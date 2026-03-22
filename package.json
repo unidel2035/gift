@@ -1,0 +1,21 @@
+{
+  "name": "@unidel/gift",
+  "version": "0.1.0",
+  "description": "Gift Ontology — онтология дара. Не тень, а источник.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core/index.js",
+    "./persons": "./src/persons/index.js",
+    "./memory": "./src/memory/index.js",
+    "./theology": "./src/theology/index.js",
+    "./oikonomia": "./src/oikonomia/index.js"
+  },
+  "keywords": ["gift", "ontology", "kenosis", "theosis", "palamas", "perichoresis"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unidel2035/gift"
+  }
+}
