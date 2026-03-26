@@ -103,6 +103,12 @@
   },
   {
     "type": "fact",
+    "content": "Self-hosted GitHub Actions runner: /home/unidel/actions-runner, PID в data/runner-pid.txt, логи в data/runner.log",
+    "weight": 7,
+    "ts": "2026-03-26T09:35:52.491Z"
+  },
+  {
+    "type": "fact",
     "content": "Матрица W: sacred-history-W.json. Священная история: Отец→Адам(40), Христос→Падший(28), Змей→Ева(14)",
     "weight": 6,
     "ts": "2026-03-26T08:53:50.525Z"
