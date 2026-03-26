@@ -255,7 +255,7 @@ async function runClaudeAgent(issueNumber, title, body) {
       // Передаём prompt через stdin (обходим ARG_MAX) + dangerously-skip-permissions для автономной работы
       const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
         input: attemptPrompt,
-        cwd: ROOT, timeout: 180_000,
+        cwd: ROOT, timeout: 300_000,  // 5 минут — сервер загружен параллельными сессиями
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
