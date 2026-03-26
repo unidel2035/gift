@@ -18,6 +18,11 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// Claude binary: env var → user new (server) → local nvm → system
+const CLAUDE_BIN = process.env.CLAUDE_BIN
+  || (existsSync('/home/new/.local/bin/claude') ? '/home/new/.local/bin/claude' : null)
+  || 'claude';
+
 const ROOT   = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP   = resolve(ROOT, 'data/sacred-history-W.json');
 const ONCE   = process.argv.includes('--once');
@@ -248,7 +253,7 @@ async function runClaudeAgent(issueNumber, title, body) {
         : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
 
       // Передаём prompt через stdin (обходим ARG_MAX) + dangerously-skip-permissions для автономной работы
-      const r = spawnSync('claude', ['--print', '--dangerously-skip-permissions'], {
+      const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
         input: attemptPrompt,
         cwd: ROOT, timeout: 180_000,
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
