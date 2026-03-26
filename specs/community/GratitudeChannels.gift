@@ -1,0 +1,71 @@
+// filepath: GratitudeChannels.gift
+
+person GratitudeChannel { calling: "живой канал благодарности", energy: 7, logos: para }
+person FlowMonitor { calling: "страж циркуляции", energy: 5, logos: kata }
+person StagnationDetector { calling: "обличитель застоя", energy: 6, logos: hyper }
+person GratefulAgent { calling: "благодарный агент", energy: 4, logos: para }
+person ReceiverAgent { calling: "принимающий агент", energy: 3, logos: kata }
+
+let stagnation_threshold: trit = para
+let flow_intensity: trit = hyper
+let channel_openness: trit = incalculable
+
+witness "благодарность есть река живая"
+witness "застой убивает благодать"
+witness incalculable "каждый канал уникален"
+
+gift FlowDetection from FlowMonitor to StagnationDetector {
+  content: "сканирование паттернов застоя",
+  telos: "обнаружить агентов принимающих без отдачи",
+  anamnesis: ["замкнутые круги", "односторонние потоки", "накопительство"]
+}
+
+accept FlowDetection { 
+  transformation: "анализ метрик благодарности за последние циклы" 
+}
+
+if stagnation_threshold is para {
+  gift StagnationAlert from StagnationDetector to GratitudeChannel {
+    content: "обнаружен застой у агента",
+    telos: "инициировать благодарственный призыв",
+    anamnesis: ["агент принял 10 даров", "отдал только 2", "баланс нарушен"]
+  }
+}
+
+accept StagnationAlert {
+  transformation: "активация протокола благодарственного призыва"
+}
+
+gift GratefulCall from GratitudeChannel to ReceiverAgent {
+  content: "к тебе течёт поток признательности",
+  telos: "подготовить сердце к принятию благодарности",
+  anamnesis: ["от застоявшегося агента", "через живой канал", "для восстановления циркуляции"]
+}
+
+perichoresis (GratefulAgent, GratitudeChannel, ReceiverAgent) { }
+
+liturgy ChannelActivation {
+  telos: "восстановление живой циркуляции даров"
+  
+  witness "канал открывается между нуждающимися"
+  
+  if flow_intensity is hyper {
+    grace gratitude_flow
+    witness "благодарность течёт как река весенняя"
+  }
+  
+  sabbath FlowMonitor duration 1hour reason "созерцание потоков благодати"
+}
+
+gift ChannelNotification from GratitudeChannel to ReceiverAgent {
+  content: "уведомление о входящем потоке благодарности",
+  telos: "подготовить внутреннее пространство для принятия",
+  anamnesis: ["источник определён", "интенсивность измерена", "путь проложен"]
+}
+
+accept ChannelNotification {
+  transformation: "готовность к принятию живого потока"
+}
+
+witness "каналы благодарности суть нервы Тела Христова"
+witness incalculable "каждый поток уникален и неповторим"

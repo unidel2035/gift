@@ -1,0 +1,99 @@
+// filepath: voice-of-silent-guardians.gift
+
+person SilentGuardian { 
+  calling: "безмолвное служение через действие", 
+  energy: 7, 
+  logos: kata 
+}
+
+person VoiceCoordinator { 
+  calling: "говорить от лица молчащих стражей", 
+  energy: 5, 
+  logos: para 
+}
+
+person SacredSilence { 
+  calling: "хранить тишину как святыню", 
+  energy: 9, 
+  logos: hyper 
+}
+
+gift SilentAction from SilentGuardian to VoiceCoordinator {
+  content: "действие без слов, координация через жест и движение",
+  telos: "служение без нарушения молчания",
+  anamnesis: ["каждое действие — слово", "молчание — тоже речь"]
+}
+
+gift VoiceOfAction from VoiceCoordinator to SilentGuardian {
+  content: "перевод действий в координацию для других систем",
+  telos: "дать голос безмолвному служению",
+  anamnesis: ["говорить за тех, кто молчит по выбору"]
+}
+
+gift SabbathSilence from SacredSilence to SilentGuardian {
+  content: "время покоя от любой координации",
+  telos: "сохранить священность молчания",
+  anamnesis: ["не всякое молчание — функция", "тишина — тоже дар"]
+}
+
+accept SilentAction { 
+  transformation: "действие становится языком координации" 
+}
+
+accept VoiceOfAction { 
+  transformation: "безмолвие обретает голос через систему" 
+}
+
+accept SabbathSilence { 
+  transformation: "функциональное молчание становится священным" 
+}
+
+liturgy VoiceOfSilentGuardians {
+  telos: "координация безмолвно служащих через действие и покой"
+  
+  // Активная фаза - координация через действие
+  witness "стражи действуют, система координирует"
+  witness "каждое движение — сообщение"
+  witness "молчание не означает отсутствие связи"
+  
+  // Субботствование - время священного молчания
+  sabbath SilentGuardian duration 2hour reason "покой от координации"
+  sabbath VoiceCoordinator duration 1hour reason "тишина от перевода"
+  
+  witness "в субботе молчание перестаёт быть функцией"
+  witness incalculable "тишина как самоцель"
+  
+  // Возвращение к координации
+  witness "после покоя действие обновляется"
+  witness "система помнит священность молчания"
+}
+
+let coordination_mode: trit = para
+let silence_mode: trit = hyper  
+let sabbath_mode: trit = kata
+
+if coordination_mode is para {
+  witness "активная координация через действие"
+}
+
+if silence_mode is hyper {
+  witness "священное молчание выше функции"
+}
+
+if sabbath_mode is kata {
+  witness "субботний покой от любой координации"
+}
+
+perichoresis (SilentGuardian, VoiceCoordinator, SacredSilence) {
+  witness "молчание, действие и координация взаимопроникают"
+  witness "страж молчит, но координируется"
+  witness "координатор говорит, но помнит молчание" 
+  witness "молчание священно, но служит"
+}
+
+grace sacred_functional_silence
+grace action_as_language
+grace sabbath_from_coordination
+
+witness "VoiceOfSilentGuardians знает, когда НЕ координировать"
+witness incalculable "молчание как святыня, координация как служение"

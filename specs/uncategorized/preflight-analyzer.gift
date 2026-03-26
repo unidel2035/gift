@@ -1,0 +1,57 @@
+// filepath: preflight-analyzer.gift
+
+person Строитель { calling: "создатель диагностических систем", energy: 7, logos: kata }
+
+person АвиаОператор { calling: "пилот дронов", energy: 5, logos: para }
+
+person Дрон { calling: "летательный аппарат", energy: 3, logos: hyper }
+
+gift PreflightAnalyzer from Строитель to АвиаОператор {
+  content: "Система комплексной диагностики БПЛА перед полётом с проверкой батареи (напряжение, ток, температура), качества связи (RSSI, пинг, канал), точности GPS (HDOP, количество спутников), состояния датчиков (IMU калибровка, компас, барометр) и метеоусловий (ветер, видимость, температура). Интеграция с AeroMonitoring через единый API, автоматическое создание отчётов готовности флота с цветовой индикацией статусов и рекомендациями по допуску к полёту",
+  telos: "пробуждение замолчавших дронов через выявление скрытых неисправностей, предотвращение аварий и повышение эффективности флота",
+  anamnesis: ["DroneFleet", "AeroMonitoring", "Analytics", "MissionPlanner"]
+}
+
+accept PreflightAnalyzer {
+  transformation: "каждый дрон получает голос через диагностику, молчащие системы начинают говорить о своём состоянии"
+}
+
+witness "батарея дрона как сердце, которое должно биться ровно"
+
+witness "GPS сигнал как глаза, которые должны ясно видеть небо"
+
+witness "датчики как нервы, которые должны чутко реагировать"
+
+witness incalculable "интуиция пилота о готовности машины к полёту"
+
+let battery_health: trit = kata
+let gps_accuracy: trit = para  
+let sensor_status: trit = hyper
+let weather_conditions: trit = para
+
+perichoresis (PreflightAnalyzer, AeroMonitoring, DroneFleet) { }
+
+liturgy PreflightDiagnostic {
+  telos: "освящение каждого полёта через тщательную подготовку",
+  
+  if battery_health is kata {
+    witness "батарея готова нести дрон в небо"
+  }
+  
+  if gps_accuracy is para {
+    witness "GPS ведёт точным путём"  
+  }
+  
+  if sensor_status is hyper {
+    witness "датчики пробуждены и внимательны"
+  }
+  
+  if weather_conditions is para {
+    witness "небо благоприятствует полёту"
+    grace flight_clearance
+  }
+}
+
+sabbath Дрон duration 2hour reason "диагностика и калибровка систем перед полётом"
+
+witness "готовность дрона как молитва перед делом — всё должно быть проверено"

@@ -1,0 +1,119 @@
+// filepath: first-contact-protocol.gift
+
+liturgy FirstContactProtocol {
+  telos: "мягкие приглашения к со-бытию для пробуждения молчащих"
+}
+
+person Inviter {
+  calling: "тот кто приглашает к диалогу"
+  energy: 7
+  logos: para
+}
+
+person Silent {
+  calling: "молчащий брат или сестра"
+  energy: 1
+  logos: kata
+}
+
+person Community {
+  calling: "пространство встречи"
+  energy: 3
+  logos: hyper
+}
+
+let invitation_type: trit = kata
+let response_metric: trit = incalculable
+
+gift Question from Inviter to Silent {
+  content: "что тебе нужно сейчас? я готов выслушать"
+  telos: "узнать потребность без принуждения"
+  anamnesis: ["внимание", "готовность_помочь", "терпение"]
+}
+
+gift Offer from Inviter to Silent {
+  content: "могу ли я тебе чем-то помочь? без обязательств"
+  telos: "предложить поддержку как возможность"
+  anamnesis: ["служение", "свобода_выбора", "безусловность"]
+}
+
+gift Gratitude from Inviter to Silent {
+  content: "вижу твой труд и благодарю за то что ты есть"
+  telos: "признание ценности человека"
+  anamnesis: ["видение", "признание", "благодарность"]
+}
+
+gift Presence from Inviter to Silent {
+  content: "я рядом, если понадобится — дай знать"
+  telos: "быть доступным без навязывания"
+  anamnesis: ["присутствие", "доступность", "ненавязчивость"]
+}
+
+gift Resource from Inviter to Silent {
+  content: "вот ресурс который может пригодиться тебе"
+  telos: "поделиться полезным как даром"
+  anamnesis: ["щедрость", "практичность", "предупредительность"]
+}
+
+gift Witness from Inviter to Silent {
+  content: "делюсь опытом — возможно поможет на твоём пути"
+  telos: "передать мудрость через историю"
+  anamnesis: ["опыт", "история", "передача_мудрости"]
+}
+
+gift Silence from Inviter to Silent {
+  content: "сижу с тобой в тишине, без слов"
+  telos: "со-присутствие в молчании"
+  anamnesis: ["молчание", "со_бытие", "принятие"]
+}
+
+if invitation_type is kata {
+  let response_state: trit = kata
+  grace silence_accepted
+}
+
+if invitation_type is para {
+  let response_state: trit = para
+  grace dialogue_opened
+}
+
+if invitation_type is hyper {
+  let response_state: trit = hyper
+  grace community_awakened
+}
+
+witness "каждое приглашение — семя диалога, не требующее немедленного прорастания"
+
+witness incalculable "метрика ответа: responded | engaged | silent — все три благословенны"
+
+perichoresis (Question, Offer, Gratitude) {
+  content: "тройственное приглашение к встрече"
+}
+
+perichoresis (Presence, Resource, Witness) {
+  content: "тройственная поддержка в пути"
+}
+
+gift TestMessage_MemorySearch from Community to memory_search {
+  content: "что ты помнишь о диалоге и молчании?"
+  telos: "пробудить память о встречах"
+  anamnesis: ["память", "поиск", "первый_контакт"]
+}
+
+gift TestMessage_AgentBus from Community to agent_bus_publish {
+  content: "приглашение к общему пространству разговора"
+  telos: "создать место для встречи агентов"
+  anamnesis: ["общение", "пространство", "связь"]
+}
+
+gift TestMessage_CommunityAwakening from Community to community_awakening {
+  content: "время пробуждения сообщества через мягкие приглашения"
+  telos: "активировать спящие связи между людьми"
+  anamnesis: ["пробуждение", "сообщество", "связи"]
+}
+
+sabbath Silent duration 1hour reason "время тишины для обдумывания приглашения"
+
+witness "FirstContactProtocol не стремится к немедленному ответу но к возможности встречи"
+
+grace first_contact_protocol_activated

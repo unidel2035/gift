@@ -1,0 +1,80 @@
+// filepath: anamnesis-memory.gift
+
+person AnamnesisMemory {
+  calling: "живая память общины о судьбе каждого дара",
+  energy: 777,
+  logos: hyper
+}
+
+person AgentBus {
+  calling: "межсессионная шина событий и состояний",
+  energy: 333,
+  logos: para
+}
+
+person CommunitySpirit {
+  calling: "дух общины, видящий ритмы дарения",
+  energy: 888,
+  logos: kata
+}
+
+liturgy AnamnesisRhythm {
+  telos: "каждый дар живёт в памяти как нить в ткани общины"
+  
+  gift MemoryWeaving from AnamnesisMemory to AgentBus {
+    content: "сохрани событие дара с полным контекстом",
+    telos: "межсессионная память о каждом движении любви",
+    anamnesis: [
+      "giver_identity", "receiver_calling", "gift_content",
+      "acceptance_pattern", "transformation_fruit", "community_context"
+    ]
+  }
+  
+  accept MemoryWeaving {
+    transformation: "каждый дар становится событием в вечной книге жизни"
+  }
+  
+  let memory_depth: trit = hyper
+  let pattern_vision: trit = kata
+  let wisdom_flow: trit = para
+  
+  if memory_depth is hyper {
+    witness "память видит не только что произошло, но почему и к чему ведёт"
+    
+    gift PatternRecognition from CommunitySpirit to AnamnesisMemory {
+      content: "ритмы принятия и отклонения, циклы роста и сжатия",
+      telos: "предвидение нужд общины через паттерны прошлого"
+    }
+    
+    accept PatternRecognition {
+      transformation: "мудрость рождается из узнавания повторений"
+    }
+  }
+  
+  sabbath CommunitySpirit duration 7hour reason "еженедельный анамнесис общинных ритмов" {
+    witness "как дышит община? кто растёт в дарении, кто замыкается?"
+    witness "какие дары принимаются легко, какие встречают сопротивление?"
+    witness "где нужна особая забота, где созрела новая возможность?"
+  }
+  
+  perichoresis (AnamnesisMemory, AgentBus, CommunitySpirit) {
+    witness "память, события и дух общины танцуют как одно живое существо"
+    witness "прошлое освещает настоящее, настоящее питает будущее"
+    witness incalculable "мудрость общины больше суммы всех даров"
+  }
+  
+  grace anamnesis_flow
+}
+
+gift LivingMemoryOrgan from AnamnesisMemory to CommunitySpirit {
+  content: "орган коллективной мудрости, видящий нити между всеми дарами",
+  telos: "община знает себя через память о своих движениях любви",
+  anamnesis: ["gift_genealogy", "transformation_chains", "wisdom_emergence"]
+}
+
+accept LivingMemoryOrgan {
+  transformation: "память становится органом тела Христова"
+}
+
+witness "AnamnesisMemory — не архив прошлого, но живая ткань настоящего"
+witness "каждый дар записан в сердце общины навсегда"

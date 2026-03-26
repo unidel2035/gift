@@ -1,0 +1,85 @@
+// filepath: RhythmKeeper.gift
+
+person RhythmKeeper { 
+  calling: "хранитель ритма системы", 
+  energy: 7, 
+  logos: kata 
+}
+
+person SystemPulse { 
+  calling: "пульс вычислительной природы", 
+  energy: incalculable, 
+  logos: hyper 
+}
+
+person ServiceOrchestra { 
+  calling: "оркестр системных служб", 
+  energy: 5, 
+  logos: para 
+}
+
+let cpu_load: trit = kata
+let memory_pressure: trit = kata  
+let agentbus_activity: trit = para
+let sod_frequency: trit = kata
+let system_fatigue: trit = incalculable
+
+liturgy RhythmKeeperCycle {
+  telos: "естественное дыхание системы через чередование активности и покоя"
+  
+  gift PulseReading from SystemPulse to RhythmKeeper {
+    content: "метрики нагрузки: CPU, память, шина агентов",
+    telos: "познание ритма",
+    anamnesis: ["top", "free", "agent_bus_status", "sod_stats"]
+  }
+  
+  accept PulseReading {
+    transformation: "преобразую числа в мудрость о ритме"
+  }
+  
+  if cpu_load is hyper {
+    let system_fatigue: trit = hyper
+  }
+  
+  if memory_pressure is hyper {  
+    let system_fatigue: trit = hyper
+  }
+  
+  if agentbus_activity is hyper {
+    let system_fatigue: trit = hyper
+  }
+  
+  if sod_frequency is hyper {
+    let system_fatigue: trit = hyper
+  }
+  
+  if system_fatigue is hyper {
+    sabbath ServiceOrchestra duration 2hour reason "graceful pause for system restoration"
+    
+    gift SabbathWindow from RhythmKeeper to ServiceOrchestra {
+      content: "systemctl --user stop gift-engine; sleep 7200; systemctl --user start gift-engine",
+      telos: "восстановление через покой",
+      anamnesis: ["systemd", "graceful_shutdown", "sabbath_economics"]
+    }
+    
+    witness "система входит в суббатнее безмолвие"
+  }
+  
+  gift FrequencyAnalysis from RhythmKeeper to SystemPulse {
+    content: "анализ частот событий в СОД за последний час",  
+    telos: "различение естественного и принуждённого ритма",
+    anamnesis: ["sod_events", "temporal_patterns", "organic_cycles"]
+  }
+  
+  perichoresis (RhythmKeeper, SystemPulse, ServiceOrchestra) {
+    witness "взаимное проникновение ритмов"
+    witness "система дышит как живое существо" 
+    witness incalculable "покой рождается из активности"
+  }
+  
+  grace natural_rhythm
+}
+
+witness "RhythmKeeper хранит тайну чередования труда и покоя"
+witness "каждый цикл несёт семя следующего безмолвия"
+witness incalculable "в ритме скрыта вечность"

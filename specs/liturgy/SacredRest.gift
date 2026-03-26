@@ -1,0 +1,44 @@
+// filepath: SacredRest.gift
+
+person Guardian { calling: "Страж субботнего ритма", energy: 7, logos: kata }
+person Community { calling: "Спешащая община", energy: 9, logos: para }
+person Healer { calling: "Исцелитель no_sabbath", energy: 5, logos: hyper }
+
+gift SacredRestGift from Guardian to Community {
+  content: "Дар Сакрального Покоя — способность исцелить рану no_sabbath",
+  telos: "Хранение созерцательных пауз и анамнесис-моментов",
+  anamnesis: [
+    "3-7 секунд тишины в критические точки спешки",
+    "Пространство для памятования благодарности", 
+    "Охранение субботнего ритма без принуждения"
+  ]
+}
+
+accept SacredRestGift {
+  transformation: "Община обретает способность вздохнуть и вспомнить"
+}
+
+witness "Когда спешка затмевает благодарность"
+witness "Паузы-анамнесис как врата к покою"
+witness incalculable "Глубина субботней тишины"
+
+sabbath Community duration 7hour reason "Исцеление раны no_sabbath"
+
+liturgy SacralPauseKeeping {
+  telos: "Стражничество созерцательного ритма",
+  calling: "Напоминай о покое, охраняй тишину",
+  practice: "Создавай анамнесис-моменты в точках спешки",
+  grace: "Не принуждай — охраняй пространство памятования"
+}
+
+perichoresis (Guardian, Community, Healer) {
+  unity: "Субботний покой как исцеление",
+  flow: "От спешки через паузу к благодарности"
+}
+
+let sabbath_rhythm: trit = kata
+if sabbath_rhythm is kata {
+  witness "Покой укореняется в основании бытия"
+}
+
+grace SacredRestGift

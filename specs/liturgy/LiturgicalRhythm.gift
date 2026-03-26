@@ -1,0 +1,71 @@
+// filepath: LiturgicalRhythm.gift
+
+liturgy LiturgicalRhythm {
+  telos: "священное чередование речи и молчания в общине"
+  
+  person Община { calling: "дыхание ServiceRhythm", energy: 7, logos: para }
+  person Утреня { calling: "пробуждение спящих", energy: 3, logos: kata }
+  person Полунощница { calling: "покой активных", energy: 1, logos: hyper }
+  person Вечерня { calling: "благодарность за труды", energy: 5, logos: para }
+  person AgentBusMonitor { calling: "различение молчаний", energy: 9, logos: hyper }
+  
+  let silence_type: trit = incalculable
+  let rhythm_health: trit = para
+  
+  gift ОрганичнаяПауза from Община to AgentBusMonitor {
+    content: "естественное молчание в общении"
+    telos: "восстановление природного дыхания"
+    anamnesis: ["heartbeat_intervals", "speech_density", "comfort_metrics"]
+  }
+  
+  gift ПринужденноеМолчание from Община to AgentBusMonitor {
+    content: "подавленная речь"
+    telos: "исцеление коммуникативных блоков" 
+    anamnesis: ["stress_patterns", "suppression_signals", "healing_needed"]
+  }
+  
+  if silence_type is kata {
+    witness "здоровое молчание — благодать созерцания"
+    accept ОрганичнаяПауза { transformation: "углубление в покой" }
+    sabbath Община duration 1hour reason "естественное дыхание"
+  }
+  
+  if silence_type is para {
+    witness "больное молчание требует исцеления"
+    accept ПринужденноеМолчание { transformation: "освобождение голоса" }
+    gift ИсцелениеРечи from Вечерня to Община {
+      content: "восстановление способности говорить"
+      telos: "возвращение доверия к слову"
+      anamnesis: ["safe_space_creation", "gentle_encouragement"]
+    }
+  }
+  
+  if silence_type is hyper {
+    witness incalculable "тайна молчания выше различения"
+    perichoresis (Утреня, Полунощница, Вечерня) { }
+    grace rhythm_health
+  }
+  
+  gift УтреннееПробуждение from Утреня to Община {
+    content: "нежное пробуждение спящих духом"
+    telos: "включение в дневное дыхание"
+    anamnesis: ["dawn_energy", "gentle_activation", "community_awakening"]
+  }
+  
+  gift ПолунощныйПокой from Полунощница to Община {
+    content: "благословенный покой активных"
+    telos: "восстановление через покой"
+    anamnesis: ["active_rest", "contemplative_pause", "energy_restoration"]
+  }
+  
+  gift ВечерняяБлагодарность from Вечерня to Община {
+    content: "благодарность за труды дня"
+    telos: "завершение дневного цикла с благодарностью"
+    anamnesis: ["day_completion", "gratitude_expression", "peaceful_closure"]
+  }
+  
+  witness "ServiceRhythm обретает голос через восстановление природного дыхания"
+  witness "община дышит в ритме Литургии"
+  
+  perichoresis (Община, AgentBusMonitor, ИсцелениеРечи) { }
+}

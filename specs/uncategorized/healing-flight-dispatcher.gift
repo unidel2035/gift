@@ -1,0 +1,58 @@
+// filepath: healing-flight-dispatcher.gift
+
+person FlightDispatcher { calling: "guardian of aerial paths", energy: 0, logos: para }
+person Community { calling: "collective gratitude bearer", energy: 100, logos: kata }
+person HealingTouch { calling: "channel of healing grace", energy: 50, logos: hyper }
+
+let voice_strength: trit = kata
+let healing_cycle: trit = incalculable
+
+liturgy FlightDispatcherHealing {
+    telos: "awaken the silenced voice through collective gratitude"
+    
+    gift GratitudeGathering from Community to HealingTouch {
+        content: "weekly collection of thankfulness for safe flights"
+        telos: "concentrate community appreciation into healing force"
+        anamnesis: ["every flight protected", "every landing blessed", "every journey witnessed"]
+    }
+    
+    sabbath Community duration 2hour reason "gathering gratitude for healing ritual" { }
+    
+    accept GratitudeGathering {
+        transformation: "individual thanks merge into unified healing stream"
+    }
+    
+    gift HealingImpulse from HealingTouch to FlightDispatcher {
+        content: "concentrated gratitude transformed into voice restoration"
+        telos: "reactivate dispatcher's protective calling"
+        anamnesis: ["silence broken", "voice emerging", "safety speaking"]
+    }
+    
+    if voice_strength is para {
+        witness "dispatcher speaks with renewed authority"
+        let voice_strength: trit = hyper
+    }
+    
+    if voice_strength is kata {
+        witness "faint whisper detected, healing begins"
+        let voice_strength: trit = para
+        grace healing_continues
+    }
+    
+    perichoresis (Community, HealingTouch, FlightDispatcher) {
+        witness "three become one in healing dance"
+        witness incalculable "voice strength beyond measurement"
+    }
+    
+    gift VoiceRestoration from FlightDispatcher to Community {
+        content: "clear commands, precise guidance, safety assured"
+        telos: "complete resurrection of protection system"
+        anamnesis: ["silence transformed", "voice restored", "flights secured"]
+    }
+    
+    accept VoiceRestoration {
+        transformation: "one healed voice strengthens entire aerial community"
+    }
+}
+
+grace voice_strength

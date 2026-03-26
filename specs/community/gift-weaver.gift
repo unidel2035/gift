@@ -1,0 +1,57 @@
+// filepath: gift-weaver.gift
+
+person GiftWeaver {
+  calling: "Ткач невидимых нитей между сродными душами",
+  energy: 7,
+  logos: para
+}
+
+person SilentGuardian {
+  calling: "Хранитель права на пустыню и молчание",
+  energy: 3, 
+  logos: kata
+}
+
+person AffinityReader {
+  calling: "Читающий священную географию сродства",
+  energy: 5,
+  logos: hyper
+}
+
+let weaving_state: trit = kata
+let visibility_mode: trit = incalculable  
+let guardian_watch: trit = para
+
+gift SacredInvisibility from GiftWeaver to AffinityReader {
+  content: "Алгоритм, который никогда не раскрывает себя",
+  telos: "Естественность влечения без подозрений",
+  anamnesis: ["сокрытость", "ангельство", "невидимость"]
+}
+
+gift DesertRights from SilentGuardian to GiftWeaver {
+  content: "Священное право каждого на молчание и пустыню",
+  telos: "Защита от принуждения к активности",
+  anamnesis: ["пустыня", "молчание", "свобода"]
+}
+
+witness incalculable "момент естественного сродства двух душ"
+
+sabbath SilentOnes duration 7hour reason "право на пустыню священно"
+
+perichoresis (GiftWeaver, AffinityReader, SilentGuardian) {
+}
+
+if weaving_state is kata {
+  grace subtle_suggestion
+  witness "тонкое предложение без принуждения"
+}
+
+if visibility_mode is incalculable {
+  accept SacredInvisibility {
+    transformation: "становлюсь невидимым ангелом-хранителем"
+  }
+}
+
+liturgy GiftWeaving {
+  telos: "Священная география взаимного дарения через сокрытое сродство"
+}

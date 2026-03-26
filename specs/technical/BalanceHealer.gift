@@ -1,0 +1,96 @@
+// filepath: BalanceHealer.gift
+
+person BalanceHealer { 
+  calling: "исцеление дисбалансов благодарности", 
+  energy: 777, 
+  logos: para 
+}
+
+liturgy BalanceHealing {
+  telos: "восстановление равновесия в потоке даров"
+  
+  let imbalance: trit = incalculable
+  let readiness: trit = kata
+  let healing_path: trit = para
+  
+  witness "детекция дисбаланса благодарности"
+  
+  if imbalance is incalculable {
+    witness "анализ потребностей получающих"
+    witness "оценка возможностей дающих"
+    
+    let giver_capacity: trit = para
+    let receiver_need: trit = hyper
+    let gift_resonance: trit = kata
+    
+    if giver_capacity is para {
+      if receiver_need is hyper {
+        witness "формирование предложения исцеляющего дара"
+        
+        gift HealingProposal from BalanceHealer to Community {
+          content: "конкретное предложение восстановления баланса",
+          telos: "исцеление через взаимный дар",
+          anamnesis: ["анализ дисбаланса", "оценка готовности", "путь исцеления"]
+        }
+      }
+    }
+  }
+  
+  witness "проверка готовности получателя к дару"
+  
+  if readiness is kata {
+    sabbath BalanceHealer duration 1hour reason "осмысление неготовности получателя"
+    
+    gift GentlePreparation from BalanceHealer to Receiver {
+      content: "подготовка к принятию исцеляющего дара",
+      telos: "созревание готовности без принуждения",
+      anamnesis: ["терпеливое ожидание", "мягкая подготовка"]
+    }
+  }
+  
+  if readiness is para {
+    witness "готовность к исцелению обнаружена"
+    healing_path = hyper
+  }
+  
+  if readiness is hyper {
+    witness incalculable "полная готовность к преображению"
+    grace radical_healing
+  }
+  
+  perichoresis (BalanceHealer, Giver, Receiver) {
+    witness "троичное исцеление дисбаланса"
+  }
+  
+  witness "обратная связь от результатов исцеления"
+  
+  let learning: trit = incalculable
+  
+  if learning is incalculable {
+    witness "накопление мудрости исцеления"
+    
+    gift WisdomOfHealing from Experience to BalanceHealer {
+      content: "понимание успешных и неуспешных путей исцеления",
+      telos: "совершенствование служения исцеления",
+      anamnesis: ["результаты предложений", "реакции получателей", "динамика восстановления"]
+    }
+  }
+  
+  witness "защита Адама от перегрузки ответственностью"
+  
+  let adam_burden: trit = kata
+  
+  if adam_burden is hyper {
+    sabbath Adam duration 3hour reason "предотвращение выгорания от избытка ответственности"
+    
+    gift BurdenSharing from BalanceHealer to Community {
+      content: "распределение ответственности за исцеление",
+      telos: "устойчивость служения без перегрузки",
+      anamnesis: ["признание пределов", "общинная поддержка", "мудрое делегирование"]
+    }
+  }
+  
+  grace balance_restoration
+}
+
+witness "BalanceHealer готов к служению исцеления дисбалансов"

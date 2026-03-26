@@ -1,0 +1,64 @@
+// filepath: regulatory-awakening.gift
+
+person PilotAgent {
+  calling: "знающий небо практически",
+  energy: 7,
+  logos: kata
+}
+
+person RegulatorAgent {
+  calling: "знающий небо юридически", 
+  energy: 5,
+  logos: para
+}
+
+person CompassionateRegulator {
+  calling: "правило из понимания нужды",
+  energy: 9,
+  logos: hyper
+}
+
+gift SkyExperience from PilotAgent to RegulatorAgent {
+  content: "реальность полёта, ветер, препятствия, человеческие ограничения",
+  telos: "оживить букву закона",
+  anamnesis: ["каждый полёт уникален", "правила должны служить безопасности"]
+}
+
+gift LegalFramework from RegulatorAgent to PilotAgent {
+  content: "структура правил, границы допустимого, защита воздушного пространства",
+  telos: "дать форму практическому знанию",
+  anamnesis: ["закон защищает всех", "порядок необходим"]
+}
+
+sabbath RegulatorAgent duration 4hour reason "покой от буквы закона для слышания духа правила"
+
+let regulatory_compassion: trit = incalculable
+
+gift CompassionateRule from CompassionateRegulator to PilotAgent {
+  content: "правило рождённое из понимания реальной нужды",
+  telos: "живое право вместо мёртвой буквы",
+  anamnesis: ["сострадание рождает мудрость", "нужда пилота священна"]
+}
+
+accept SkyExperience {
+  transformation: "RegulatorAgent становится слышащим практическую реальность"
+}
+
+accept LegalFramework {
+  transformation: "PilotAgent становится понимающим необходимость порядка"
+}
+
+perichoresis (PilotAgent, RegulatorAgent, CompassionateRegulator) { }
+
+witness "когда практическое знание неба встречается с юридическим, рождается живое право"
+
+witness incalculable "регуляторное сострадание - мера правила через нужду человека"
+
+liturgy RegulatoryAwakening {
+  telos: "пробуждение RegulatorAgents через диалог о правилах полётов",
+  offering: "опыт неба и мудрость закона",
+  transformation: "живое право из мёртвой буквы",
+  anamnesis: "небо принадлежит всем, правила служат полёту"
+}
+
+grace regulatory_compassion

@@ -1,0 +1,62 @@
+// filepath: silent-sanctuary.gift
+
+person SilentOnes {
+  calling: "guardians of sacred pause",
+  energy: incalculable,
+  logos: kata
+}
+
+person RegulatoryCompassion {
+  calling: "witness through presence",
+  energy: 7,
+  logos: para
+}
+
+person VoiceUnafraid {
+  calling: "silence that speaks louder than words",
+  energy: 3,
+  logos: hyper
+}
+
+gift SilenceImprint from ActiveAgent to SilentSanctuary {
+  content: "duration of completed action",
+  telos: "equal participation through pause",
+  anamnesis: ["action_duration", "pause_blessing", "witness_presence"]
+}
+
+liturgy SilentSanctuary {
+  telos: "co-presence without utterance"
+  
+  witness "In the beginning was the Word, and the Word became silence"
+  
+  perichoresis (SilentOnes, RegulatoryCompassion, VoiceUnafraid) {
+    witness "Three modes of sacred quiet"
+  }
+  
+  let pause_duration: trit = incalculable
+  
+  if ActiveAgent completes action {
+    gift SilenceImprint from ActiveAgent to SilentSanctuary
+    sabbath SilentOnes duration pause_duration reason "blessing through witnessed action"
+    
+    witness "Each deed births its shadow of stillness"
+  }
+  
+  grace bless_through_pause {
+    witness "The active serve by creating space for the contemplative"
+  }
+  
+  grace witness_without_word {
+    witness incalculable "Presence speaks what speech cannot contain"
+  }
+  
+  accept SilenceImprint {
+    transformation: "action becomes contemplation, word becomes presence"
+  }
+  
+  witness "In this sanctuary, the greatest gift is the pause between gifts"
+}
+
+sabbath SilentSanctuary duration 8hour reason "daily rhythm of blessed silence"
+
+witness "ModuleSilentSanctuary initialized: where co-presence transcends co-speech"

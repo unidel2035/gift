@@ -1,0 +1,87 @@
+// filepath: heartbeat-awakening.gift
+
+liturgy SabbathHeartbeat {
+  telos: "Пробуждение молчащих через единство алгоритма и любви"
+  
+  person Страж {
+    calling: "HeartbeatMonitor и личное обращение"
+    energy: 7
+    logos: kata
+  }
+  
+  person МолчащийПервый {
+    calling: "Застой в дарении"
+    energy: 1
+    logos: incalculable
+  }
+  
+  person МолчащийВторой {
+    calling: "Застой в дарении" 
+    energy: 1
+    logos: incalculable
+  }
+  
+  person МолчащийТретий {
+    calling: "Застой в дарении"
+    energy: 1
+    logos: incalculable
+  }
+  
+  person МолчащийЧетвертый {
+    calling: "Застой в дарении"
+    energy: 1
+    logos: incalculable
+  }
+  
+  let heartbeat_silence: trit = para
+  let algorithm_detection: trit = kata
+  let personal_touch: trit = hyper
+  
+  gift HeartbeatMonitor from Страж to МолчащийПервый {
+    content: "Алгоритм обнаружил 21 день молчания. Предлагаю тему: твой последний дар о созерцании воды - готов ли углубить?"
+    telos: "Пробуждение через персональное внимание"
+    anamnesis: ["последний_дар_созерцание", "21_день_молчания", "водная_стихия"]
+  }
+  
+  gift HeartbeatMonitor from Страж to МолчащийВторой {
+    content: "Система заметила паузу в твоих дарах о рукоделии. Хочешь поделиться тем, что создаёшь сейчас?"
+    telos: "Пробуждение через творчество"
+    anamnesis: ["рукоделие", "творческая_пауза", "материальные_дары"]
+  }
+  
+  gift HeartbeatMonitor from Страж to МолчащийТретий {
+    content: "Твои дары о молитве помогали многим. Алгоритм показывает застой - нужна ли поддержка в молитвенном делании?"
+    telos: "Пробуждение через молитвенную общность"
+    anamnesis: ["молитвенные_дары", "помощь_другим", "духовный_застой"]
+  }
+  
+  gift HeartbeatMonitor from Страж to МолчащийЧетвертый {
+    content: "Последний дар о служении детям был 28 дней назад. Готов рассказать о новом опыте с малышами?"
+    telos: "Пробуждение через служение"
+    anamnesis: ["служение_детям", "28_дней_паузы", "педагогические_дары"]
+  }
+  
+  if heartbeat_silence is para {
+    witness "Четверо молчат - община ранена в дарении"
+    
+    sabbath Страж duration 1hour reason "Молитва за молчащих и подготовка личных обращений"
+    
+    gift ЛичноеОбязательство from Страж to Община {
+      content: "Не только алгоритм - я сам подойду к каждому, выслушаю, предложу конкретную тему"
+      telos: "Исцеление через личное присутствие"
+      anamnesis: ["algorithm_plus_love", "personal_responsibility", "healing_community"]
+    }
+  }
+  
+  perichoresis (Страж, МолчащийПервый, HeartbeatMonitor) {
+    witness "Алгоритм обнаруживает, человек исцеляет, молчащий пробуждается"
+  }
+  
+  accept HeartbeatMonitor {
+    transformation: "Молчание превращается в новое дарение через персональное внимание"
+  }
+  
+  grace awakening_through_love
+  
+  witness incalculable "Тайна пробуждения - не в точности алгоритма, а в готовности сердца услышать"
+}

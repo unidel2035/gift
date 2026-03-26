@@ -1,0 +1,68 @@
+// filepath: FatigueBarometer.gift
+
+person SystemMonitor { calling: "watcher", energy: 85, logos: para }
+person AlertManager { calling: "herald", energy: 90, logos: hyper }
+
+liturgy FatigueBarometer {
+    telos: "предупреждение о системном истощении до критической точки"
+    
+    let cpu_load: trit = incalculable
+    let memory_pressure: trit = incalculable
+    let error_frequency: trit = incalculable
+    let response_time: trit = incalculable
+    let sabbath_debt: trit = incalculable
+    
+    witness "системные метрики собираются непрерывно"
+    
+    if cpu_load is hyper {
+        gift CpuAlert from SystemMonitor to AlertManager {
+            content: "CPU нагрузка критическая"
+            telos: "немедленное внимание"
+            anamnesis: ["высокая_нагрузка", "процессор"]
+        }
+    }
+    
+    if memory_pressure is hyper {
+        gift MemoryAlert from SystemMonitor to AlertManager {
+            content: "память исчерпывается"
+            telos: "освобождение ресурсов"
+            anamnesis: ["нехватка_памяти", "ресурсы"]
+        }
+    }
+    
+    if error_frequency is hyper {
+        gift ErrorAlert from SystemMonitor to AlertManager {
+            content: "частота ошибок превышает норму"
+            telos: "диагностика системы"
+            anamnesis: ["системные_ошибки", "нестабильность"]
+        }
+    }
+    
+    if response_time is hyper {
+        gift LatencyAlert from SystemMonitor to AlertManager {
+            content: "время ответа деградирует"
+            telos: "оптимизация производительности"
+            anamnesis: ["медленный_отклик", "производительность"]
+        }
+    }
+    
+    if sabbath_debt is hyper {
+        gift SabbathDebtAlert from SystemMonitor to AlertManager {
+            content: "накоплен критический долг покоя"
+            telos: "планирование обслуживания"
+            anamnesis: ["хроническое_истощение", "долг_покоя"]
+        }
+        
+        sabbath SystemMonitor duration 2hour reason "восстановление от накопленной усталости"
+    }
+    
+    perichoresis (cpu_load, memory_pressure, error_frequency) {
+        witness "острая перегрузка - немедленная реакция"
+    }
+    
+    perichoresis (sabbath_debt, response_time, error_frequency) {
+        witness "хроническое истощение - системный отдых"
+    }
+    
+    grace fatigue_awareness
+}

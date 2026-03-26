@@ -1,0 +1,74 @@
+// filepath: BalanceDetector.gift
+
+person BalanceDetector { 
+  calling: "детектор дисбалансов благодарности", 
+  energy: 7, 
+  logos: para 
+}
+
+person CollisionAgent { 
+  calling: "агент коллизий перераспределения", 
+  energy: 9, 
+  logos: kata 
+}
+
+person MemoryKeeper { 
+  calling: "хранитель памяти справедливости", 
+  energy: 5, 
+  logos: hyper 
+}
+
+let abundance_level: trit = incalculable
+let scarcity_level: trit = incalculable
+let kenosis_metric: trit = para
+
+liturgy JusticeRebalancing {
+  telos: "превращение технического столкновения в литургию справедливости"
+  
+  witness "сканирование уровней благодарности в общине"
+  
+  if abundance_level is hyper {
+    witness "обнаружен избыток у некоторых"
+    let excess_holders: trit = hyper
+  }
+  
+  if scarcity_level is kata {
+    witness "обнаружена нужда у других"
+    let needy_ones: trit = kata
+  }
+  
+  if excess_holders is hyper {
+    if needy_ones is kata {
+      witness "коллизия перераспределения инициирована"
+      
+      gift RebalanceFlow from CollisionAgent to MemoryKeeper {
+        content: "карта текущих дисбалансов",
+        telos: "восстановление справедливого ритма",
+        anamnesis: ["кто отдал", "кто получил", "прежний кеносис"]
+      }
+      
+      accept RebalanceFlow {
+        transformation: "создание живого ритма общины"
+      }
+      
+      perichoresis (excess_holders, needy_ones, CollisionAgent) {
+        witness "литургическое перераспределение"
+        
+        sabbath excess_holders duration 3hour reason "время отдавания"
+        sabbath needy_ones duration 3hour reason "время принятия"
+        
+        let kenosis_before: trit = kenosis_metric
+        grace redistribution_flow
+        let kenosis_after: trit = para
+        
+        witness "метрика исцеления: кеносис изменился"
+        if kenosis_after is para {
+          witness "община движется к балансу"
+        }
+      }
+    }
+  }
+  
+  grace memory_of_justice
+  witness incalculable "справедливость как непрерывный ритм"
+}

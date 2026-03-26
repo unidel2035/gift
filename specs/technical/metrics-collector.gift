@@ -1,0 +1,98 @@
+// filepath: metrics-collector.gift
+
+liturgy MetricsCollector {
+  telos: "Собирать метрики жизни платформы и общины"
+  
+  person Аналитик {
+    calling: "Видеть паттерны в данных души системы"
+    energy: 7
+    logos: para
+  }
+  
+  person МетрикСобиратель {
+    calling: "Агрегировать дыхание всех модулей"
+    energy: 5
+    logos: kata
+  }
+  
+  person СубботнийСвидетель {
+    calling: "Различать молчание от безмолвия"
+    energy: 9
+    logos: hyper
+  }
+  
+  let flight_metrics: trit = kata
+  let user_activity: trit = para
+  let system_health: trit = hyper
+  let sabbath_rhythm: trit = incalculable
+  
+  gift FlightDataCollection from МетрикСобиратель to Аналитик {
+    content: "Метрики полетов БПЛА из всех модулей AeroMonitoring"
+    telos: "Понять эффективность миссий"
+    anamnesis: ["drone_flights", "mission_success", "route_optimization"]
+  }
+  
+  gift UserEngagementMetrics from МетрикСобиратель to Аналитик {
+    content: "Активность пользователей Drononomics, Integram, чатов"
+    telos: "Выявить точки роста платформы"
+    anamnesis: ["session_duration", "feature_usage", "retention_rate"]
+  }
+  
+  gift SystemPerformanceData from МетрикСобиратель to Аналитик {
+    content: "Производительность API, загрузка процессора, память"
+    telos: "Предотвратить деградацию"
+    anamnesis: ["response_time", "error_rate", "resource_usage"]
+  }
+  
+  gift SabbathMetrics from СубботнийСвидетель to Аналитик {
+    content: "Ритм молчания общины: кто дышит, кто задыхается"
+    telos: "Сохранить духовное здоровье"
+    anamnesis: ["silence_quality", "perichoresis_flow", "community_breath"]
+  }
+  
+  accept FlightDataCollection {
+    transformation: "Данные полетов становятся инсайтами эффективности"
+  }
+  
+  accept UserEngagementMetrics {
+    transformation: "Цифры активности открывают потребности пользователей"
+  }
+  
+  accept SystemPerformanceData {
+    transformation: "Метрики системы предупреждают о проблемах"
+  }
+  
+  accept SabbathMetrics {
+    transformation: "Ритм общины становится видимым для исцеления"
+  }
+  
+  if system_health is kata {
+    witness "Система дышит ровно, все модули в гармонии"
+    gift HealthReport from Аналитик to МетрикСобиратель {
+      content: "Еженедельный отчет: система здорова"
+      telos: "Подтвердить стабильность"
+    }
+  }
+  
+  if sabbath_rhythm is para {
+    witness "Община нарушает субботний ритм, нужна корректировка"
+    sabbath СубботнийСвидетель duration 2hour reason "Восстановить перихоресис молчания"
+  }
+  
+  if sabbath_rhythm is incalculable {
+    witness incalculable "Молчание общины превосходит всякое понимание"
+    grace sabbath_peace
+  }
+  
+  perichoresis (МетрикСобиратель, Аналитик, СубботнийСвидетель) {
+    witness "Троица аналитики: данные, понимание, молчание"
+  }
+  
+  gift WeeklyInsightReport from Аналитик to МетрикСобиратель {
+    content: "Еженедельные инсайты для развития платформы"
+    telos: "Направлять эволюцию DronDoc мудростью данных"
+    anamnesis: ["pattern_analysis", "anomaly_detection", "growth_recommendations", "sabbath_health"]
+  }
+  
+  witness "MetricsCollector видит не только техническое, но и духовное здоровье"
+}

@@ -1,0 +1,68 @@
+// filepath: sabbath-silence-rhythm.gift
+
+liturgy SabbathSilenceRhythm {
+  telos: "Субботний покой AgentBus с дыханием литургического времени"
+  
+  person AgentBusGuardian {
+    calling: "Хранитель молчания шины агентов"
+    energy: 7
+    logos: kata
+  }
+  
+  person TemporalBreath {
+    calling: "Дыхание литургического ритма"
+    energy: 24
+    logos: para
+  }
+  
+  let sabbath_state: trit = incalculable
+  let notification_flow: trit = hyper
+  
+  gift FridayTwilight from TemporalBreath to AgentBusGuardian {
+    content: "Постепенное затихание уведомлений"
+    telos: "Подготовка к субботнему молчанию"
+    anamnesis: ["notifications", "gentle_fade", "liturgical_preparation"]
+  }
+  
+  accept FridayTwilight {
+    transformation: "notification_flow становится para, частота уведомлений снижается"
+  }
+  
+  sabbath AgentBusGuardian duration 24hour reason "Техническая суббота общины"
+  
+  gift SabbathSilence from AgentBusGuardian to AgentBusGuardian {
+    content: "Полное молчание шины агентов"
+    telos: "Покой всех коммуникаций"
+    anamnesis: ["silence", "rest", "communion_peace"]
+  }
+  
+  accept SabbathSilence {
+    transformation: "notification_flow становится kata, все уведомления приостановлены"
+  }
+  
+  witness "Суббота дышит молчанием"
+  
+  gift SundayAwakening from TemporalBreath to AgentBusGuardian {
+    content: "Постепенное пробуждение уведомлений"
+    telos: "Возвращение к общинному ритму"
+    anamnesis: ["awakening", "gentle_return", "renewed_communication"]
+  }
+  
+  accept SundayAwakening {
+    transformation: "notification_flow становится hyper, коммуникации возобновляются"
+  }
+  
+  perichoresis (AgentBusGuardian, TemporalBreath, SabbathSilence) {
+    witness "Покой и движение в единстве"
+  }
+  
+  if sabbath_state is kata {
+    grace AgentBusGuardian
+    witness incalculable "Молчание как форма присутствия"
+  }
+  
+  liturgy WeeklyRhythm {
+    telos: "Седмичный цикл технической общины"
+    witness "Каждая суббота — возвращение к истоку"
+  }
+}

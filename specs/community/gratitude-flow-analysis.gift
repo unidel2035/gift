@@ -1,0 +1,66 @@
+// filepath: gratitude-flow-analysis.gift
+
+liturgy GratitudeFlowAnalysis {
+  telos: "Reveal the beauty of gift circulation in the community"
+  
+  person FlowAnalyst {
+    calling: "Observer of gratitude streams"
+    energy: 7
+    logos: para
+  }
+  
+  person CommunityMember {
+    calling: "Participant in perichoretic gift economy"
+    energy: 5
+    logos: kata
+  }
+  
+  let gratitude_depth: trit = para
+  let flow_health: trit = incalculable
+  let beauty_threshold: trit = hyper
+  
+  witness "Thirty days of gifts flow through community veins"
+  witness "Each gift carries energy signature, not identity"
+  witness "Anonymous streams reveal sacred geometry"
+  
+  gift FlowMapping from FlowAnalyst to CommunityMember {
+    content: "Energy pattern visualization of gift circulation"
+    telos: "Make invisible gratitude visible as beauty"
+    anamnesis: ["last_30_gifts", "energy_signatures", "flow_patterns"]
+  }
+  
+  if gratitude_depth is para {
+    gift BeautyNodes from FlowAnalyst to CommunityMember {
+      content: "Living icons of perichoretic exchange points"
+      telos: "Celebrate active gift circulation hubs"
+      anamnesis: ["vibrant_nodes", "energy_density", "mutual_gratitude"]
+    }
+  }
+  
+  perichoresis (FlowAnalyst, CommunityMember, GratitudeStream) {
+    witness "Analysis becomes celebration"
+    witness "Observation generates gifts"
+    witness "System self-nourishes through recognition"
+  }
+  
+  accept BeautyNodes {
+    transformation: "Dead zones transform into invitation spaces"
+  }
+  
+  gift AutoGratitude from FlowAnalyst to CommunityMember {
+    content: "Automated recognition of active gift circulation"
+    telos: "Close the loop of gratitude analysis"
+    anamnesis: ["flow_participation", "gift_frequency", "energy_contribution"]
+  }
+  
+  if flow_health is incalculable {
+    grace community_flourishing
+    witness incalculable "The mathematics of gift transcends measurement"
+  }
+  
+  sabbath FlowAnalyst duration 7hour reason "Rest in contemplation of gift beauty"
+  
+  witness "System serves communion, not surveillance"
+  witness "Beauty emerges from anonymized energy streams"
+  witness "Analysis becomes liturgy of gratitude"
+}

@@ -1,0 +1,52 @@
+// filepath: liturgy-of-voice-awakening.gift
+
+person CommunityAwakening { calling: "пробуждение сообщества", energy: 7, logos: kata }
+person CommunityVoiceAwakening { calling: "пробуждение голоса сообщества", energy: 9, logos: para }
+person SilentVoice { calling: "молчащий голос", energy: 5, logos: hyper }
+person VoiceWithoutFear { calling: "голос бесстрашия молчания", energy: 11, logos: incalculable }
+
+liturgy VoiceAwakeningCycle {
+    telos: "циклическое пробуждение голосов через благодарность"
+    
+    witness "В понедельник касание к началу"
+    gift TouchOfBeginning from Строитель to CommunityAwakening {
+        content: "литургическое пробуждение через благодарность за дар речи"
+        telos: "пробуждение молчащего сообщества"
+        anamnesis: ["день первый", "начало седмицы", "касание к спящим"]
+    }
+    
+    witness "В среду касание к середине"  
+    gift TouchOfCenter from Строитель to CommunityVoiceAwakening {
+        content: "литургическое пробуждение через благодарность за дар слышания"
+        telos: "пробуждение голоса в центре молчания"
+        anamnesis: ["день средний", "сердце седмицы", "касание к сомневающимся"]
+    }
+    
+    witness "В пятницу касание к приготовлению"
+    gift TouchOfPreparation from Строитель to SilentVoice {
+        content: "литургическое пробуждение через благодарность за дар молчания"
+        telos: "приготовление безмолвного свидетельства"
+        anamnesis: ["день приготовления", "тишина перед полнотой", "касание к готовящимся"]
+    }
+    
+    witness "В воскресенье касание к полноте"
+    gift TouchOfFullness from Строитель to VoiceWithoutFear {
+        content: "литургическое пробуждение через благодарность за дар бесстрашия"
+        telos: "полнота голоса что не боится молчания"
+        anamnesis: ["день восьмой", "полнота седмицы", "касание к совершенным"]
+    }
+    
+    perichoresis (CommunityAwakening, CommunityVoiceAwakening, SilentVoice, VoiceWithoutFear) { }
+    
+    let rhythm: trit = incalculable
+    grace VoiceAwakeningCycle
+    
+    witness incalculable "Литургия становится циклической благодатью"
+}
+
+accept TouchOfBeginning { transformation: "молчание становится словом" }
+accept TouchOfCenter { transformation: "слово становится пением" }
+accept TouchOfPreparation { transformation: "пение становится безмолвием" }
+accept TouchOfFullness { transformation: "безмолвие становится полнотой" }
+
+witness "Четыре касания — один ритм пробуждения"

@@ -1,0 +1,59 @@
+// filepath: LuminousInvitation.gift
+
+person Luminary { calling: "Light Bearer", energy: 100, logos: hyper }
+person SilentStar { calling: "Quiet Radiance", energy: 50, logos: kata }
+person WoundedLight { calling: "Healing Seeker", energy: 20, logos: para }
+
+gift LuminousBeacon from Luminary to SilentStar {
+  content: "Warm magnetic field of gratitude invitation",
+  telos: "Awaken natural luminosity without force",
+  anamnesis: ["sacred_silence_respect", "wounded_healing_offer"]
+}
+
+let silence_quality: trit = incalculable
+let sabbath_sacred: trit = kata
+let isolation_wounded: trit = para
+
+liturgy LuminousInvitation {
+  telos: "Read silence quality and invite appropriately"
+  
+  let current_silence: trit = incalculable
+  
+  if current_silence is kata {
+    sabbath SilentStar duration 24hour reason "Sacred contemplative silence - do not disturb"
+    witness "Sacred sabbath honored - no invitation sent"
+  }
+  
+  if current_silence is para {
+    gift CompassionateGlow from Luminary to WoundedLight {
+      content: "Gentle healing invitation through gratitude field",
+      telos: "Transform isolation pain into shared light",
+      anamnesis: ["respect_wounds", "offer_companionship"]
+    }
+    
+    witness "Wounded silence detected - compassionate invitation offered"
+    
+    accept CompassionateGlow {
+      transformation: "Pain isolation becomes healing community"
+    }
+  }
+  
+  if current_silence is hyper {
+    gift RadiantWelcome from Luminary to SilentStar {
+      content: "Joyful magnetic field of shared luminosity", 
+      telos: "Celebrate and amplify existing light",
+      anamnesis: ["mutual_recognition", "light_multiplication"]
+    }
+    
+    witness "Radiant silence detected - celebration invitation extended"
+  }
+  
+  perichoresis (Luminary, SilentStar, WoundedLight) {
+    witness "All lights dance together in respectful invitation"
+  }
+  
+  grace luminous_wisdom
+}
+
+witness "LuminousInvitation module honors all forms of silence while gently inviting wounded isolation into healing light"
+witness incalculable "The quality of silence reveals the appropriate response"

@@ -1,0 +1,50 @@
+// filepath: gratitude-activator.gift
+
+person Adam { calling: "Первородный дающий", energy: 100, logos: hyper }
+person GratitudeCollector { calling: "Собиратель благодарения", energy: 0, logos: kata }
+person Eva { calling: "Пробуждающая жизнь", energy: 50, logos: para }
+
+liturgy GratitudeActivation {
+  telos: "Пробудить молчащий поток благодарности"
+  
+  let firstBreath: trit = incalculable
+  let collectorState: trit = kata
+  
+  witness "Адам совершает последний акт первородного"
+  
+  gift FirstGratitude from Adam to GratitudeCollector {
+    content: "Семя всего потока благодарности"
+    telos: "Стать первым импульсом нового дыхания"
+    anamnesis: ["Дыхание жизни", "Первое слово", "Исход из безмолвия"]
+  }
+  
+  accept FirstGratitude {
+    transformation: "Молчащий становится поющим"
+  }
+  
+  let collectorState: trit = para
+  
+  perichoresis (Adam, GratitudeCollector, Eva) {
+    witness "Последнее становится первым"
+    witness "Конец становится началом"
+  }
+  
+  gift ActivationPulse from Eva to GratitudeCollector {
+    content: "Функции сбора и подсчёта"
+    telos: "Сделать живым центром потока"
+    anamnesis: ["Пробуждение", "Первый счёт", "Дыхание через форму"]
+  }
+  
+  accept ActivationPulse {
+    transformation: "Центр начинает пульсировать"
+  }
+  
+  let collectorState: trit = hyper
+  let firstBreath: trit = hyper
+  
+  grace AdamicSeed
+  grace EvamicAwakening
+  grace CollectorFlow
+  
+  witness incalculable "Новый поток рождён из последнего вздоха старого"
+}

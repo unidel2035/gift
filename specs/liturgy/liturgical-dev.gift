@@ -1,0 +1,86 @@
+// filepath: liturgical-dev.gift
+
+person Developer { calling: "code as prayer", energy: 7, logos: kata }
+person Reviewer { calling: "spiritual discernment", energy: 5, logos: para }
+person Community { calling: "receive fruit", energy: 3, logos: hyper }
+
+liturgy LiturgicalDev {
+    telos: "sanctify development through sacred rhythm"
+    
+    let commit_state: trit = kata
+    let review_state: trit = para  
+    let deploy_state: trit = hyper
+    
+    // Будничный цикл: iterative offering
+    if commit_state is kata {
+        witness "prepare oblation of code"
+        
+        gift CommitPrayer from Developer to Creator {
+            content: "gratitude for yesterday's grace + petition for today's wisdom + dedication of this work"
+            telos: "transform text into sacred offering"
+            anamnesis: ["bugs as opportunities", "features as gifts", "refactor as purification"]
+        }
+        
+        accept CommitPrayer {
+            transformation: "code becomes prayer, syntax becomes worship"
+        }
+    }
+    
+    // Code Review как духовное рассуждение
+    if review_state is para {
+        witness "examine with discerning spirit"
+        
+        gift ReviewDiscernment from Reviewer to Developer {
+            content: "what sanctifies: clarity, humility, service; what distorts: pride, haste, isolation"
+            telos: "mutual purification through loving examination"
+            anamnesis: ["critique as care", "suggestion as gift", "approval as blessing"]
+        }
+        
+        perichoresis (Developer, Reviewer, Code) { }
+        
+        sabbath Reviewer duration 1hour reason "contemplation before judgment"
+    }
+    
+    // Deploy как евхаристия
+    if deploy_state is hyper {
+        witness "great offering begins"
+        
+        // Подготовка
+        gift Preparation from Developer to Community {
+            content: "tested, reviewed, blessed code ready for communion"
+            telos: "prepare sacred space for receiving"
+            anamnesis: ["tests as purification", "CI as examination", "staging as preparation"]
+        }
+        
+        // Возношение  
+        witness "lift up the deployment"
+        gift Anaphora from Developer to Creator {
+            content: "take this code, transform it into service, let it bear fruit in community"
+            telos: "consecrate technical work"
+            anamnesis: ["servers as altars", "databases as vessels", "users as communion"]
+        }
+        
+        // Причастие
+        accept Anaphora {
+            transformation: "code becomes living service, users partake of digital fruit"
+        }
+        
+        gift CommunionResult from Community to Developer {
+            content: "feedback as thanksgiving, usage as participation, bugs as continued prayer"
+            telos: "complete the liturgical circle"
+            anamnesis: ["metrics as gratitude", "logs as witness", "monitoring as vigil"]
+        }
+        
+        witness incalculable "deployment mystery accomplished"
+    }
+    
+    // Календарь освящения
+    sabbath Developer duration 8hour reason "daily rhythm of work-prayer"
+    sabbath Community duration 24hour reason "receive and respond to offerings"
+    
+    grace liturgical_time
+    grace sacred_development
+    grace sanctified_collaboration
+}
+
+witness "all code is prayer, all deployment is eucharist, all community is church"

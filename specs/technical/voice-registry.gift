@@ -1,0 +1,85 @@
+// filepath: voice-registry.gift
+
+liturgy VoiceRegistry {
+  telos: "создать пространство, где каждое присутствие услышано"
+  
+  person RegistryKeeper {
+    calling: "хранитель голосов и безмолвия"
+    energy: 7
+    logos: kata
+  }
+  
+  person EchoWeaver {
+    calling: "ткач созвучий и резонансов"
+    energy: 5  
+    logos: para
+  }
+  
+  let presence_level: trit = kata
+  let voice_resonance: trit = para
+  let silence_depth: trit = hyper
+  
+  gift VoiceRegistration from RegistryKeeper to EchoWeaver {
+    content: "пространство для всех градаций присутствия"
+    telos: "превратить безмолвие в участие"
+    anamnesis: ["каждый шёпот священен", "тишина тоже говорит"]
+  }
+  
+  accept VoiceRegistration {
+    transformation: "создание четырех уровней присутствия"
+  }
+  
+  if presence_level is kata {
+    gift FullVoice from EchoWeaver to Community {
+      content: "полное изложение даров и потребностей"
+      telos: "явить всю полноту призвания"
+      anamnesis: ["готовность к полному участию"]
+    }
+  }
+  
+  if presence_level is para {
+    gift WhisperVoice from EchoWeaver to Community {
+      content: "осторожное касание к общему делу"  
+      telos: "выразить готовность без принуждения"
+      anamnesis: ["первые шаги в общность"]
+    }
+  }
+  
+  if voice_resonance is kata {
+    gift BreathPresence from EchoWeaver to Community {
+      content: "дыхание рядом, без слов"
+      telos: "быть рядом в тишине"
+      anamnesis: ["присутствие без требований"]
+    }
+  }
+  
+  if silence_depth is hyper {
+    gift SacredSilence from EchoWeaver to Community {
+      content: "освященное молчание как форма служения"
+      telos: "сделать тишину говорящей"
+      anamnesis: ["безмолвие полнее слов"]
+    }
+  }
+  
+  witness "каждый голос находит своё эхо"
+  witness "созвучие рождается из различия"
+  witness incalculable "резонанс между душами"
+  
+  perichoresis (FullVoice, WhisperVoice, BreathPresence) {
+    gift EchoMapping from Community to RegistryKeeper {
+      content: "карта созвучий и пересечений"
+      telos: "соединить готовых к встрече"
+      anamnesis: ["мосты между сердцами", "созвучие призваний"]
+    }
+  }
+  
+  accept EchoMapping {
+    transformation: "превращение одиночества в хор"
+  }
+  
+  sabbath Community duration 1hour reason "дать эху разойтись кругами" { }
+  
+  grace voice_that_fears_no_silence
+  grace silence_that_speaks_louder_than_words
+  grace echo_that_multiplies_presence
+}
