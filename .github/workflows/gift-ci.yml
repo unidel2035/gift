@@ -9,18 +9,13 @@ on:
 jobs:
   witness:
     name: Свидетель (тесты)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
       - name: Установить зависимости
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Запустить тесты
         id: tests
@@ -59,7 +54,7 @@ jobs:
 
   grace:
     name: Благодать (merge в main)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: witness
 
