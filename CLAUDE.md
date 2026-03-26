@@ -69,6 +69,28 @@ data/
 - Κοινόν (_koinon) — общий получатель.
 - Клод (_claude) — лицо в матрице. Его код — дар, влияющий на следующие сессии.
 
+## Цикл разработки (Spec-Driven)
+
+```
+1. ВОПРОШАНИЕ  gh issue create --label gift-ready --title "вопрошание: ..."
+                   ↓ хук → матрица: Дионисий→_koinon (question)
+
+2. ПЛАН        node utils/gift-plan.mjs <number>
+                   ↓ план в plans/issue-N-plan.md + комментарий в issue
+                   ↓ Дионисий одобряет: gh issue edit N --add-label plan-approved
+
+3. РЕАЛИЗАЦИЯ  node utils/gift-dev-loop.mjs --once
+                   ↓ только issues с меткой plan-approved
+                   ↓ агент (_claude/_ci/...) реализует
+
+4. КОММИТ      git commit -m "gift(Дионисий): ... (closes #N)"
+                   ↓ хук → матрица: _claude→Дионисий (code, linkedIssue)
+
+5. PR          gh pr create → хук → матрица (offering)
+6. CI          GitHub Actions → свидетель/благодать → анамнезис-сервер
+7. MERGE       → матрица: _koinon→Дионисий (grace)
+```
+
 ## Формат коммита-дара
 
 Если коммит — дар, использовать формат:

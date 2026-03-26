@@ -52,11 +52,32 @@ function recordAct(mem, giverId, receiverId, type, content, weight, linkedIssue)
 // ── GitHub issues ──────────────────────────────────────────────────────────
 function getReadyIssues() {
   try {
+    // Только issues с plan-approved — план должен быть одобрен Дионисием
     const raw = execSync(
-      'gh issue list --label gift-ready --state open --json number,title,body,assignees --limit 10',
+      'gh issue list --label plan-approved --state open --json number,title,body,labels --limit 10',
       { cwd: ROOT }
     ).toString();
-    return JSON.parse(raw);
+    const approved = JSON.parse(raw);
+    if (approved.length) return approved;
+
+    // Fallback: gift-ready без плана → сначала создать план
+    const raw2 = execSync(
+      'gh issue list --label gift-ready --state open --json number,title,body,labels --limit 10',
+      { cwd: ROOT }
+    ).toString();
+    const ready = JSON.parse(raw2).filter(i =>
+      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved')
+    );
+    if (ready.length) {
+      console.log(`[оркестратор] ${ready.length} issues без плана → генерирую планы сначала`);
+      for (const i of ready) {
+        spawnSync('node', ['utils/gift-plan.mjs', String(i.number)],
+          { cwd: ROOT, stdio: 'inherit' });
+      }
+      console.log('[оркестратор] Планы созданы. Жду одобрения Дионисия.');
+      return []; // не реализуем до одобрения
+    }
+    return [];
   } catch {
     return [];
   }
