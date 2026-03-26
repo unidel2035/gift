@@ -28,6 +28,17 @@ import { GiftAct, AntiKenosis } from '../core/GiftAct.js';
 import { Trit, TernaryVM } from '../core/TernaryCore.js';
 import LogosRegistry from '../core/LogosRegistry.js';
 import { GratitudeGraph } from '../traces/GratitudeGraph.js';
+import { GiftMemory } from '../core/GiftMemory.js';
+import { KoinonFederation } from '../core/KoinonFederation.js';
+
+// ── KoinonFederation ─────────────────────────────────────────
+
+const _fedMemory    = new GiftMemory(['_claude', '_koinon', 'Дионисий']);
+const _federation   = new KoinonFederation(
+  process.env.KOINON_ID  ?? 'koinon-dion',
+  _fedMemory,
+  { url: process.env.KOINON_URL ?? null }
+);
 
 // ── Состояние сессии ─────────────────────────────────────────
 
@@ -767,6 +778,70 @@ const server = createServer(async (req, res) => {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found', path }));
     }
+    return;
+  }
+
+  // Federation
+  if (path.startsWith('/federation')) {
+    let body = {};
+    if (req.method === 'POST') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      try { body = JSON.parse(Buffer.concat(chunks).toString()); } catch {}
+    }
+
+    const json = (obj, status = 200) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(obj, null, 2));
+    };
+
+    // POST /federation/connect — рукопожатие
+    if (req.method === 'POST' && path === '/federation/connect') {
+      try {
+        const descriptor = _federation.acceptHandshake(body);
+        json(descriptor);
+      } catch (e) {
+        json({ error: e.message }, 400);
+      }
+      return;
+    }
+
+    // GET /federation/peers — список общин
+    if (req.method === 'GET' && path === '/federation/peers') {
+      json({ peers: _federation.peers(), count: _federation.peerCount() });
+      return;
+    }
+
+    // POST /federation/gift — принять межобщинный акт
+    if (req.method === 'POST' && path === '/federation/gift') {
+      const result = _federation.receiveFromPeer(body);
+      json(result);
+      return;
+    }
+
+    // GET /federation/matrix — экспорт матрицы
+    if (req.method === 'GET' && path === '/federation/matrix') {
+      json(_federation.matrixSnapshot());
+      return;
+    }
+
+    // GET /federation/global — глобальный тензор
+    if (req.method === 'GET' && path === '/federation/global') {
+      const paschaBoost = new URL(req.url, `http://localhost:${PORT}`).searchParams.get('pascha') === '1';
+      const tensor = await _federation.computeGlobalTensor({ paschaBoost });
+      json(tensor);
+      return;
+    }
+
+    // GET /federation/pascha — пасхальная синхронизация
+    if (req.method === 'GET' && path === '/federation/pascha') {
+      const year = parseInt(new URL(req.url, `http://localhost:${PORT}`).searchParams.get('year') ?? new Date().getFullYear());
+      const result = await _federation.onPascha(year);
+      json(result);
+      return;
+    }
+
+    json({ error: 'not found', path }, 404);
     return;
   }
 
