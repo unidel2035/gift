@@ -200,9 +200,8 @@ function createPR(issueNumber, title, summary, agentId) {
       `Создано gift-dev-loop.mjs`,
     ].join('\n');
 
-    // Передаём body через stdin (spawnSync) чтобы избежать проблем с кавычками и спецсимволами
-    const { spawnSync: spawn } = await import('child_process');
-    const r = spawn('gh', ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', branch, '--base', 'main'], {
+    // Передаём title и body как аргументы массива — никаких проблем с кавычками и спецсимволами
+    const r = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', branch, '--base', 'main'], {
       cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
     if (r.status !== 0) throw new Error(r.stderr?.slice(0, 200) || `exit ${r.status}`);
