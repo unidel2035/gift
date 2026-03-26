@@ -24,12 +24,16 @@ try {
   process.exit(0); // не git-репо или нет коммитов
 }
 
-// Формат: gift(Получатель): описание
+// Формат: gift(Получатель): описание (closes #N)
 const m = msg.match(/^gift\(([^)]+)\):\s*(.+)$/);
 if (!m) process.exit(0); // не дар — игнорируем
 
 const receiver    = m[1].trim();
 const description = m[2].trim();
+
+// Извлечь linkedIssue если есть "closes #N" или "#N"
+const issueMatch  = description.match(/#(\d+)/);
+const linkedIssue = issueMatch ? parseInt(issueMatch[1]) : null;
 
 // Обновить матрицу
 const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
@@ -45,11 +49,12 @@ mem._idx('_claude');
 mem._idx(receiver);
 
 mem.receive({
-  giverId:     '_claude',
-  receiverId:  receiver,
-  weight:      4,
-  type:        'code',
-  content:     description,
+  giverId:      '_claude',
+  receiverId:   receiver,
+  weight:       4,
+  type:         'code',
+  content:      description,
+  linkedIssue,
   irreversible: true,
 });
 

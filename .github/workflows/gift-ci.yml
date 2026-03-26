@@ -1,0 +1,81 @@
+name: Gift CI — Свидетель и Благодать
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  witness:
+    name: Свидетель (тесты)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Запустить тесты
+        id: tests
+        run: npm test 2>&1 | tee test-output.txt
+        continue-on-error: true
+
+      - name: Свидетель — тесты прошли (witness-акт)
+        if: steps.tests.outcome == 'success'
+        run: |
+          curl -s -X POST ${{ secrets.ANAMNESIS_URL }}/gift \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"giverId\": \"CI\",
+              \"receiverId\": \"_koinon\",
+              \"weight\": 3,
+              \"type\": \"witness\",
+              \"content\": \"тесты прошли: ${{ github.sha }}\"
+            }" || true
+
+      - name: Свидетель — тесты упали (kenosis-акт)
+        if: steps.tests.outcome == 'failure'
+        run: |
+          curl -s -X POST ${{ secrets.ANAMNESIS_URL }}/gift \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"giverId\": \"CI\",
+              \"receiverId\": \"_koinon\",
+              \"weight\": 1,
+              \"type\": \"kenosis\",
+              \"content\": \"тесты упали: ${{ github.sha }}\"
+            }" || true
+
+      - name: Fail если тесты упали
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
+
+  grace:
+    name: Благодать (merge в main)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: witness
+
+    steps:
+      - name: Благодать — дар принят общиной
+        run: |
+          # Извлечь receiver из сообщения коммита если формат gift(...)
+          MSG="${{ github.event.head_commit.message }}"
+          RECEIVER=$(echo "$MSG" | grep -oP '(?<=gift\()[^)]+' || echo "_koinon")
+
+          curl -s -X POST ${{ secrets.ANAMNESIS_URL }}/gift \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"giverId\": \"_koinon\",
+              \"receiverId\": \"$RECEIVER\",
+              \"weight\": 6,
+              \"type\": \"grace\",
+              \"content\": \"merge принят: ${MSG::80}\"
+            }" || true
