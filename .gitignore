@@ -1,3 +1,7 @@
 node_modules/
 .env
 *.log
+data/spec-vectors.db
+data/.anamnesis-cache.json
+data/.session-heartbeat.json
+data/pulse-pid.txt

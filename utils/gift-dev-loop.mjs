@@ -167,11 +167,14 @@ async function runClaudeAgent(issueNumber, title, body) {
     // Найти релевантные спецификации
     const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
     const query   = `${title} ${body || ''}`;
-    const specs   = searchSpecs(query, 5);
+
+    // Получаем все релевантные спеки — больше контекста = лучше агент
+    // Claude имеет 200k окно; 20 спеков × ~500 токенов ≈ 10k — вписываемся
+    const specs   = await searchSpecs(query, 20);
     const specCtx = formatContext(specs);
 
     if (specs.length) {
-      console.log(`   Спецификации (${specs.length}): ${specs.map(s => s.file).join(', ')}`);
+      console.log(`   Спецификации (${specs.length}): ${specs.slice(0,5).map(s => s.file).join(', ')}${specs.length>5?'...':''}`);
     }
 
     const prompt = [
@@ -183,15 +186,40 @@ async function runClaudeAgent(issueNumber, title, body) {
     ].join('');
 
     // Запускаем claude в режиме --print (не интерактивный)
-    const r = spawnSync('claude', ['--print', prompt], {
-      cwd: ROOT, timeout: 120_000,
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
-    });
+    // Петля самоисправления: до 3 попыток
+    const MAX_ATTEMPTS = 3;
+    let lastError = '';
 
-    if (r.status === 0) {
-      return { success: true, summary: `issue #${issueNumber} закрыт` };
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const attemptPrompt = attempt === 1
+        ? prompt
+        : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
+
+      const r = spawnSync('claude', ['--print', attemptPrompt], {
+        cwd: ROOT, timeout: 120_000,
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      if (r.status !== 0) {
+        return { success: false, error: r.stderr?.slice(0, 200) || 'ошибка' };
+      }
+
+      // Запускаем тесты
+      console.log(`   Попытка ${attempt}/${MAX_ATTEMPTS} — запускаю тесты...`);
+      const test = spawnSync('npm', ['test'], {
+        cwd: ROOT, timeout: 60_000,
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      if (test.status === 0) {
+        return { success: true, summary: `issue #${issueNumber} закрыт (попытка ${attempt})` };
+      }
+
+      lastError = (test.stderr || test.stdout || '').slice(0, 500);
+      console.log(`   ✗ Тесты упали (попытка ${attempt}): ${lastError.slice(0, 80)}...`);
     }
-    return { success: false, error: r.stderr?.slice(0, 200) || 'ошибка' };
+
+    return { success: false, error: `тесты не прошли после ${MAX_ATTEMPTS} попыток: ${lastError.slice(0, 200)}` };
   } catch (e) {
     return { success: false, error: e.message };
   }

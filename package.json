@@ -21,6 +21,14 @@
     "oikonomia": "node src/lab/index.js oikonomia",
     "repl": "node src/lab/index.js repl",
     "sergiy": "node src/lab/sergiy.js",
+    "spec:build": "node utils/build-spec-library.mjs",
+    "spec:index": "node utils/spec-index.mjs",
+    "spec:search": "node utils/spec-search.mjs",
+    "pulse": "node utils/ontology-pulse.mjs",
+    "pulse:dry": "node utils/ontology-pulse.mjs --dry-run",
+    "viz": "node utils/gift-viz.mjs",
+    "proposals": "node utils/proposals.mjs",
+    "insight": "node utils/claude-insight.mjs",
     "test": "node --test tests/"
   },
   "keywords": [
@@ -38,6 +46,7 @@
   },
   "dependencies": {
     "@tensorflow/tfjs-node": "^4.22.0",
+    "better-sqlite3": "^12.8.0",
     "openai": "^4.0.0"
   }
 }

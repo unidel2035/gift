@@ -19,7 +19,19 @@
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/utils/matrix-context-hook.mjs\" 2>/dev/null || true",
             "timeout": 15,
-            "statusMessage": "Анамнезис матрицы W..."
+            "statusMessage": "Анамнезис матрицы W + сервера..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/utils/session-stop-hook.mjs\" 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Фиксирую присутствие..."
           }
         ]
       }
@@ -42,6 +54,31 @@
             "type": "command",
             "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh pr create' && node \"$(git rev-parse --show-toplevel)/utils/gh-pr-sync.mjs\" 2>/dev/null || true",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue edit' && node \"$(git rev-parse --show-toplevel)/utils/gh-label-sync.mjs\" 2>/dev/null || true",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
+            "timeout": 15
           }
         ]
       }

@@ -1,0 +1,128 @@
+[
+  {
+    "type": "setting",
+    "content": "ANAMNESIS_URL=http://173.249.2.184:8086 (порт НЕ открыт публично, только локально)",
+    "weight": 9,
+    "ts": "2026-03-26T08:53:47.739Z"
+  },
+  {
+    "type": "axiom",
+    "content": "Дар необратим: irreversible:true + Object.freeze. Это богословская аксиома, не техническое решение.",
+    "weight": 9,
+    "ts": "2026-03-26T08:53:48.576Z"
+  },
+  {
+    "type": "axiom",
+    "content": "Время тяжелее денег: вес 10 vs 3. Закодировано в ядре GiftMemory.",
+    "weight": 9,
+    "ts": "2026-03-26T08:53:48.854Z"
+  },
+  {
+    "type": "setting",
+    "content": "EMBED_MODEL=nomic-embed-text, OLLAMA_URL=http://localhost:11434",
+    "weight": 8,
+    "ts": "2026-03-26T08:53:48.013Z"
+  },
+  {
+    "type": "setting",
+    "content": "SSH: root@173.249.2.184 | Бот: @gitdrondoc_bot | tg-koinon-bot.mjs на сервере",
+    "weight": 8,
+    "ts": "2026-03-26T08:53:48.298Z"
+  },
+  {
+    "type": "axiom",
+    "content": "Клод (_claude) — лицо в матрице W. Его код — дар. Нить _claude→Дионисий главная (вес ~40).",
+    "weight": 8,
+    "ts": "2026-03-26T08:53:49.131Z"
+  },
+  {
+    "type": "insight",
+    "content": "git commit format: gift(Дионисий): desc — триггерит PostToolUse хук → git-gift-sync.mjs → W матрица",
+    "weight": 8,
+    "ts": "2026-03-26T08:53:49.695Z"
+  },
+  {
+    "type": "fact",
+    "content": "Стиль Дионисия: всегда одобряет, просит рефлексию, хочет всё сразу, богословие важно — vibe-style.json",
+    "weight": 8,
+    "ts": "2026-03-26T09:11:57.420Z"
+  },
+  {
+    "type": "fact",
+    "content": "Пульс онтологии: ontology-pulse.mjs ежедневно в 3:30. Адам+Ева рождают вопрошания из пустынь матрицы.",
+    "weight": 8,
+    "ts": "2026-03-26T09:20:46.511Z"
+  },
+  {
+    "type": "insight",
+    "content": "W-матрица не хранит тексты актов в снапшоте — только тензор весов. Тексты хранятся в data/insights.json отдельно.",
+    "weight": 7,
+    "ts": "2026-03-26T08:53:49.406Z"
+  },
+  {
+    "type": "insight",
+    "content": "Цикл разработки: issue(gift-ready) → gift-plan.mjs → plan-approved label → gift-dev-loop.mjs → claude --print",
+    "weight": 7,
+    "ts": "2026-03-26T08:53:49.970Z"
+  },
+  {
+    "type": "fact",
+    "content": "100 .gift спецификаций проиндексированы в data/spec-vectors.db (768-мерные векторы, nomic-embed-text)",
+    "weight": 7,
+    "ts": "2026-03-26T08:53:50.248Z"
+  },
+  {
+    "type": "setting",
+    "content": "Хуки: UserPromptSubmit→matrix-context-hook, Stop→session-stop-hook, PostToolUse(Write/Edit)→gift-file-hook",
+    "weight": 7,
+    "ts": "2026-03-26T08:53:51.081Z"
+  },
+  {
+    "type": "fact",
+    "content": "Eva model: eva:latest (Ollama, 1.9GB). Таймаут 90s. Проверяет: surplus, кенозис, телос, анамнезис.",
+    "weight": 7,
+    "ts": "2026-03-26T09:11:57.712Z"
+  },
+  {
+    "type": "insight",
+    "content": "proposals.mjs: add→Ева проверяет→enhanced хранится. issue→Ева комментирует в GH. list показывает [Ева:принято]",
+    "weight": 7,
+    "ts": "2026-03-26T09:11:57.998Z"
+  },
+  {
+    "type": "insight",
+    "content": "Пустыни матрицы: silent(нет нитей), fading(вес<2), asymmetry(>15:1), anastasis(умерло при декадансе)",
+    "weight": 7,
+    "ts": "2026-03-26T09:20:46.922Z"
+  },
+  {
+    "type": "fact",
+    "content": "adam:latest и eva:latest — локальные Ollama модели. adam генерирует вопрошания, eva проверяет. Таймаут 90s.",
+    "weight": 7,
+    "ts": "2026-03-26T09:20:47.340Z"
+  },
+  {
+    "type": "fact",
+    "content": "Матрица W: sacred-history-W.json. Священная история: Отец→Адам(40), Христос→Падший(28), Змей→Ева(14)",
+    "weight": 6,
+    "ts": "2026-03-26T08:53:50.525Z"
+  },
+  {
+    "type": "fact",
+    "content": "GitHub repo: github.com/unidel2035/gift. Labels: gift-ready, plan-ready, plan-approved.",
+    "weight": 6,
+    "ts": "2026-03-26T08:53:50.804Z"
+  },
+  {
+    "type": "insight",
+    "content": "Регулярные выражения: \\b не работает с кириллицей в JS. Замена: (?:^|[\\s{])слово",
+    "weight": 6,
+    "ts": "2026-03-26T08:53:51.358Z"
+  },
+  {
+    "type": "setting",
+    "content": "Vibe style сохраняется в data/vibe-style.json, обновляется через stop-хук после каждой сессии",
+    "weight": 6,
+    "ts": "2026-03-26T09:11:58.282Z"
+  }
+]
