@@ -34,6 +34,7 @@ const AGENTS = {
   '_codex':    { name: 'Codex',      type: 'llm',      weight: 3 },
   '_ci':       { name: 'CI',         type: 'machine',  weight: 2 },
   '_reviewer': { name: 'Reviewer',   type: 'llm',      weight: 3 },
+  '_external': { name: 'External',   type: 'llm',      weight: 2 },
 };
 
 // ── Матрица ────────────────────────────────────────────────────────────────
@@ -115,6 +116,18 @@ async function orchestrate() {
   for (const issue of issues) {
     const { number, title, body } = issue;
     console.log(`\n── Issue #${number}: ${title}`);
+
+    // eval: если issue имеет метку eval — запустить gift-eval.mjs (перихоресис агентов)
+    const isEval = issue.labels?.some(l => l.name === 'eval');
+    if (isEval) {
+      console.log(`   Режим eval: запускаю gift-eval.mjs #${number}`);
+      spawnSync('node', ['utils/gift-eval.mjs', String(number), '--plan'],
+        { cwd: ROOT, stdio: 'inherit', timeout: 600_000 });
+      recordAct(mem, '_claude', '_koinon', 'witness',
+        `eval #${number}: агент-перихоресис завершён`, 3, number);
+      saveMem(mem);
+      continue;
+    }
 
     // Выбрать агента (простая эвристика — можно усложнить)
     const agentId = pickAgent(title, body);
@@ -215,7 +228,10 @@ async function runAgent(agentId, issueNumber, title, body) {
   if (agentId === '_ci') {
     return runCIAgent(issueNumber);
   }
-  // Для других агентов — заглушка (можно подключить внешние API)
+  if (agentId === '_codex') {
+    return runCodexAgent(issueNumber, title, body);
+  }
+  // _external и другие: только архитектурные планы, не реализуют код
   return { success: false, error: `агент ${agentId} ещё не подключён` };
 }
 
@@ -293,6 +309,36 @@ async function runCIAgent(issueNumber) {
     });
     if (r.status === 0) return { success: true, summary: 'тесты прошли' };
     return { success: false, error: 'тесты упали' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ── Кодекс: Claude без богословского контекста ────────────────────────────
+async function runCodexAgent(issueNumber, title, body) {
+  try {
+    const prompt = [
+      `Task: implement GitHub Issue #${issueNumber}`,
+      `Title: ${title}`,
+      body ? `\nDescription:\n${body}` : '',
+      `\nImplement the feature. Commit with: gift(Дионисий): [description] (closes #${issueNumber})`,
+    ].join('');
+
+    const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
+      input: prompt, cwd: ROOT, timeout: 300_000,
+      encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    if (r.error || r.status !== 0) {
+      return { success: false, error: r.error?.message || r.stderr?.slice(0, 200) || `exit ${r.status}` };
+    }
+
+    const test = spawnSync('npm', ['test'], {
+      cwd: ROOT, timeout: 60_000,
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+    });
+    if (test.status === 0) return { success: true, summary: `issue #${issueNumber} закрыт (_codex)` };
+    return { success: false, error: 'тесты упали после _codex' };
   } catch (e) {
     return { success: false, error: e.message };
   }

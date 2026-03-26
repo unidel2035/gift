@@ -5,14 +5,20 @@
  * Телос: сравнить подходы разных агентов к одной задаче через призму онтологии дара.
  * Каждый агент — лицо, несущее свой телос. Сравнение — перихоресис.
  *
+ * Два режима:
+ *   full  — агенты работают в изолированных git-ветках (нужен доступ на запись в .git)
+ *   plan  — агенты описывают подход текстом (работает всегда, в т.ч. как user `new`)
+ *
  * Агенты:
  *   _claude   — богословский агент: полный контекст спецификаций + онтология дара
  *   _codex    — минималистичный: только задача, прямая реализация без теологии
  *   _external — внешний (Ollama): независимый взгляд, локальная модель
  *
  * Использование:
- *   node utils/gift-eval.mjs <issue-number>                    # полный eval
- *   node utils/gift-eval.mjs <issue-number> --dry              # план без запуска
+ *   node utils/gift-eval.mjs <issue-number>                    # авто-выбор режима
+ *   node utils/gift-eval.mjs <issue-number> --plan             # только сравнение планов
+ *   node utils/gift-eval.mjs <issue-number> --full             # полная реализация (нужен hive)
+ *   node utils/gift-eval.mjs <issue-number> --dry              # показать план без запуска
  *   node utils/gift-eval.mjs <issue-number> --agents=_claude,_codex
  *   node utils/gift-eval.mjs --list                            # все сохранённые eval-ы
  *   node utils/gift-eval.mjs --report <issue-number>           # показать сохранённый
@@ -57,12 +63,27 @@ const EVAL_AGENTS = {
 };
 
 // ── CLI аргументы ─────────────────────────────────────────────────────────
-const argv      = process.argv.slice(2);
-const DRY       = argv.includes('--dry');
-const LIST      = argv.includes('--list');
-const REPORT    = argv.includes('--report');
-const agentsArg = argv.find(a => a.startsWith('--agents='))?.split('=')[1]?.split(',');
-const issueArg  = argv.find(a => /^\d+$/.test(a));
+const argv       = process.argv.slice(2);
+const DRY        = argv.includes('--dry');
+const LIST       = argv.includes('--list');
+const REPORT     = argv.includes('--report');
+const FORCE_PLAN = argv.includes('--plan');
+const FORCE_FULL = argv.includes('--full');
+const agentsArg  = argv.find(a => a.startsWith('--agents='))?.split('=')[1]?.split(',');
+const issueArg   = argv.find(a => /^\d+$/.test(a));
+
+// ── Определить доступный режим ────────────────────────────────────────────
+function canWriteGit() {
+  try {
+    // Проверить возможность записи в .git/refs
+    const testRef = resolve(ROOT, '.git/refs/heads/.eval-write-test');
+    writeFileSync(testRef, '');
+    execSync(`rm -f ${testRef}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ── Матрица ───────────────────────────────────────────────────────────────
 async function loadMem() {
@@ -90,13 +111,52 @@ function fetchIssue(number) {
   return JSON.parse(raw);
 }
 
-// ── Промпты для разных стилей агентов ────────────────────────────────────
-async function buildPrompt(issue, style) {
+// ── Промпты ───────────────────────────────────────────────────────────────
+async function buildPlanPrompt(issue, style) {
   const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
   const query = `${issue.title} ${issue.body || ''}`;
 
   if (style === 'minimal') {
-    // Кодекс: чистая инженерная задача без богословского контекста
+    return [
+      `Task: plan implementation for GitHub Issue #${issue.number}`,
+      `Title: ${issue.title}`,
+      issue.body ? `\nDescription:\n${issue.body}` : '',
+      `\nDescribe your implementation plan: which files to create/modify, key logic, data structures.`,
+      `Be concrete and technical. Output plan only (no code).`,
+    ].join('');
+  }
+
+  if (style === 'theological') {
+    const specs   = await searchSpecs(query, 15);
+    const specCtx = formatContext(specs);
+    if (specs.length) {
+      console.log(`    Спецификации (${specs.length}): ${specs.slice(0,4).map(s=>s.file).join(', ')}${specs.length>4?'...':''}`);
+    }
+    return [
+      `GitHub Issue #${issue.number}: ${issue.title}`,
+      issue.body ? `\nОписание:\n${issue.body}` : '',
+      specCtx ? `\n${specCtx}` : '',
+      `\nОпиши план реализации: какие файлы создать/изменить, ключевая логика, структуры данных.`,
+      `Учитывай онтологию дара и богословский контекст. Только план, не код.`,
+    ].join('');
+  }
+
+  // external
+  const specs   = await searchSpecs(query, 5);
+  const specCtx = formatContext(specs);
+  return [
+    `Implement feature: ${issue.title}`,
+    issue.body ? `\n${issue.body.slice(0, 800)}` : '',
+    specCtx ? `\nContext:\n${specCtx}` : '',
+    `\nProvide a concise implementation plan.`,
+  ].join('');
+}
+
+async function buildImplPrompt(issue, style) {
+  const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
+  const query = `${issue.title} ${issue.body || ''}`;
+
+  if (style === 'minimal') {
     return [
       `Task: implement GitHub Issue #${issue.number}`,
       `Title: ${issue.title}`,
@@ -106,129 +166,67 @@ async function buildPrompt(issue, style) {
     ].join('');
   }
 
-  if (style === 'theological') {
-    // Клод: полный контекст онтологии, спецификации, богословское мышление
-    const specs   = await searchSpecs(query, 20);
-    const specCtx = formatContext(specs);
-    if (specs.length) {
-      console.log(`    Спецификации (${specs.length}): ${specs.slice(0,4).map(s=>s.file).join(', ')}${specs.length>4?'...':''}`);
-    }
-    return [
-      `GitHub Issue #${issue.number}: ${issue.title}`,
-      issue.body ? `\nОписание:\n${issue.body}` : '',
-      specCtx ? `\n${specCtx}` : '',
-      `\nЗадача: реализовать описанное согласно спецификациям. Завершить коммитом:`,
-      `gift(Дионисий): [краткое описание] (closes #${issue.number})`,
-    ].join('');
-  }
-
-  // external: краткий контекст (5 спецификаций)
-  const specs   = await searchSpecs(query, 5);
+  // theological (default)
+  const specs   = await searchSpecs(query, 20);
   const specCtx = formatContext(specs);
+  if (specs.length) {
+    console.log(`    Спецификации (${specs.length}): ${specs.slice(0,4).map(s=>s.file).join(', ')}${specs.length>4?'...':''}`);
+  }
   return [
-    `Implement feature for project "Gift Ontology":`,
-    `Issue: ${issue.title}`,
-    issue.body ? `\n${issue.body.slice(0, 800)}` : '',
-    specCtx ? `\nRelevant specs:\n${specCtx}` : '',
-    `\nDescribe your implementation approach (no code editing tools available).`,
+    `GitHub Issue #${issue.number}: ${issue.title}`,
+    issue.body ? `\nОписание:\n${issue.body}` : '',
+    specCtx ? `\n${specCtx}` : '',
+    `\nЗадача: реализовать описанное согласно спецификациям. Завершить коммитом:`,
+    `gift(Дионисий): [краткое описание] (closes #${issue.number})`,
   ].join('');
 }
 
-// ── Запуск агента в изолированной ветке ──────────────────────────────────
-async function runAgentOnBranch(agentId, issue) {
-  const agent  = EVAL_AGENTS[agentId];
-  const branch = `eval/issue-${issue.number}-${agentId.replace('_', '')}`;
-  const start  = Date.now();
+// ════════════════════════════════════════════════════════════════════════════
+// РЕЖИМ ПЛАН — агенты описывают подход текстом
+// ════════════════════════════════════════════════════════════════════════════
+async function runPlanMode(agentId, issue) {
+  const agent = EVAL_AGENTS[agentId];
+  const start = Date.now();
 
-  console.log(`\n  ▸ ${agent.name} (${agentId}) → ветка: ${branch}`);
+  console.log(`\n  ▸ ${agent.name} (${agentId}) — режим план`);
 
   if (DRY) {
-    console.log(`    [dry-run] Пропускаю запуск агента.`);
-    return { agentId, branch, success: false, diff: '', tests: null,
-             summary: 'dry-run — агент не запускался', duration: 0 };
+    return { agentId, mode: 'plan', plan: 'dry-run', duration: 0 };
   }
 
   try {
-    // Убедиться что на main и создать ветку
-    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
-    const branchExists = safeExec(`git branch --list ${branch}`, ROOT).trim();
-    if (branchExists) {
-      execSync(`git branch -D ${branch}`, { cwd: ROOT, stdio: 'pipe' });
-    }
-    execSync(`git checkout -b ${branch}`, { cwd: ROOT, stdio: 'pipe' });
-
-    let agentResult;
+    let plan;
 
     if (agentId === '_external') {
-      agentResult = await runOllamaAgent(issue);
+      plan = await runOllamaForPlan(issue);
     } else {
-      const prompt = await buildPrompt(issue, agent.style);
-      agentResult  = runClaudeAgent(prompt, issue.number);
+      const prompt = await buildPlanPrompt(issue, agent.style);
+      plan = runClaudeForPlan(prompt);
     }
 
-    // Захватить diff относительно main
-    const diff     = safeExec(`git diff main...${branch} --stat`, ROOT).trim();
-    const diffFull = safeExec(
-      `git diff main...${branch} -- '*.mjs' '*.js' '*.json' '*.md' '*.ts'`,
-      ROOT
-    ).slice(0, 3000);
-
-    // Тесты
-    const test        = spawnSync('npm', ['test'], {
-      cwd: ROOT, timeout: 60_000,
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
-    });
-    const testsPassed = test.status === 0;
-    const testsOut    = (test.stdout + test.stderr).slice(0, 500);
-
-    // Вернуться на main
-    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
-
-    const success = agentResult.success && testsPassed;
-    return {
-      agentId,
-      branch,
-      success,
-      diff,
-      diffFull,
-      tests: { passed: testsPassed, output: testsOut },
-      summary: agentResult.summary || agentResult.error || '',
-      externalResponse: agentResult.externalResponse,
-      duration: Date.now() - start,
-    };
-
+    return { agentId, mode: 'plan', plan, duration: Date.now() - start };
   } catch (e) {
-    try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
-    return {
-      agentId, branch, success: false,
-      diff: '', diffFull: '', tests: null,
-      summary: e.message.slice(0, 200),
-      duration: Date.now() - start,
-    };
+    return { agentId, mode: 'plan', plan: `Ошибка: ${e.message}`, duration: Date.now() - start };
   }
 }
 
-// ── Claude: богословский или минималистичный ──────────────────────────────
-function runClaudeAgent(prompt, issueNumber) {
+function runClaudeForPlan(prompt) {
   const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
     input:    prompt,
     cwd:      ROOT,
-    timeout:  300_000,
+    timeout:  120_000,
     encoding: 'utf8',
     stdio:    ['pipe', 'pipe', 'pipe'],
   });
-
   if (r.error || r.status !== 0) {
-    const err = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
-    return { success: false, summary: err };
+    return `Клод недоступен: ${r.error?.message || `exit ${r.status}`}`;
   }
-  return { success: true, summary: `issue #${issueNumber} реализован` };
+  return r.stdout?.trim() || '(пустой ответ)';
 }
 
-// ── Ollama: внешний агент (описывает подход, не редактирует файлы) ────────
-async function runOllamaAgent(issue) {
+async function runOllamaForPlan(issue) {
   try {
-    const prompt = await buildPrompt(issue, 'external');
+    const prompt = await buildPlanPrompt(issue, 'external');
     const res    = await fetch(`${OLLAMA_URL}/api/chat`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -243,52 +241,130 @@ async function runOllamaAgent(issue) {
       }),
     });
     if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
-    const data     = await res.json();
-    const response = data.message?.content ?? '';
-    // Ollama не может редактировать файлы — фиксируем как архитектурное свидетельство
-    return {
-      success:          false,
-      summary:          'Ollama: архитектурный ответ (без изменений в файлах)',
-      externalResponse: response.slice(0, 1500),
-    };
+    const data = await res.json();
+    return data.message?.content?.trim() || '(пустой ответ)';
   } catch (e) {
-    return { success: false, summary: `Ollama недоступен: ${e.message}` };
+    return `Ollama недоступен: ${e.message}`;
   }
 }
 
-// ── Судья: Клод сравнивает решения ───────────────────────────────────────
-function judgeResults(issue, results) {
+// ════════════════════════════════════════════════════════════════════════════
+// РЕЖИМ FULL — агенты реализуют в изолированных git-ветках
+// ════════════════════════════════════════════════════════════════════════════
+async function runFullMode(agentId, issue) {
+  const agent  = EVAL_AGENTS[agentId];
+  const branch = `eval/issue-${issue.number}-${agentId.replace('_', '')}`;
+  const start  = Date.now();
+
+  console.log(`\n  ▸ ${agent.name} (${agentId}) → ветка: ${branch}`);
+
+  if (DRY) {
+    return { agentId, mode: 'full', branch, success: false, diff: '', tests: null,
+             summary: 'dry-run', duration: 0 };
+  }
+
+  try {
+    // Создать ветку от main (удалить старую если есть)
+    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
+    const existing = safeExec(`git branch --list ${branch}`, ROOT).trim();
+    if (existing) execSync(`git branch -D ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+    execSync(`git checkout -b ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+
+    let agentResult;
+    if (agentId === '_external') {
+      // Ollama не может редактировать файлы
+      const plan = await runOllamaForPlan(issue);
+      agentResult = { success: false, summary: 'plan only', plan };
+    } else {
+      const prompt = await buildImplPrompt(issue, agent.style);
+      agentResult  = runClaudeImpl(prompt, issue.number);
+    }
+
+    // Захватить diff
+    const diff     = safeExec(`git diff main...${branch} --stat`, ROOT).trim();
+    const diffFull = safeExec(
+      `git diff main...${branch} -- '*.mjs' '*.js' '*.json' '*.md'`,
+      ROOT
+    ).slice(0, 3000);
+
+    // Тесты
+    const test      = spawnSync('npm', ['test'], {
+      cwd: ROOT, timeout: 60_000,
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+    });
+    const testsPassed = test.status === 0;
+    const testsOut    = (test.stdout + test.stderr).slice(0, 500);
+
+    // Вернуться на main
+    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
+
+    return {
+      agentId, mode: 'full', branch,
+      success:  agentResult.success && testsPassed,
+      diff, diffFull,
+      tests:    { passed: testsPassed, output: testsOut },
+      summary:  agentResult.summary || '',
+      plan:     agentResult.plan,
+      duration: Date.now() - start,
+    };
+  } catch (e) {
+    try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+    return {
+      agentId, mode: 'full', branch, success: false,
+      diff: '', tests: null, summary: e.message.slice(0, 200),
+      duration: Date.now() - start,
+    };
+  }
+}
+
+function runClaudeImpl(prompt, issueNumber) {
+  const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
+    input:    prompt,
+    cwd:      ROOT,
+    timeout:  300_000,
+    encoding: 'utf8',
+    stdio:    ['pipe', 'pipe', 'pipe'],
+  });
+  if (r.error || r.status !== 0) {
+    return { success: false, summary: r.error?.message || `exit ${r.status}` };
+  }
+  return { success: true, summary: `issue #${issueNumber} реализован` };
+}
+
+// ── Судья ────────────────────────────────────────────────────────────────
+function judgeResults(issue, results, mode) {
   const blocks = results.map(r => {
-    const a = EVAL_AGENTS[r.agentId];
-    const lines = [
-      `### ${a.name} (${r.agentId})`,
-      `Стиль: ${a.description}`,
-      `Итог: ${r.success ? 'УСПЕХ' : 'КЕНОЗИС'}`,
-      `Тесты: ${r.tests ? (r.tests.passed ? 'прошли ✓' : 'упали ✗') : 'не запускались'}`,
-      `Время: ${Math.round((r.duration || 0) / 1000)}с`,
-    ];
-    if (r.diff)             lines.push(`Изменения:\n${r.diff}`);
-    if (r.diffFull)         lines.push(`Diff (фрагмент):\n${r.diffFull.slice(0, 800)}`);
-    if (r.externalResponse) lines.push(`Архитектурный ответ:\n${r.externalResponse.slice(0, 600)}`);
-    if (r.summary)          lines.push(`Комментарий: ${r.summary}`);
+    const a     = EVAL_AGENTS[r.agentId];
+    const lines = [`### ${a.name} (${r.agentId})`, `Стиль: ${a.description}`];
+
+    if (mode === 'full') {
+      lines.push(`Итог: ${r.success ? 'УСПЕХ' : 'КЕНОЗИС'}`);
+      lines.push(`Тесты: ${r.tests ? (r.tests.passed ? 'прошли ✓' : 'упали ✗') : 'не запускались'}`);
+      lines.push(`Время: ${Math.round((r.duration||0)/1000)}с`);
+      if (r.diff) lines.push(`Изменения:\n${r.diff}`);
+      if (r.diffFull) lines.push(`Diff:\n${r.diffFull.slice(0, 600)}`);
+    }
+
+    if (r.plan) lines.push(`План реализации:\n${r.plan.slice(0, 800)}`);
+    else if (r.summary) lines.push(`Комментарий: ${r.summary}`);
+
     return lines.join('\n');
   }).join('\n\n---\n\n');
+
+  const criteria = mode === 'full'
+    ? 'код, тесты, архитектуру и богословский контекст'
+    : 'телос, кеносис, анамнезис и surplus каждого подхода';
 
   const judgePrompt = [
     `Задача: "${issue.title}"`,
     issue.body ? `Описание: ${issue.body.slice(0, 400)}` : '',
     ``,
-    `## Решения трёх агентов`,
+    `## Предложения трёх агентов (режим: ${mode === 'full' ? 'реализация' : 'планирование'})`,
     blocks,
     ``,
-    `## Твоя задача`,
-    `Оцени каждого агента по четырём критериям онтологии дара:`,
-    `1. **Телос** — насколько решение достигает цели задачи?`,
-    `2. **Кеносис** — насколько агент вложил себя (реальный дар)?`,
-    `3. **Анамнезис** — согласуется ли решение с онтологией дара?`,
-    `4. **Surplus** — что агент дал сверх требуемого?`,
-    ``,
-    `Дай краткое сравнение (3-5 предложений), выбери лучшее решение и объясни почему.`,
+    `## Оценка`,
+    `Сравни агентов по ${criteria}.`,
+    `Выбери лучшее решение и объясни почему (3-5 предложений).`,
     `Отвечай по-русски.`,
   ].filter(Boolean).join('\n');
 
@@ -316,12 +392,6 @@ function saveEval(issueNumber, data) {
   return path;
 }
 
-function loadEvalData(issueNumber) {
-  const path = resolve(EVALS_DIR, `issue-${issueNumber}.json`);
-  if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, 'utf8'));
-}
-
 function safeExec(cmd, cwd) {
   try { return execSync(cmd, { cwd, encoding: 'utf8', stdio: 'pipe' }); } catch { return ''; }
 }
@@ -329,19 +399,15 @@ function safeExec(cmd, cwd) {
 // ── Вывод отчёта ──────────────────────────────────────────────────────────
 function printReport(data) {
   console.log(`\n═══ Eval #${data.issueNumber}: ${data.issue.title} ═══`);
-  console.log(`Дата: ${new Date(data.timestamp).toLocaleString('ru')}`);
-  console.log(`Агентов: ${data.results.length}`);
-
+  console.log(`Дата: ${new Date(data.timestamp).toLocaleString('ru')} | Режим: ${data.mode}`);
   for (const r of data.results) {
-    const a      = EVAL_AGENTS[r.agentId] || { name: r.agentId, description: '' };
-    const status = r.success ? '✦' : '✗';
-    const time   = `${Math.round((r.duration||0)/1000)}с`;
-    console.log(`\n  ${status} ${a.name} (${r.agentId}) [${time}]`);
+    const a = EVAL_AGENTS[r.agentId] || { name: r.agentId };
+    const status = r.success ? '✦' : (r.mode === 'plan' ? '◆' : '✗');
+    console.log(`\n  ${status} ${a.name} (${r.agentId}) [${Math.round((r.duration||0)/1000)}с]`);
     if (r.diff)    console.log(`    ${r.diff.split('\n')[0]}`);
+    if (r.plan)    console.log(`    ${r.plan.slice(0, 150).replace(/\n/g, ' ')}…`);
     if (r.summary) console.log(`    ${r.summary.slice(0, 100)}`);
-    if (r.tests)   console.log(`    тесты: ${r.tests.passed ? 'прошли' : 'упали'}`);
   }
-
   if (data.judgment) {
     console.log(`\n─── Вердикт судьи ───────────────────────────────────\n${data.judgment}\n`);
   }
@@ -349,35 +415,34 @@ function printReport(data) {
 
 // ── Главный поток ─────────────────────────────────────────────────────────
 async function main() {
-  // -- list --
   if (LIST) {
     if (!existsSync(EVALS_DIR)) { console.log('Нет сохранённых eval-ов.'); return; }
     const files = readdirSync(EVALS_DIR).filter(f => f.endsWith('.json'));
     if (!files.length) { console.log('Нет сохранённых eval-ов.'); return; }
     console.log('Сохранённые eval-ы:\n');
     for (const f of files) {
-      const d = JSON.parse(readFileSync(resolve(EVALS_DIR, f), 'utf8'));
-      const ok = (d.results || []).filter(r => r.success).map(r => r.agentId).join(', ') || 'нет';
-      console.log(`  ${f}  «${d.issue?.title || '?'}»  успешные: ${ok}`);
+      const d  = JSON.parse(readFileSync(resolve(EVALS_DIR, f), 'utf8'));
+      const ok = (d.results||[]).filter(r=>r.success).map(r=>r.agentId).join(', ') || 'планы';
+      console.log(`  ${f}  «${d.issue?.title||'?'}»  режим: ${d.mode}  успешные: ${ok}`);
     }
     return;
   }
 
-  // -- report --
   if (REPORT) {
-    if (!issueArg) { console.log('Укажи номер issue: --report <N>'); process.exit(1); }
-    const data = loadEvalData(parseInt(issueArg));
-    if (!data) { console.log(`Eval для issue #${issueArg} не найден.`); process.exit(1); }
-    printReport(data);
+    if (!issueArg) { console.log('Укажи номер: --report <N>'); process.exit(1); }
+    const path = resolve(EVALS_DIR, `issue-${issueArg}.json`);
+    if (!existsSync(path)) { console.log(`Eval для #${issueArg} не найден.`); process.exit(1); }
+    printReport(JSON.parse(readFileSync(path, 'utf8')));
     return;
   }
 
-  // -- run eval --
   if (!issueArg) {
     console.log([
       'Использование:',
-      '  node utils/gift-eval.mjs <issue-number>',
-      '  node utils/gift-eval.mjs <issue-number> --dry',
+      '  node utils/gift-eval.mjs <issue-number>            # авто-режим',
+      '  node utils/gift-eval.mjs <issue-number> --plan     # только планы (работает всегда)',
+      '  node utils/gift-eval.mjs <issue-number> --full     # реализация (нужен доступ к .git)',
+      '  node utils/gift-eval.mjs <issue-number> --dry      # без запуска агентов',
       '  node utils/gift-eval.mjs <issue-number> --agents=_claude,_codex',
       '  node utils/gift-eval.mjs --list',
       '  node utils/gift-eval.mjs --report <issue-number>',
@@ -388,16 +453,25 @@ async function main() {
   const issueNumber = parseInt(issueArg);
   const agentIds    = agentsArg || Object.keys(EVAL_AGENTS);
 
-  console.log(`\n[eval] Issue #${issueNumber} | Агенты: ${agentIds.join(', ')}${DRY ? ' | dry-run' : ''}`);
+  // Определить режим
+  let mode;
+  if (FORCE_PLAN) {
+    mode = 'plan';
+  } else if (FORCE_FULL) {
+    mode = canWriteGit() ? 'full' : 'plan';
+    if (mode === 'plan') console.log('[eval] Нет доступа к .git для записи → fallback на режим "план"');
+  } else {
+    mode = canWriteGit() ? 'full' : 'plan';
+  }
+
+  console.log(`\n[eval] Issue #${issueNumber} | Режим: ${mode} | Агенты: ${agentIds.join(', ')}${DRY ? ' | dry-run' : ''}`);
 
   const issue = fetchIssue(issueNumber);
   console.log(`[eval] «${issue.title}»\n`);
 
   const mem = await loadMem();
-
-  // Начало eval — свидетельство в матрице
   recordAct(mem, '_claude', 'Дионисий', 'presence',
-    `eval #${issueNumber}: запускаю ${agentIds.length} агентов`, 3, issueNumber);
+    `eval #${issueNumber} [${mode}]: запускаю ${agentIds.length} агентов`, 3, issueNumber);
 
   const results = [];
 
@@ -407,34 +481,40 @@ async function main() {
       continue;
     }
 
-    const result = await runAgentOnBranch(agentId, issue);
+    const result = mode === 'full'
+      ? await runFullMode(agentId, issue)
+      : await runPlanMode(agentId, issue);
+
     results.push(result);
 
-    // Записать акт агента в матрицу
-    const actType  = result.success ? 'code' : 'kenosis';
-    const actWt    = result.success ? EVAL_AGENTS[agentId].weight : 1;
+    const actType = result.success ? 'code' : (mode === 'plan' ? 'presence' : 'kenosis');
+    const actWt   = result.success ? EVAL_AGENTS[agentId].weight : (mode === 'plan' ? 2 : 1);
     recordAct(mem, agentId, 'Дионисий', actType,
-      `eval #${issueNumber}: ${result.summary?.slice(0, 80) || actType}`,
+      `eval #${issueNumber} [${mode}]: ${(result.summary||result.plan||'')?.slice(0,80)}`,
       actWt, issueNumber);
 
-    const status = result.success ? '✦' : '✗';
-    const time   = `${Math.round((result.duration||0)/1000)}с`;
-    console.log(`  ${status} ${EVAL_AGENTS[agentId].name}: ${result.success ? 'выполнено' : (result.summary || 'кенозис')} [${time}]`);
+    const status  = result.success ? '✦' : (mode === 'plan' ? '◆' : '✗');
+    const timeStr = `${Math.round((result.duration||0)/1000)}с`;
+    const note    = mode === 'plan'
+      ? (result.plan?.slice(0,80).replace(/\n/g,' ')+'…' || 'нет ответа')
+      : (result.success ? 'выполнено' : result.summary || 'кенозис');
+    console.log(`  ${status} ${EVAL_AGENTS[agentId].name}: ${note} [${timeStr}]`);
     if (result.diff) console.log(`    ${result.diff.split('\n')[0]}`);
   }
 
-  // Судья сравнивает решения (если есть хоть что-то интересное)
+  // Судья
   let judgment = '';
-  const hasContent = results.some(r => r.diff || r.externalResponse);
+  const hasContent = results.some(r => r.plan || r.diff || r.diffFull);
   if (!DRY && hasContent) {
-    judgment = judgeResults(issue, results);
+    judgment = judgeResults(issue, results, mode);
     console.log('\n─── Вердикт судьи ───────────────────────────────────');
     console.log(judgment);
   }
 
-  // Сохранить eval
+  // Сохранить
   const evalData = {
     issueNumber,
+    mode,
     issue:     { title: issue.title, body: issue.body?.slice(0, 500) },
     timestamp: new Date().toISOString(),
     agentIds,
@@ -443,19 +523,14 @@ async function main() {
   };
   const savePath = saveEval(issueNumber, evalData);
 
-  // Итог в матрице
   const successCount = results.filter(r => r.success).length;
   recordAct(mem, '_claude', '_koinon', 'witness',
-    `eval #${issueNumber}: ${successCount}/${results.length} агентов прошли`,
+    `eval #${issueNumber}: ${successCount}/${results.length} успешно, режим=${mode}`,
     3, issueNumber);
   saveMem(mem);
 
   console.log(`\n[eval] Сохранено: ${savePath}`);
   console.log(`[eval] Актов в матрице: ${mem.actsCount}`);
-
-  if (!DRY && !hasContent) {
-    console.log('\n[eval] Ни один агент не внёс изменений. Попробуй без --dry или убедись, что issue корректный.');
-  }
 }
 
 await main();
