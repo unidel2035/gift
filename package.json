@@ -35,7 +35,9 @@
     "sync": "node utils/anamnesis-sync.mjs",
     "insight": "node utils/claude-insight.mjs",
     "postinstall": "node utils/spec-index.mjs 2>/dev/null || true",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "eval": "node utils/gift-eval.mjs",
+    "eval:list": "node utils/gift-eval.mjs --list"
   },
   "keywords": [
     "gift",
