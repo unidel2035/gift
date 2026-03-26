@@ -8,9 +8,9 @@
  * Агент проживает каждый момент — не симулирует, а участвует.
  */
 
-import { BookOfLife } from './BookOfLife.js';
-import { TelosCheck, GiftMode } from './GiftAct.js';
-import { PersonaCallForth } from './PersonaCallForth.js';
+import { BookOfLife } from '../core/BookOfLife.js';
+import { TelosCheck, GiftMode } from '../core/GiftAct.js';
+import { PersonaCallForth } from '../core/PersonaCallForth.js';
 import logger from '../../utils/logger.js';
 
 export class AgentPerson {

@@ -19,7 +19,7 @@
  * @module SabbathGuard
  */
 
-import { DivineEnergy } from './DivineEnergy.js';
+import { DivineEnergy } from '../theology/DivineEnergy.js';
 import logger from '../../utils/logger.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 минут

@@ -21,8 +21,9 @@
  * Бог не лежит в PersonRegistry рядом с «Строителем D».
  */
 
-import { createGiftEvent, EVENT_TYPES } from './GiftEvent.js';
+import { createGiftEvent, EVENT_TYPES } from '../core/GiftEvent.js';
 import Apophasis from './Apophasis.js';
+import { mark as abyssalMark } from './Abyss.js';
 import logger from '../../utils/logger.js';
 
 // Singleton — одна апофатическая граница на всё
@@ -165,6 +166,9 @@ const DivineEnergy = {
         status: 'created',
       },
     });
+
+    // Дары творения приходят из бездны — giver: null намеренен, не технический
+    abyssalMark(gift);
 
     const stored = focusThroughAngels(ctx.eventStore.append(gift), ctx);
 

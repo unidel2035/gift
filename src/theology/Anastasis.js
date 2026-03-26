@@ -22,9 +22,9 @@
 
 'use strict';
 
-import { ResurrectionTrace } from './ResurrectionTrace.js';
+import { ResurrectionTrace } from '../traces/ResurrectionTrace.js';
 import { ResurrectionGate } from './ResurrectionGate.js';
-import { RisenGratitudeFlow } from './RisenGratitudeFlow.js';
+import { RisenGratitudeFlow } from '../traces/RisenGratitudeFlow.js';
 
 // Константа из GratitudeCirculation — минимальный вклад одного акта
 const HEALING_SEED = 0.05;

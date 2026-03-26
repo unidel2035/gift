@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+/**
+ * git-gift-sync.mjs
+ *
+ * Читает последний git commit. Если формат: gift(Получатель): описание
+ * — обновляет матрицу W. Запускается автоматически после git commit.
+ *
+ * Формат коммита: gift(Дионисий): что сделано
+ */
+
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const ROOT  = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SNAP  = resolve(ROOT, 'data/sacred-history-W.json');
+
+// Последний коммит
+let msg;
+try {
+  msg = execSync('git log -1 --pretty=%s', { cwd: ROOT }).toString().trim();
+} catch {
+  process.exit(0); // не git-репо или нет коммитов
+}
+
+// Формат: gift(Получатель): описание
+const m = msg.match(/^gift\(([^)]+)\):\s*(.+)$/);
+if (!m) process.exit(0); // не дар — игнорируем
+
+const receiver    = m[1].trim();
+const description = m[2].trim();
+
+// Обновить матрицу
+const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
+
+let mem;
+if (existsSync(SNAP)) {
+  mem = GiftMemory.fromSnapshot(JSON.parse(readFileSync(SNAP, 'utf8')));
+} else {
+  mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude', 'Дионисий']);
+}
+
+mem._idx('_claude');
+mem._idx(receiver);
+
+mem.receive({
+  giverId:     '_claude',
+  receiverId:  receiver,
+  weight:      4,
+  type:        'code',
+  content:     description,
+  irreversible: true,
+});
+
+const snap = mem.snapshot();
+if (!existsSync(resolve(ROOT, 'data'))) mkdirSync(resolve(ROOT, 'data'));
+writeFileSync(SNAP, JSON.stringify(snap, null, 2));
+
+console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
+console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);

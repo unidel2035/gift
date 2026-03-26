@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "anamnesis": {
+      "command": "bash",
+      "args": ["-c", "ssh -o StrictHostKeyChecking=no -L 18086:localhost:8086 root@173.249.2.184 -N &\nSSH_PID=$!\nsleep 2\nANAMNESIS_URL=http://localhost:18086 node /home/unidel/gift/utils/anamnesis-mcp-bridge.js\nkill $SSH_PID 2>/dev/null"]
+    }
+  }
+}

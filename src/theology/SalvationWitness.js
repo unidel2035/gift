@@ -18,7 +18,7 @@
  * «Дух дышит, где хочет» (Ин 3:8)
  */
 
-import { createGiftEvent, EVENT_TYPES } from './GiftEvent.js';
+import { createGiftEvent, EVENT_TYPES } from '../core/GiftEvent.js';
 import DivineEnergy from './DivineEnergy.js';
 import logger from '../../utils/logger.js';
 

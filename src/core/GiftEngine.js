@@ -13,20 +13,20 @@
  *  от Отца светов, у Которого нет изменения и ни тени перемены» (Иак 1:17)
  */
 
-import { PersonRegistry } from './PersonRegistry.js';
-import { GratitudeGraph } from './GratitudeGraph.js';
-import { AnamnesisCache } from './AnamnesisCache.js';
+import { PersonRegistry } from '../persons/PersonRegistry.js';
+import { GratitudeGraph } from '../traces/GratitudeGraph.js';
+import { AnamnesisCache } from '../memory/AnamnesisCache.js';
 import { TelosPlanner } from './TelosPlanner.js';
-import { FreedomGuard } from './FreedomGuard.js';
-import { LiturgicalClock } from './LiturgicalClock.js';
+import { FreedomGuard } from '../theology/FreedomGuard.js';
+import { LiturgicalClock } from '../memory/LiturgicalClock.js';
 import { TechPackageEngine } from './TechPackageEngine.js';
 import { GiftAgents } from './GiftAgents.js';
 import PatternObserver from './PatternObserver.js';
-import Apophasis from './Apophasis.js';
+import Apophasis from '../theology/Apophasis.js';
 import LogosRegistry from './LogosRegistry.js';
 import FallObserver from './FallObserver.js';
-import { SalvationWitness } from './SalvationWitness.js';
-import WitnessJournal from './WitnessJournal.js';
+import { SalvationWitness } from '../theology/SalvationWitness.js';
+import WitnessJournal from '../memory/WitnessJournal.js';
 import GiftEventBus from './GiftEventBus.js';
 import GiftEventStore from './GiftEventStore.js';
 import { createGiftEvent, EVENT_TYPES } from './GiftEvent.js';
@@ -34,25 +34,30 @@ import JournalSubscriber from './subscribers/JournalSubscriber.js';
 import SocketSubscriber from './subscribers/SocketSubscriber.js';
 import PersistenceSubscriber from './subscribers/PersistenceSubscriber.js';
 import SodBridgeSubscriber from './subscribers/SodBridgeSubscriber.js';
+import IncarnationSubscriber from './subscribers/IncarnationSubscriber.js';
 import { executeHexaemeron } from './Hexaemeron.js';
 import { Person } from './Person.js';
-import { getAnamnesisMemory } from './AnamnesisMemory.js';
-import { getGiftChronicle } from './GiftChronicle.js';
+import { getAnamnesisMemory } from '../memory/AnamnesisMemory.js';
+import { getGiftChronicle } from '../memory/GiftChronicle.js';
 import { getGiftStore } from './GiftStore.js';
 import { enrichWithAnamnesis } from './AutoAnamnesis.js';
-import HolySpiritEngine from './HolySpiritEngine.js';
-import NewJerusalem from './NewJerusalem.js';
+import HolySpiritEngine from '../theology/HolySpiritEngine.js';
+import NewJerusalem from '../theology/NewJerusalem.js';
 import TernaryRegister from './TernaryCore.js';
-import { AngelicOrder, TemptationField } from './AngelicOrder.js';
+import { AngelicOrder, TemptationField } from '../theology/AngelicOrder.js';
 import PhysicalLayer from './PhysicalLayer.js';
 import BioLayer from './BioLayer.js';
 import EnvironmentLayer from './EnvironmentLayer.js';
 import DiscernmentGuard from './DiscernmentGuard.js';
-import { SabbathGuard } from './SabbathGuard.js';
-import { ResurrectionTrace } from './ResurrectionTrace.js';
+import { SabbathGuard } from '../memory/SabbathGuard.js';
+import { ResurrectionTrace } from '../traces/ResurrectionTrace.js';
 import GiftPersistence from './GiftPersistence.js';
-import { DivineEnergy } from './DivineEnergy.js';
+import { DivineEnergy } from '../theology/DivineEnergy.js';
 import agentLayer from '../integram/integram-v2-agent.js';
+import { Flesh } from '../theology/Flesh.js';
+import { CommunalBreath } from '../theology/CommunalBreath.js';
+import { AnamnesisStore } from '../memory/AnamnesisStore.js';
+import { Presence } from '../memory/Presence.js';
 import logger from '../../utils/logger.js';
 
 // ── Живые модули Домостроительства (подключены к среде) ──
@@ -99,8 +104,20 @@ export class GiftEngine {
     this.techPackage = new TechPackageEngine(this);
     this.agents = new GiftAgents(this);
 
+    // ── Анамнетическая память ─────────────────────────────
+    // Не шкаф с папками. Воплощение прошлого в настоящем.
+    // «Сие творите в Моё воспоминание» (Лк 22:19)
+    this.anamnesisStore = new AnamnesisStore();
+    this.presence       = new Presence(this.anamnesisStore);
+
+    // ── Плоть общины — тело которое помнит ───────────────
+    // Мицелий: нити утолщаются от даров, истончаются без них
+    this.flesh  = new Flesh();
+    this.breath = new CommunalBreath(this.flesh);
+
     // ── Πνεῦμα Ἅγιον ─────────────────────────────────────
     this.spirit = new HolySpiritEngine(this);
+    this.spirit.connectFlesh(this.flesh);   // Дух идёт туда где нити умирают
 
     // ── Ἱερουσαλὴμ Καινή ────────────────────────────────
     this.kingdom = new NewJerusalem(this);
@@ -167,6 +184,16 @@ export class GiftEngine {
 
     this._sodSub = new SodBridgeSubscriber(() => this._sodBridge);
     this._sodSub.register(this._eventBus);
+
+    // ── Воплощение — мост между событием и живым слоем ──
+    // Каждый дар через шину → AnamnesisStore + Flesh + Breath
+    // «Слово стало плотью» — не однажды, каждый раз (Ин 1:14)
+    this._incarnationSub = new IncarnationSubscriber(
+      this.anamnesisStore,
+      this.flesh,
+      this.breath,
+    );
+    this._incarnationSub.register(this._eventBus);
   }
 
   // ── Shared context for Person actors ────────────────────

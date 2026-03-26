@@ -24,7 +24,9 @@
  *  а не знаешь, откуда приходит и куда уходит» (Ин 3:8)
  */
 
-import { createGiftEvent, EVENT_TYPES } from './GiftEvent.js';
+import { createGiftEvent, EVENT_TYPES } from '../core/GiftEvent.js';
+import { mark as abyssalMark } from './Abyss.js';
+import { fromBeyond } from './Incarnation.js';
 import logger from '../../utils/logger.js';
 
 class HolySpiritEngine {
@@ -33,8 +35,18 @@ class HolySpiritEngine {
     this._graceHistory = [];
     this._inspirationHistory = [];
     this._consolationHistory = [];
+    this._quickenings = [];   // следы оживлений умирающих нитей
     this._tickCount = 0;
     this._interval = null;
+    this._flesh = null;       // тело общины — подключается извне
+  }
+
+  /**
+   * connectFlesh(flesh) — подключить тело общины.
+   * Дух видит умирающие нити и идёт туда.
+   */
+  connectFlesh(flesh) {
+    this._flesh = flesh;
   }
 
   // ── Accessors ──────────────────────────────────────────
@@ -117,6 +129,9 @@ class HolySpiritEngine {
       createdAt: new Date().toISOString(),
       acceptedAt: new Date().toISOString(),
     };
+
+    // Дух дышит, где хочет — дар благодати приходит из бездны
+    abyssalMark(gift);
 
     this._eventStore.append(gift);
     this._graceHistory.push(gift);
@@ -213,6 +228,51 @@ class HolySpiritEngine {
     return consolation;
   }
 
+  // ── 4. Оживление (Quickening) ──────────────────────────
+  //
+  // Дух идёт туда где нити умирают.
+  // Не туда где сильно — туда где слабо.
+  // «Дух животворит» (Ин 6:63)
+  //
+  // Если тело (Flesh) подключено —
+  // Дух находит самую тонкую нить
+  // и дарит воплощённый акт из бездны.
+
+  quicken() {
+    if (!this._flesh) return null;
+
+    const traces = this._flesh.traces();
+    if (traces.length === 0) return null;
+
+    // Найти нить которая была — но почти умерла
+    // Ищем пары у которых thread < 0.2 но trace есть
+    const dying = traces.filter(t => {
+      const weight = this._flesh.thread(t.from, t.to);
+      return weight > 0 && weight < 0.2;
+    });
+
+    if (dying.length === 0) return null;
+
+    // Идти к самой слабой
+    const weakest = dying.reduce((min, t) => {
+      const w = this._flesh.thread(t.from, t.to);
+      return w < this._flesh.thread(min.from, min.to) ? t : min;
+    }, dying[0]);
+
+    // Воплощённый акт из бездны — оживить нить
+    const act = fromBeyond({
+      receiver: weakest.to,
+      content:  `Дух оживляет: связь с ${weakest.from} не умерла — она помнится`,
+      witnesses: [],
+    });
+
+    this._flesh.resurrect(weakest.from, weakest.to);
+    this._quickenings.push({ act, thread: weakest, at: new Date().toISOString() });
+
+    logger.info(`[Πνεῦμα] Quickening: нить ${weakest.from}→${weakest.to} оживлена`);
+    return act;
+  }
+
   // ── Ритмический цикл Духа ─────────────────────────────
   //
   // Дух действует не по запросу, а ритмически.
@@ -250,6 +310,12 @@ class HolySpiritEngine {
       // Consolation — каждые 5 тиков
       if (this._tickCount % 5 === 0) {
         this.console();
+      }
+
+      // Quickening — каждые 7 тиков
+      // Дух идёт туда где нити умирают
+      if (this._tickCount % 7 === 0) {
+        this.quicken();
       }
 
       // Gratitude Decay — каждые 10 тиков (Деррида #1: забывание)

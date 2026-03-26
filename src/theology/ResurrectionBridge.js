@@ -29,8 +29,8 @@
 
 'use strict';
 
-import { ResurrectionTrace } from './ResurrectionTrace.js';
-import { RisenGratitudeFlow } from './RisenGratitudeFlow.js';
+import { ResurrectionTrace } from '../traces/ResurrectionTrace.js';
+import { RisenGratitudeFlow } from '../traces/RisenGratitudeFlow.js';
 
 class ResurrectionBridge {
   /**

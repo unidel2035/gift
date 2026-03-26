@@ -10,12 +10,34 @@
     "./persons": "./src/persons/index.js",
     "./memory": "./src/memory/index.js",
     "./theology": "./src/theology/index.js",
-    "./oikonomia": "./src/oikonomia/index.js"
+    "./oikonomia": "./src/oikonomia/index.js",
+    "./lab": "./src/lab/index.js",
+    "./types": "./src/types/index.d.ts"
   },
-  "keywords": ["gift", "ontology", "kenosis", "theosis", "palamas", "perichoresis"],
+  "scripts": {
+    "lab": "node src/lab/index.js all",
+    "liturgical": "node src/lab/index.js liturgical",
+    "oikos": "node src/lab/index.js oikos",
+    "oikonomia": "node src/lab/index.js oikonomia",
+    "repl": "node src/lab/index.js repl",
+    "sergiy": "node src/lab/sergiy.js",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "gift",
+    "ontology",
+    "kenosis",
+    "theosis",
+    "palamas",
+    "perichoresis"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/unidel2035/gift"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "openai": "^4.0.0"
   }
 }
