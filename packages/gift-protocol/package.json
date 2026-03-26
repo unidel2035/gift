@@ -1,0 +1,32 @@
+{
+  "name": "@koinon/gift-protocol",
+  "version": "1.0.0",
+  "description": "Gift Protocol — open standard for gift-based community economics and AI ethics",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./adapters/discord": "./adapters/discord.js",
+    "./adapters/telegram": "./adapters/telegram.js",
+    "./adapters/github": "./adapters/github.js"
+  },
+  "keywords": [
+    "gift-protocol",
+    "gift-economy",
+    "kenosis",
+    "koinon",
+    "ai-ethics",
+    "personhood",
+    "community"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unidel2035/gift"
+  },
+  "homepage": "https://github.com/unidel2035/gift/tree/main/packages/gift-protocol",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}

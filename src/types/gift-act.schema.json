@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gift/v1",
+  "title": "GiftAct",
+  "description": "Акт дара — единица Gift Protocol v0.1. Открытый стандарт: бот, CI, человек — любая система может подарить.",
+  "type": "object",
+  "required": ["schema", "from", "to", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "description": "Версия протокола. Всегда \"gift/v1\".",
+      "type": "string",
+      "const": "gift/v1"
+    },
+    "from": {
+      "description": "Идентификатор дарителя (personId в матрице W). Анонимный дар: \"_abyss\".",
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "description": "Идентификатор получателя. Общий получатель: \"_koinon\".",
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "description": "Тип дара. Определяет базовый вес (богословская аксиома: время тяжелее денег).",
+      "type": "string",
+      "enum": ["time", "presence", "knowledge", "code", "word", "money", "data", "memory", "question", "offering", "grace"]
+    },
+    "weight": {
+      "description": "Вес дара (1.0–10.0). Необязателен — вычисляется по типу если отсутствует.",
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10.0
+    },
+    "content": {
+      "description": "Краткое описание содержания дара (до 500 символов).",
+      "type": "string",
+      "maxLength": 500
+    },
+    "irreversible": {
+      "description": "Дар необратим. Богословская аксиома — не техническое решение. Всегда true.",
+      "type": "boolean",
+      "const": true
+    },
+    "proof": {
+      "description": "Доказательство дара. Одна из четырёх форм: git commit, telegram сообщение, github issue, время.",
+      "$ref": "#/definitions/Proof"
+    },
+    "timestamp": {
+      "description": "Время совершения дара (ISO 8601). Если отсутствует — сервер ставит текущее.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "definitions": {
+    "Proof": {
+      "description": "Доказательство совершения дара — внешний свидетель акта. Одна из четырёх форм.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/definitions/ProofCommit" },
+        { "$ref": "#/definitions/ProofTelegram" },
+        { "$ref": "#/definitions/ProofIssue" },
+        { "$ref": "#/definitions/ProofTime" }
+      ]
+    },
+    "ProofCommit": {
+      "description": "Git commit — дар кода подтверждён хешем коммита.",
+      "type": "object",
+      "required": ["commit", "repo"],
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "description": "Git commit SHA (не менее 7 символов).",
+          "type": "string",
+          "minLength": 7
+        },
+        "repo": {
+          "description": "Репозиторий в формате owner/repo.",
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        }
+      }
+    },
+    "ProofTelegram": {
+      "description": "Telegram сообщение — дар слова подтверждён идентификатором сообщения.",
+      "type": "object",
+      "required": ["tg_message_id", "chat_id"],
+      "additionalProperties": false,
+      "properties": {
+        "tg_message_id": {
+          "description": "ID сообщения в Telegram.",
+          "type": "integer"
+        },
+        "chat_id": {
+          "description": "ID чата в Telegram.",
+          "type": "integer"
+        }
+      }
+    },
+    "ProofIssue": {
+      "description": "GitHub Issue — дар вопрошания или задачи подтверждён номером issue.",
+      "type": "object",
+      "required": ["issue", "repo"],
+      "additionalProperties": false,
+      "properties": {
+        "issue": {
+          "description": "Номер GitHub issue.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "repo": {
+          "description": "Репозиторий в формате owner/repo.",
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        }
+      }
+    },
+    "ProofTime": {
+      "description": "Время — дар присутствия подтверждён количеством секунд.",
+      "type": "object",
+      "required": ["seconds"],
+      "additionalProperties": false,
+      "properties": {
+        "seconds": {
+          "description": "Количество секунд времени, отданного другому. Минимум 1.",
+          "type": "number",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

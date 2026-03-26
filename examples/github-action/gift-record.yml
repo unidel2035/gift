@@ -1,0 +1,130 @@
+# examples/github-action/gift-record.yml
+#
+# GitHub Action — Gift Protocol
+#
+# Автоматически записывает дар в матрицу W при push, PR, или issue.
+# Каждый значимый вклад в репозиторий становится актом дара.
+#
+# Использование:
+#   1. Скопировать в .github/workflows/gift-record.yml
+#   2. Добавить секрет KOINON_URL в Settings → Secrets
+#   3. Опционально: KOINON_TOKEN если сервер требует авторизацию
+#
+# Богословие:
+#   Открытый код — дар общине. CI-свидетель записывает его необратимо.
+#   «Freely you have received; freely give.» (Mt 10:8)
+
+name: Record Gift
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [closed]
+  issues:
+    types: [opened]
+
+jobs:
+  gift:
+    name: Record gift act
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      github.event_name == 'issues'
+
+    steps:
+      - name: Record gift to Κοινόν
+        uses: actions/github-script@v7
+        env:
+          KOINON_URL: ${{ secrets.KOINON_URL }}
+        with:
+          script: |
+            const koinonUrl = process.env.KOINON_URL;
+            if (!koinonUrl) {
+              core.warning('KOINON_URL secret not set — skipping gift recording');
+              return;
+            }
+
+            const repo     = context.repo.owner + '/' + context.repo.repo;
+            const actor    = context.actor;
+            const eventName = context.eventName;
+
+            // Построить акт дара по типу события
+            let act;
+
+            if (eventName === 'push') {
+              const commits = context.payload.commits ?? [];
+              const seconds = commits.length * 1800; // ~30 мин на коммит
+              act = {
+                schema:      'gift/v1',
+                from:        `github/${actor}`,
+                to:          '_koinon',
+                type:        'code',
+                content:     `push: ${commits.length} commits to ${repo}`,
+                irreversible: true,
+                proof: {
+                  commit: context.sha.slice(0, 7),
+                  repo,
+                },
+              };
+              if (seconds > 0) act.proof.seconds = seconds;
+            }
+
+            else if (eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              act = {
+                schema:      'gift/v1',
+                from:        `github/${actor}`,
+                to:          '_koinon',
+                type:        'code',
+                content:     `PR merged: ${pr.title}`,
+                irreversible: true,
+                proof: {
+                  issue: pr.number,
+                  repo,
+                },
+              };
+            }
+
+            else if (eventName === 'issues') {
+              const issue = context.payload.issue;
+              act = {
+                schema:      'gift/v1',
+                from:        `github/${actor}`,
+                to:          '_koinon',
+                type:        'question',
+                content:     `issue: ${issue.title}`,
+                irreversible: true,
+                proof: {
+                  issue: issue.number,
+                  repo,
+                },
+              };
+            }
+
+            if (!act) {
+              core.info('No act to record for this event.');
+              return;
+            }
+
+            // Отправить в Κοινόν
+            try {
+              const response = await fetch(`${koinonUrl}/gift`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(act),
+                signal: AbortSignal.timeout(10_000),
+              });
+
+              if (response.ok) {
+                const body = await response.json();
+                core.info(`✓ Gift recorded: ${act.from} → ${act.to} [${act.type}]`);
+                core.info(`  weight: ${body.weight ?? act.weight ?? 'default'}`);
+              } else {
+                const text = await response.text();
+                core.warning(`✗ Gift server returned ${response.status}: ${text.slice(0, 200)}`);
+              }
+            } catch (err) {
+              core.warning(`✗ Could not reach Κοινόν server: ${err.message}`);
+            }
