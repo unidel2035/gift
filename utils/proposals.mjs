@@ -123,14 +123,12 @@ else if (cmd === 'issue') {
     process.exit(0);
   }
 
-  // Заголовок — усиленная версия Евы
-  const title = `вопрошание: ${(p.enhanced ?? p.text).slice(0, 70)}`;
+  // Заголовок — чистый технический текст (без внутренних богословских меток)
+  const title = (p.enhanced ?? p.text).slice(0, 70);
   const body  = [
-    `**Адам предложил:** ${p.text}`,
+    p.enhanced ?? p.text,
     '',
-    p.telos ? `**Телос:** ${p.telos}` : '',
-    '',
-    `*Категория: ${p.cat}*`,
+    `*Category: ${p.cat}*`,
   ].filter(Boolean).join('\n');
 
   try {
@@ -141,21 +139,8 @@ else if (cmd === 'issue') {
     const numMatch = raw.match(/#(\d+)/);
     const issueNum = numMatch ? Number(numMatch[1]) : null;
 
-    if (issueNum && p.eva_notes) {
-      // Комментарий Евы — её усиление видно в issue
-      const comment = [
-        '## ✦ Ева проверила и усилила',
-        '',
-        p.eva_notes,
-        '',
-        `---`,
-        `*Предложение #${p.id} | ${new Date(p.created).toLocaleDateString('ru')}*`,
-      ].join('\n');
-
-      execSync(
-        `gh issue comment ${issueNum} --body "${comment.replace(/"/g, "'").replace(/\n/g, '\\n')}"`,
-        { cwd: ROOT }
-      );
+    if (issueNum) {
+      // Eva's analysis stays internal (proposals.json) — GitHub sees only clean technical text
 
       p.issue_number = issueNum;
       save(proposals);

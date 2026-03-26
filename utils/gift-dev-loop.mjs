@@ -247,13 +247,16 @@ async function runClaudeAgent(issueNumber, title, body) {
         ? prompt
         : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
 
-      const r = spawnSync('claude', ['--print', attemptPrompt], {
-        cwd: ROOT, timeout: 120_000,
-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+      // Передаём prompt через stdin (обходим ARG_MAX) + dangerously-skip-permissions для автономной работы
+      const r = spawnSync('claude', ['--print', '--dangerously-skip-permissions'], {
+        input: attemptPrompt,
+        cwd: ROOT, timeout: 180_000,
+        encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      if (r.status !== 0) {
-        return { success: false, error: r.stderr?.slice(0, 200) || 'ошибка' };
+      if (r.error || r.status !== 0) {
+        const errMsg = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
+        return { success: false, error: errMsg };
       }
 
       // Запускаем тесты
