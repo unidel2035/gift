@@ -164,11 +164,21 @@ async function runAgent(agentId, issueNumber, title, body) {
 
 async function runClaudeAgent(issueNumber, title, body) {
   try {
-    // Claude Code в режиме агента: читает issue, пишет код, делает коммит
+    // Найти релевантные спецификации
+    const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
+    const query   = `${title} ${body || ''}`;
+    const specs   = searchSpecs(query, 5);
+    const specCtx = formatContext(specs);
+
+    if (specs.length) {
+      console.log(`   Спецификации (${specs.length}): ${specs.map(s => s.file).join(', ')}`);
+    }
+
     const prompt = [
       `GitHub Issue #${issueNumber}: ${title}`,
       body ? `\nОписание:\n${body}` : '',
-      `\nЗадача: реализовать описанное. Завершить коммитом в формате:`,
+      specCtx ? `\n${specCtx}` : '',
+      `\nЗадача: реализовать описанное согласно спецификациям. Завершить коммитом:`,
       `gift(Дионисий): [краткое описание] (closes #${issueNumber})`,
     ].join('');
 
