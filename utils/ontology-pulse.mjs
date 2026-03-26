@@ -15,7 +15,9 @@
  *   ПОСЕВ        — добавляем в proposals.json
  *   (Суббота)    — декаданс уже есть в matrix-decay.mjs
  *
- * Запуск: node utils/ontology-pulse.mjs [--dry-run] [--max N]
+ * Запуск: node utils/ontology-pulse.mjs [--dry-run] [--no-issues] [--max N]
+ *   --dry-run    — только анализ, без посева и issues
+ *   --no-issues  — посев в proposals.json, но без создания GH issues
  *
  * Крон: 30 3 * * * node /home/unidel/gift/utils/ontology-pulse.mjs
  */
@@ -24,11 +26,12 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-const ROOT    = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SNAP    = resolve(ROOT, 'data/sacred-history-W.json');
-const DRY_RUN = process.argv.includes('--dry-run');
-const maxIdx  = process.argv.indexOf('--max');
-const MAX_NEW = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 3 : 3;
+const ROOT      = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SNAP      = resolve(ROOT, 'data/sacred-history-W.json');
+const DRY_RUN   = process.argv.includes('--dry-run');
+const NO_ISSUES = process.argv.includes('--no-issues');
+const maxIdx    = process.argv.indexOf('--max');
+const MAX_NEW   = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 3 : 3;
 
 if (!existsSync(SNAP)) {
   console.log('[пульс] Матрица не найдена — онтология ещё не родилась.');
@@ -180,6 +183,76 @@ if (newProposals.length && !DRY_RUN) {
   wf(PROPOSALS_FILE, JSON.stringify(existingProposals, null, 2));
 }
 
+// ── 5. ПОСЕВ В ПУСТЫНЕ: пустыни сами создают GH issues ────────────────────
+// Онтология самоорганизуется — каждое принятое вопрошание становится issue.
+let issuesCreated = 0;
+
+if (!DRY_RUN && !NO_ISSUES && newProposals.length) {
+  const { spawnSync } = await import('child_process');
+
+  console.log('\n[посев в пустыне] Пустыни создают вопрошания в GitHub...');
+
+  for (const proposal of newProposals) {
+    if (proposal.issue_number) continue;
+
+    // Формат из CLAUDE.md: "вопрошание: ..."
+    const titleBase = (proposal.enhanced ?? proposal.text)
+      .replace(/^вопрошание:\s*/i, '').trim();
+    const title = `вопрошание: ${titleBase}`.slice(0, 70);
+
+    const body = [
+      proposal.enhanced ?? proposal.text,
+      '',
+      `> Источник: пульс онтологии (${proposal.source})`,
+      `> Пустыня: ${proposal.source.replace('pulse:', '')} | Категория: ${proposal.cat}`,
+    ].join('\n');
+
+    const result = spawnSync('gh', [
+      'issue', 'create',
+      '--label', 'gift-ready',
+      '--title', title,
+      '--body',  body,
+    ], { cwd: ROOT, encoding: 'utf8' });
+
+    if (result.status !== 0) {
+      console.error(`  [!] Ошибка gh: ${(result.stderr ?? '').slice(0, 100)}`);
+      continue;
+    }
+
+    // Парсим номер issue из URL в stdout
+    const numMatch = (result.stdout ?? '').match(/\/issues\/(\d+)/);
+    const issueNum = numMatch ? Number(numMatch[1]) : null;
+
+    if (issueNum) {
+      // Обновляем proposal в файле
+      const idx = existingProposals.findIndex(p => p.id === proposal.id);
+      if (idx !== -1) existingProposals[idx].issue_number = issueNum;
+      proposal.issue_number = issueNum;
+
+      // Акт вопрошания в матрицу: _koinon → Дионисий (question)
+      mem._idx('_koinon');
+      mem._idx('Дионисий');
+      mem.receive({
+        giverId:      '_koinon',
+        receiverId:   'Дионисий',
+        weight:       5,
+        type:         'question',
+        content:      `вопрошание #${issueNum}: ${titleBase.slice(0, 60)}`,
+        linkedIssue:  issueNum,
+        irreversible: true,
+      });
+
+      console.log(`  ✦ #${issueNum}: "${title.slice(0, 65)}"`);
+      issuesCreated++;
+    }
+  }
+
+  // Сохраняем обновлённые issue_number в proposals
+  if (issuesCreated > 0) {
+    wf(PROPOSALS_FILE, JSON.stringify(existingProposals, null, 2));
+  }
+}
+
 // ── Фиксируем пульс в матрице ─────────────────────────────────────────────
 if (!DRY_RUN && newProposals.length) {
   mem._idx('_koinon');
@@ -199,5 +272,6 @@ if (!DRY_RUN && newProposals.length) {
 console.log('\n╔══════════════════════════════════════════════════════╗');
 console.log(`║  Пульс завершён                                      ║`);
 console.log(`║  Пустынь обработано: ${String(toProcess.length).padEnd(4)} Посев: ${String(newProposals.length).padEnd(4)}            ║`);
+console.log(`║  Issues созданы:     ${String(issuesCreated).padEnd(4)}                           ║`);
 console.log(`║  Pending proposals: ${String(existingProposals.filter(p=>p.status==='pending').length).padEnd(5)}                          ║`);
 console.log('╚══════════════════════════════════════════════════════╝\n');
