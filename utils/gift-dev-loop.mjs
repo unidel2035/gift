@@ -124,11 +124,18 @@ async function orchestrate() {
     const result = await runAgent(agentId, number, title, body);
 
     if (result.success) {
+      // Создать ветку и PR
+      const prUrl = createPR(number, title, result.summary, agentId);
+
       // Дар выполнен
       recordAct(mem, agentId, 'Дионисий', 'code',
         `выполнил #${number}: ${result.summary}`, agent.weight + 1, number);
-      closeIssue(number, `✦ Выполнено агентом ${agent.name}: ${result.summary}`);
+      if (prUrl) {
+        recordAct(mem, agentId, '_koinon', 'offering',
+          `PR для #${number}: ${prUrl}`, agent.weight, number);
+      }
       console.log(`   ✦ Выполнено: ${result.summary}`);
+      if (prUrl) console.log(`   PR: ${prUrl}`);
     } else {
       // Кенозис — не получилось
       recordAct(mem, agentId, '_koinon', 'kenosis',
@@ -148,6 +155,51 @@ function pickAgent(title, body = '') {
   if (text.includes('тест') || text.includes('test')) return '_ci';
   if (text.includes('review') || text.includes('проверь')) return '_reviewer';
   return '_claude'; // по умолчанию
+}
+
+// ── Создать PR ────────────────────────────────────────────────────────────
+function createPR(issueNumber, title, summary, agentId) {
+  try {
+    const branch = `gift/issue-${issueNumber}`;
+
+    // Создать ветку если её нет
+    try {
+      execSync(`git checkout -b ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+    } catch {
+      execSync(`git checkout ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+    }
+
+    // Запушить
+    execSync(`git push origin ${branch} --force-with-lease 2>/dev/null || git push origin ${branch}`,
+      { cwd: ROOT, stdio: 'pipe' });
+
+    // Вернуться на main
+    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
+
+    // Создать PR
+    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '')}`;
+    const prBody = [
+      `## Дар`,
+      ``,
+      `Реализует #${issueNumber}`,
+      ``,
+      `${summary}`,
+      ``,
+      `**Агент:** ${agentId}`,
+      ``,
+      `---`,
+      `🤖 Создано [gift-dev-loop.mjs](utils/gift-dev-loop.mjs)`,
+    ].join('\n');
+
+    const r = execSync(
+      `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --head ${branch} --base main`,
+      { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' }
+    );
+    return r.trim();
+  } catch (err) {
+    console.log(`   ! PR не создан: ${err.message?.slice(0, 100)}`);
+    return null;
+  }
 }
 
 // ── Запуск агента ─────────────────────────────────────────────────────────
