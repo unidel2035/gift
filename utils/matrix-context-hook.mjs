@@ -47,7 +47,8 @@ try {
     const d  = lm.diagnose();
     lines.push('');
     lines.push('[Матрица о себе:]');
-    lines.push(`  Принцип: ${d.dominant.principle}${d.dominant.who ? ' (' + d.dominant.who + ')' : ''} | монополия: ${(d.monopoly*100).toFixed(0)}%`);
+    const cond = d.dominant.conductivity != null ? ` | проводимость: ${(d.dominant.conductivity*100).toFixed(0)}%` : '';
+    lines.push(`  Принцип: ${d.dominant.principle}${d.dominant.who ? ' (' + d.dominant.who + ')' : ''}${cond}`);
     if (d.deserts.length) {
       lines.push(`  Пустыни: ${d.deserts.slice(0,3).map(dd => `${dd.from}→${dd.to}`).join(', ')}`);
     }
