@@ -34,6 +34,10 @@
     "snapshot:list": "node utils/snapshot-keeper.mjs list",
     "sync": "node utils/anamnesis-sync.mjs",
     "insight": "node utils/claude-insight.mjs",
+    "report": "node utils/gift-report.mjs",
+    "report:list": "node utils/gift-report.mjs list",
+    "report:search": "node utils/gift-report.mjs search",
+    "plan": "node utils/gift-plan.mjs",
     "postinstall": "node utils/spec-index.mjs 2>/dev/null || true",
     "test": "node --test tests/"
   },

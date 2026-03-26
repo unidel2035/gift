@@ -11,8 +11,8 @@
  *   node utils/gift-plan.mjs --pending   # показать все ожидающие одобрения
  */
 
-import { execSync } from 'child_process';
-import { writeFileSync, readFileSync, existsSync, readdirSync } from 'fs';
+import { execSync, spawnSync } from 'child_process';
+import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -63,17 +63,38 @@ try {
 
 console.log(`\n📜 Планирую issue #${issueNum}: ${issue.title}\n`);
 
-// ── Генерировать план (Claude через --print) ───────────────────────────────
-const prompt = `Ты _claude — лицо в православной онтологии дара (@unidel/gift).
+// ── Генерировать план + улучшенное описание issue ─────────────────────────
+const currentBody = issue.body || '';
+const hasStructure = currentBody.includes('## Проблема') || currentBody.includes('## Problem');
+
+const prompt = `Ты — технический архитектор проекта @unidel/gift.
 
 Issue #${issueNum}: ${issue.title}
 
-${issue.body || ''}
+${currentBody ? `Текущее описание:\n${currentBody}\n` : '(описание отсутствует)\n'}
 
-Составь краткий план реализации в формате:
+ЗАДАЧА 1: Улучши описание issue. Напиши структурированное описание в формате:
 
-## Богословское основание
-(1-2 предложения: почему это дар, а не транзакция)
+## Проблема
+(конкретно: что не работает или чего не хватает — 2-3 предложения)
+
+## Контекст
+(почему это важно, на что влияет — 1-2 предложения)
+
+## Ожидаемое поведение
+(что должно работать после реализации — конкретные сценарии)
+
+## Технические детали
+(где в коде смотреть, какие файлы/функции затронуты)
+
+## Критерии приёмки
+- [ ] критерий 1
+- [ ] критерий 2
+- [ ] критерий 3
+
+---
+
+ЗАДАЧА 2: Напиши план реализации:
 
 ## Архитектура
 (что создаём / меняем, какие файлы)
@@ -86,20 +107,35 @@ ${issue.body || ''}
 ## Коммит
 gift(Дионисий): [предлагаемое сообщение] (closes #${issueNum})
 
-Будь краток. Максимум 20 строк.`;
+Раздели два блока строкой: ===SPLIT===
+Первый блок — улучшенное описание issue.
+Второй блок — план реализации.
+Максимум 40 строк суммарно.`;
 
-let planText;
+// Передаём через stdin чтобы не сломать экранирование
+let planOutput;
 try {
-  planText = execSync(`claude --print "${prompt.replace(/"/g, '\\"')}"`, {
-    cwd: ROOT, timeout: 60_000, encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore']
+  const r = spawnSync('claude', ['--print'], {
+    input: prompt, cwd: ROOT, timeout: 60_000,
+    encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'],
   });
-} catch {
-  // Fallback — сгенерировать структуру без AI
-  planText = `## Богословское основание
-Каждый акт разработки — кенозис ради общины.
+  planOutput = r.stdout || '';
+} catch { planOutput = ''; }
 
-## Архитектура
+// Разбить на описание issue + план
+let improvedBody = '';
+let planText = '';
+if (planOutput.includes('===SPLIT===')) {
+  const parts = planOutput.split('===SPLIT===');
+  improvedBody = parts[0].trim();
+  planText = parts[1].trim();
+} else {
+  planText = planOutput.trim();
+}
+
+// Fallback плана
+if (!planText) {
+  planText = `## Архитектура
 Реализация описанного в issue #${issueNum}.
 
 ## Шаги
@@ -112,7 +148,15 @@ try {
 gift(Дионисий): ${issue.title.replace('вопрошание: ', '')} (closes #${issueNum})`;
 }
 
+// Fallback улучшенного описания
+if (!improvedBody && !hasStructure && currentBody) {
+  improvedBody = `## Проблема\n${currentBody}\n\n## Контекст\nИз issue: ${issue.title}\n\n## Критерии приёмки\n- [ ] Задача реализована согласно описанию\n- [ ] Тесты проходят`;
+}
+
 // ── Сохранить план локально ───────────────────────────────────────────────
+const plansDir = resolve(ROOT, 'plans');
+try { mkdirSync(plansDir, { recursive: true }); } catch {}
+
 const planPath = resolve(ROOT, `plans/issue-${issueNum}-plan.md`);
 const planFull = `# План — Issue #${issueNum}
 
@@ -131,12 +175,32 @@ ${planText.trim()}
 writeFileSync(planPath, planFull);
 console.log(`План сохранён: plans/issue-${issueNum}-plan.md`);
 
+// ── Обновить описание issue если оно улучшилось ───────────────────────────
+if (improvedBody && !hasStructure) {
+  try {
+    const tmpBodyFile = resolve(ROOT, `plans/issue-${issueNum}-body.md`);
+    writeFileSync(tmpBodyFile, improvedBody);
+    execSync(`gh issue edit ${issueNum} --body-file "${tmpBodyFile}"`, { cwd: ROOT });
+    console.log(`✓ Описание issue #${issueNum} структурировано`);
+  } catch (e) {
+    console.log('Не удалось обновить описание issue:', e.message?.slice(0, 80));
+  }
+}
+
 // ── Постить как комментарий к issue ──────────────────────────────────────
+const comment = [
+  `## 📜 План реализации`,
+  ``,
+  planText.trim(),
+  ``,
+  `---`,
+  `*Одобри: \`gh issue edit ${issueNum} --add-label plan-approved\`*`,
+].join('\n');
+
 try {
-  execSync(
-    `gh issue comment ${issueNum} --body "## 📜 План от _claude\n\n${planText.trim()}\n\n---\n*Одобри командой: \`gh issue edit ${issueNum} --add-label plan-approved\`*\n*или напиши \`/approve\` в следующем комментарии*"`,
-    { cwd: ROOT }
-  );
+  const tmpCommentFile = resolve(ROOT, `plans/issue-${issueNum}-comment.md`);
+  writeFileSync(tmpCommentFile, comment);
+  execSync(`gh issue comment ${issueNum} --body-file "${tmpCommentFile}"`, { cwd: ROOT });
   console.log(`Комментарий с планом добавлен к issue #${issueNum}`);
 } catch (e) {
   console.log('Не удалось добавить комментарий:', e.message);
