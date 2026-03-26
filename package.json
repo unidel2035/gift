@@ -28,6 +28,7 @@
     "pulse:dry": "node utils/ontology-pulse.mjs --dry-run",
     "viz": "node utils/gift-viz.mjs",
     "proposals": "node utils/proposals.mjs",
+    "validate": "node utils/gift-validate.mjs specs/ --all",
     "insight": "node utils/claude-insight.mjs",
     "postinstall": "node utils/spec-index.mjs 2>/dev/null || true",
     "test": "node --test tests/"

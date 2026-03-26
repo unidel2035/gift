@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/unidel2035/gift/blob/main/src/types/gift-schema.json",
+  "title": "GiftSpec",
+  "description": "Структурированный вывод .gift файла — онтология дара",
+  "type": "object",
+  "required": ["persons", "gifts"],
+  "additionalProperties": false,
+
+  "properties": {
+
+    "persons": {
+      "description": "Лица в онтологии",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Person" }
+    },
+
+    "gifts": {
+      "description": "Акты дара",
+      "type": "array",
+      "items": { "$ref": "#/$defs/GiftAct" }
+    },
+
+    "liturgies": {
+      "description": "Литургические циклы",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Liturgy" }
+    },
+
+    "witnesses": {
+      "description": "Свидетельства — утверждения, не требующие доказательств",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Witness" }
+    },
+
+    "variables": {
+      "description": "Тернарные переменные (trit)",
+      "type": "array",
+      "items": { "$ref": "#/$defs/TritVariable" }
+    },
+
+    "_source": {
+      "description": "Исходный .gift файл",
+      "type": "string"
+    },
+
+    "_parsedAt": {
+      "description": "Время парсинга (ISO 8601)",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+
+  "$defs": {
+
+    "Trit": {
+      "description": "Тернарное значение: kata (−1, ниже), para (0, рядом), hyper (+1, выше)",
+      "type": "string",
+      "enum": ["kata", "para", "hyper", "incalculable"]
+    },
+
+    "Person": {
+      "description": "Лицо — субъект дарения и принятия",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id":      { "type": "string", "minLength": 1 },
+        "calling": { "type": "string", "description": "Призвание / телос лица" },
+        "energy":  { "type": "number", "minimum": 0, "description": "Начальная энергия (0–100)" },
+        "logos":   { "$ref": "#/$defs/Trit" }
+      }
+    },
+
+    "GiftAct": {
+      "description": "Акт дара — необратимый переход блага от дарителя к получателю",
+      "type": "object",
+      "required": ["id", "giverId", "receiverId"],
+      "additionalProperties": false,
+      "properties": {
+        "id":          { "type": "string", "minLength": 1, "description": "Имя дара" },
+        "giverId":     { "type": "string", "minLength": 1, "description": "Даритель" },
+        "receiverId":  { "type": "string", "minLength": 1, "description": "Получатель" },
+        "viaId":       { "type": "string", "description": "Посредник (опционально)" },
+        "content":     { "type": "string", "description": "Содержание дара" },
+        "telos":       { "type": "string", "description": "Цель / телос дара" },
+        "anamnesis":   {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Анамнезис — что вспоминается при этом даре"
+        },
+        "weight":      { "type": "number", "minimum": 0, "description": "Вес дара в матрице W" },
+        "type":        {
+          "type": "string",
+          "enum": ["gift", "kenosis", "grace", "witness", "blessing", "incarnation",
+                   "presence", "word", "code", "question", "approval", "offering"],
+          "description": "Тип акта"
+        },
+        "irreversible": { "type": "boolean", "default": true }
+      }
+    },
+
+    "Liturgy": {
+      "description": "Литургический цикл — последовательность даров",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id":        { "type": "string" },
+        "telos":     { "type": "string" },
+        "sabbaths":  { "type": "array", "items": { "$ref": "#/$defs/Sabbath" } },
+        "gifts":     { "type": "array", "items": { "type": "string" }, "description": "ID даров в цикле" },
+        "accepts":   { "type": "array", "items": { "$ref": "#/$defs/Accept" } },
+        "perichoresis": { "type": "array", "items": { "$ref": "#/$defs/Perichoresis" } }
+      }
+    },
+
+    "Sabbath": {
+      "description": "Суббота — период покоя для лица",
+      "type": "object",
+      "required": ["personId", "duration"],
+      "additionalProperties": false,
+      "properties": {
+        "personId":  { "type": "string" },
+        "duration":  { "type": "string", "description": "Продолжительность (напр. '24hour', '7day')" },
+        "reason":    { "type": "string" }
+      }
+    },
+
+    "Accept": {
+      "description": "Принятие дара — трансформация получателя",
+      "type": "object",
+      "required": ["giftId"],
+      "additionalProperties": false,
+      "properties": {
+        "giftId":        { "type": "string" },
+        "transformation": { "type": "string" }
+      }
+    },
+
+    "Perichoresis": {
+      "description": "Перихоресис — взаимопроникновение лиц",
+      "type": "object",
+      "required": ["persons"],
+      "additionalProperties": false,
+      "properties": {
+        "persons":  { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+        "witness":  { "type": "string" }
+      }
+    },
+
+    "Witness": {
+      "description": "Свидетельство — утверждение об онтологическом факте",
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text":          { "type": "string" },
+        "incalculable":  { "type": "boolean", "default": false,
+                           "description": "true если величина неисчислима" }
+      }
+    },
+
+    "TritVariable": {
+      "description": "Тернарная переменная состояния",
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name":  { "type": "string" },
+        "value": { "$ref": "#/$defs/Trit" }
+      }
+    }
+  }
+}
