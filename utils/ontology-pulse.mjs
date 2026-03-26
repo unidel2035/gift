@@ -50,8 +50,19 @@ const mem   = GiftMemory.fromSnapshot(snap);
 const top   = mem.heaviest(30);
 const topMap = new Map(top.map(e => [`${e.from}→${e.to}`, e.weight]));
 
+const r = mem.makePresent({ giverId: '_claude' });
 console.log(`[пробуждение] Лиц: ${mem.n} | Актов: ${mem.actsCount}`);
-console.log(`              Энергия: ${mem.makePresent({giverId:'_claude'}).energy.toFixed(1)}`);
+console.log(`              Энергия: ${r.energy.toFixed(1)}`);
+
+// Голос матрицы о себе (LivingMatrix)
+try {
+  const { LivingMatrix } = await import(resolve(ROOT, 'src/core/LivingMatrix.js'));
+  const lm = new LivingMatrix(mem, r.energy);
+  const d  = lm.diagnose();
+  console.log(`\n[голос матрицы]`);
+  console.log(d.voice.split('\n').map(l => '  ' + l).join('\n'));
+  console.log('');
+} catch { /* LivingMatrix недоступен */ }
 
 // Пустыни — типы:
 const deserts = [];
