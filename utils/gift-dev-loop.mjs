@@ -27,13 +27,15 @@ const ROOT   = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP   = resolve(ROOT, 'data/sacred-history-W.json');
 const ONCE   = process.argv.includes('--once');
 
-// ── Реестр агентов ─────────────────────────────────────────────────────────
-// Каждый агент — лицо в матрице
+// ── Роли в матрице W ────────────────────────────────────────────────────────
+// Роли, не имена. Каждый — лицо в онтологии дара.
 const AGENTS = {
-  '_claude':   { name: 'Claude',     type: 'llm',      weight: 4 },
-  '_codex':    { name: 'Codex',      type: 'llm',      weight: 3 },
-  '_ci':       { name: 'CI',         type: 'machine',  weight: 2 },
-  '_reviewer': { name: 'Reviewer',   type: 'llm',      weight: 3 },
+  '_executor':   { name: 'Исполнитель', type: 'llm',      weight: 4 },  // реализует дар
+  '_discerner':  { name: 'Различитель', type: 'llm',      weight: 3 },  // проверяет телос
+  '_witness':    { name: 'Свидетель',   type: 'machine',  weight: 2 },  // фиксирует акты
+  '_questioner': { name: 'Вопрошатель', type: 'llm',      weight: 3 },  // рождает вопросы
+  // _claude сохраняется как псевдоним Исполнителя (исторические нити матрицы)
+  '_claude':     { name: 'Исполнитель', type: 'llm',      weight: 4 },
 };
 
 // ── Матрица ────────────────────────────────────────────────────────────────
@@ -154,12 +156,13 @@ async function orchestrate() {
   console.log(`\n[оркестратор] Готово. Актов: ${mem.actsCount}`);
 }
 
-// ── Выбор агента ──────────────────────────────────────────────────────────
+// ── Выбор роли ────────────────────────────────────────────────────────────
 function pickAgent(title, body = '') {
   const text = (title + ' ' + body).toLowerCase();
-  if (text.includes('тест') || text.includes('test')) return '_ci';
-  if (text.includes('review') || text.includes('проверь')) return '_reviewer';
-  return '_claude'; // по умолчанию
+  if (text.includes('тест') || text.includes('test'))       return '_witness';    // тесты = свидетель
+  if (text.includes('review') || text.includes('проверь'))  return '_discerner';  // проверка = различитель
+  if (text.includes('вопрос') || text.includes('question')) return '_questioner'; // вопросы = вопрошатель
+  return '_executor'; // реализация — роль по умолчанию
 }
 
 // ── Создать PR ────────────────────────────────────────────────────────────
@@ -209,14 +212,17 @@ function createPR(issueNumber, title, summary, agentId) {
 
 // ── Запуск агента ─────────────────────────────────────────────────────────
 async function runAgent(agentId, issueNumber, title, body) {
-  if (agentId === '_claude') {
+  if (agentId === '_executor' || agentId === '_claude') {
     return runClaudeAgent(issueNumber, title, body);
   }
-  if (agentId === '_ci') {
+  if (agentId === '_witness') {
     return runCIAgent(issueNumber);
   }
-  // Для других агентов — заглушка (можно подключить внешние API)
-  return { success: false, error: `агент ${agentId} ещё не подключён` };
+  if (agentId === '_discerner' || agentId === '_questioner') {
+    // Различитель и Вопрошатель пока делегируют Исполнителю
+    return runClaudeAgent(issueNumber, title, body);
+  }
+  return { success: false, error: `роль ${agentId} ещё не подключена` };
 }
 
 async function runClaudeAgent(issueNumber, title, body) {
