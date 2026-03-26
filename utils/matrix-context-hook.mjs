@@ -39,6 +39,19 @@ try {
   if (r.decoded.receivers.length > 0)
     lines.push(`Анамнезис _claude → ${r.decoded.receivers.join(', ')}`);
   lines.push(`Энергия сети: ${r.energy.toFixed(2)}`);
+
+  // Голос матрицы — богословский автопортрет (LivingMatrix)
+  try {
+    const { LivingMatrix } = await import(resolve(ROOT, 'src/core/LivingMatrix.js'));
+    const lm = new LivingMatrix(mem, r.energy);
+    const d  = lm.diagnose();
+    lines.push('');
+    lines.push('[Матрица о себе:]');
+    lines.push(`  Принцип: ${d.dominant.principle}${d.dominant.who ? ' (' + d.dominant.who + ')' : ''} | монополия: ${(d.monopoly*100).toFixed(0)}%`);
+    if (d.deserts.length) {
+      lines.push(`  Пустыни: ${d.deserts.slice(0,3).map(dd => `${dd.from}→${dd.to}`).join(', ')}`);
+    }
+  } catch { /* LivingMatrix не загрузился */ }
 } catch {
   // TF не загрузился — продолжаем без матрицы
 }
