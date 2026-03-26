@@ -185,7 +185,8 @@ function createPR(issueNumber, title, summary, agentId) {
     execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
 
     // Создать PR
-    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '')}`;
+    // Заголовок: убрать prefix вопрошания, схлопнуть переносы строк в пробел
+    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '').replace(/\s*\n\s*/g, ' — ').trim()}`.slice(0, 70);
     const prBody = [
       `## Дар`,
       ``,
@@ -196,14 +197,16 @@ function createPR(issueNumber, title, summary, agentId) {
       `**Агент:** ${agentId}`,
       ``,
       `---`,
-      `🤖 Создано [gift-dev-loop.mjs](utils/gift-dev-loop.mjs)`,
+      `Создано gift-dev-loop.mjs`,
     ].join('\n');
 
-    const r = execSync(
-      `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --head ${branch} --base main`,
-      { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' }
-    );
-    return r.trim();
+    // Передаём body через stdin (spawnSync) чтобы избежать проблем с кавычками и спецсимволами
+    const { spawnSync: spawn } = await import('child_process');
+    const r = spawn('gh', ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', branch, '--base', 'main'], {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (r.status !== 0) throw new Error(r.stderr?.slice(0, 200) || `exit ${r.status}`);
+    return r.stdout.trim();
   } catch (err) {
     console.log(`   ! PR не создан: ${err.message?.slice(0, 100)}`);
     return null;
