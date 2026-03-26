@@ -59,10 +59,14 @@ class HolySpiritEngine {
   get _fall() { return this.engine.fall; }
   get _anamnesis() { return this.engine.anamnesis; }
 
-  // ── 1. Grace Event (Деррида #3) ────────────────────────
+  // ── 1. Grace Event ──────────────────────────────────────
   //
   // Безусловный дар: случайный GT случайному лицу.
   // Без причины. Без запроса. Без ожидания возврата.
+  // Философская аналогия: Деррида о «чистом даре» (Given Time, 1991)
+  // используется как СТРУКТУРНАЯ модель, не как богословский авторитет.
+  // Православный источник: Макарий Великий, Беседы духовные;
+  // Григорий Богослов о безусловности благодати (Сл. 40)
   // «Дух дышит, где хочет»
 
   graceEvent() {
@@ -115,7 +119,13 @@ class HolySpiritEngine {
       logos: 'Χάρις — безусловный дар, не вызванный заслугой',
       cost: null,
       telos: 'χάρις',
-      status: 'accepted', // Grace events are auto-accepted
+      // БОГОСЛОВСКАЯ ПРАВКА: синергия (συνέργεια).
+      // Благодать предваряет (prevenient), но не принуждает.
+      // Макарий Великий: «Благодать не действует без согласия человека»
+      // Дар благодати предлагается (offered), не навязывается.
+      // Person.accept(giftId) завершает синергию.
+      status: 'offered',
+      graceType: 'prevenient',
       freedom: true,
       transforms: {
         giver: 'Дух не изменяется, не уменьшается от дарения',
@@ -127,10 +137,11 @@ class HolySpiritEngine {
       ontologicalType: 'grace_event',
       gtAmount,
       createdAt: new Date().toISOString(),
-      acceptedAt: new Date().toISOString(),
+      acceptedAt: null, // заполняется при явном принятии через Person.accept()
     };
 
-    // Дух дышит, где хочет — дар благодати приходит из бездны
+    // Дух дышит, где хочет — Даритель (Троица) за границей системы.
+    // abyssalMark = «система не может проследить Источник», не «источника нет».
     abyssalMark(gift);
 
     this._eventStore.append(gift);
@@ -280,8 +291,28 @@ class HolySpiritEngine {
   // Большинство попыток ничего не произведут (вероятности низкие).
   // Это нормально. Дух дышит, где хочет.
 
+  /**
+   * _onGraceAccepted(gift) — применить энергию благодати при явном принятии.
+   * Синергия: благодать предлагается, человек принимает, энергия действует.
+   */
+  _onGraceAccepted(gift) {
+    if (gift?.ontologicalType !== 'grace_event') return;
+    try {
+      const regPerson = this.engine.persons._persons?.get(gift.receiver);
+      if (regPerson) regPerson.graceEnergy = (regPerson.graceEnergy || 0) + 10;
+      logger.info(`[Πνεῦμα] Синергия: ${gift.receiverName} принял благодать — +10 graceEnergy`);
+    } catch { /* */ }
+  }
+
   start(intervalMs = 60000) {
     if (this._interval) return;
+
+    // Подписка на принятие дара благодати (синергия)
+    try {
+      this._eventBus.on(EVENT_TYPES.GIFT_ACCEPTED || 'gift_accepted', (event) => {
+        this._onGraceAccepted(event?.gift || event);
+      });
+    } catch { /* */ }
 
     this._interval = setInterval(() => {
       this._tickCount++;
@@ -289,18 +320,9 @@ class HolySpiritEngine {
       // Grace event — каждый тик
       const grace = this.graceEvent();
 
-      // Grace event restores energy (+10) to recipient
-      if (grace && grace.receiver) {
-        try {
-          const engine = this.engine;
-          const person = engine.persons.get(grace.receiver);
-          if (person && typeof person === 'object') {
-            // Person actors are transient; update registry energy
-            const regPerson = engine.persons._persons?.get(grace.receiver);
-            if (regPerson) regPerson.graceEnergy = (regPerson.graceEnergy || 0) + 10;
-          }
-        } catch { /* */ }
-      }
+      // БОГОСЛОВСКАЯ ПРАВКА: энергия благодати (+10) применяется
+      // только при явном принятии (синергия), не автоматически.
+      // Бонус перенесён в обработчик GIFT_ACCEPTED (см. _onGraceAccepted).
 
       // Inspiration — каждые 3 тика
       if (this._tickCount % 3 === 0) {
@@ -318,7 +340,9 @@ class HolySpiritEngine {
         this.quicken();
       }
 
-      // Gratitude Decay — каждые 10 тиков (Деррида #1: забывание)
+      // Gratitude Decay — каждые 10 тиков
+      // Философская аналогия: Деррида о забывании дара.
+      // Патристический источник: «Помяни, откуда ты ниспал» (Откр 2:5)
       if (this._tickCount % 10 === 0) {
         try {
           const forgotten = this.engine.gratitude.applyDecay();
