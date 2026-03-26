@@ -8,7 +8,7 @@
  * Это и есть "Бот → матрица" (proposal #9).
  *
  * Запуск: node utils/anamnesis-sync.mjs
- * Cron:   */15 * * * * (каждые 15 минут)
+ * Cron:   каждые 15 минут: 0,15,30,45 * * * *
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -70,13 +70,30 @@ function saveState(state) {
 
 // ── Получить ленту с сервера ──────────────────────────────────────────────────
 
+// Путь к файлу на сервере (читаем через SSH если HTTP недоступен)
+const SERVER_HOST     = process.env.ANAMNESIS_HOST || 'root@173.249.2.184';
+const SERVER_TAPE     = process.env.ANAMNESIS_TAPE || '/home/hive/dronedoc2026/monolith/data/gift-anamnesis.json';
+
 async function fetchTape(limit = 200) {
-  const url = `${ANAMNESIS_URL}/tape?limit=${limit}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
-  const data = await res.json();
-  // Формат: { tape: [...] } или массив напрямую
-  return Array.isArray(data) ? data : (data.tape ?? []);
+  // Попытка 1: HTTP API
+  try {
+    const url = `${ANAMNESIS_URL}/tape?limit=${limit}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+    if (res.ok) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data.tape ?? []);
+    }
+  } catch { /* fallback to SSH */ }
+
+  // Попытка 2: читать файл напрямую через SSH
+  const { spawnSync } = await import('child_process');
+  const r = spawnSync('ssh', ['-o', 'ConnectTimeout=5', SERVER_HOST, `cat "${SERVER_TAPE}"`], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000,
+  });
+  if (r.status !== 0) throw new Error(`SSH failed: ${(r.stderr || '').slice(0, 100)}`);
+  const data = JSON.parse(r.stdout);
+  const tape = Array.isArray(data) ? data : (data.tape ?? []);
+  return tape.slice(-limit);
 }
 
 // ── Загрузить матрицу ─────────────────────────────────────────────────────────
