@@ -30,6 +30,7 @@ import LogosRegistry from '../core/LogosRegistry.js';
 import { GratitudeGraph } from '../traces/GratitudeGraph.js';
 import { GiftMemory } from '../core/GiftMemory.js';
 import { KoinonFederation } from '../core/KoinonFederation.js';
+import { GiftValidator } from '../core/GiftValidator.js';
 
 // ── KoinonFederation ─────────────────────────────────────────
 
@@ -107,8 +108,27 @@ function handleApi(method, path, body) {
     return p;
   }
 
-  // POST /api/gift
+  // POST /api/gift — Gift Protocol v0.1 (schema:"gift/v1") ИЛИ legacy API
+  //
+  // Если тело содержит schema:"gift/v1" → протокольный обработчик:
+  //   валидирует акт, записывает в W-матрицу, возвращает запечатанный акт.
+  // Иначе → legacy (from/to/content/cost), сессионный режим.
   if (method === 'POST' && path === '/api/gift') {
+    if (body && body.schema === 'gift/v1') {
+      const result = GiftValidator.validate(body);
+      if (!result.ok) {
+        return { ok: false, errors: result.errors };
+      }
+      const { act } = result;
+      const memAct = GiftValidator.toMemoryAct(act);
+      _fedMemory.receive(memAct);
+      session.log.push({
+        ts: act.timestamp,
+        msg: `Дар [gift/v1]: ${act.from} → ${act.to} (${act.type}, w=${act.weight})`,
+      });
+      return { ok: true, act, memoryAct: memAct };
+    }
+    // legacy
     const { from, to, content, cost = 1, decision = null } = body;
     if (!from || !content) return { error: 'from and content required' };
     return createGift(from, to || 'all', content, cost, decision);
@@ -220,6 +240,48 @@ function handleApi(method, path, body) {
       gratitude: g.result.gratitude,
       ts: g.ts,
     }));
+  }
+
+  // ── Gift Protocol v0.1 ──────────────────────────────────────
+  // POST /gift — принять акт дара по формальному протоколу.
+  //
+  // Тело: { schema:"gift/v1", from, to, type, weight?, content?, irreversible?, timestamp?, proof? }
+  //
+  // Отличие от POST /api/gift:
+  //   /api/gift — старый API (from/to/content/cost), сессионный.
+  //   /gift     — протокольный endpoint: валидирует schema gift/v1,
+  //               записывает в W-матрицу (_fedMemory), возвращает
+  //               необратимо запечатанный акт + memoryAct для матрицы.
+  //
+  // κένωσις: принятый дар нельзя отозвать (irreversible:true — аксиома).
+  if (method === 'POST' && path === '/gift') {
+    const result = GiftValidator.validate(body);
+    if (!result.ok) {
+      return { ok: false, errors: result.errors };
+    }
+    const { act } = result;
+    // Обновить W-матрицу
+    const memAct = GiftValidator.toMemoryAct(act);
+    _fedMemory.receive(memAct);
+    session.log.push({
+      ts: act.timestamp,
+      msg: `Дар [gift/v1]: ${act.from} → ${act.to} (${act.type}, w=${act.weight})`,
+    });
+    return {
+      ok: true,
+      act,
+      memoryAct: memAct,
+    };
+  }
+
+  // GET /gift/schema — вернуть JSON Schema протокола
+  if (method === 'GET' && path === '/gift/schema') {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, join } = await import('node:path');
+    const __dir = dirname(fileURLToPath(import.meta.url));
+    const schema = JSON.parse(readFileSync(join(__dir, '../protocol/gift-schema.json'), 'utf8'));
+    return schema;
   }
 
   return null;
