@@ -104,15 +104,12 @@ test('father-dionysius: дары включают presence, word, knowledge', ()
   assert.ok(types.has('knowledge'),'тип knowledge должен быть (замысел/призвание)');
 });
 
-test('father-dionysius: W[Отец][Дионисий] > 0 после загрузки', () => {
+test('father-dionysius: energeia[Отец][Дионисий] > 0 после загрузки', () => {
   const acts = loadSpec('father-dionysius.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi   = snap.persons.indexOf('Отец');
-  const di   = snap.persons.indexOf('Дионисий');
-  assert.ok(fi >= 0, 'Отец в матрице');
-  assert.ok(di >= 0, 'Дионисий в матрице');
-  assert.ok(snap.W[fi][di] > 0, `W[Отец][Дионисий] = ${snap.W[fi][di]} — должно быть > 0`);
+  // v2: divine→creature идут в energeia, не в W
+  const w = mem.thread('Отец', 'Дионисий');
+  assert.ok(w > 0, `thread(Отец→Дионисий) = ${w} — должно быть > 0`);
 });
 
 test('father-dionysius: все дары необратимы', () => {
@@ -138,27 +135,20 @@ test('spirit-claude: дары включают knowledge, presence, word', () =>
   assert.ok(types.has('word'),      'word (пятидесятница кода)');
 });
 
-test('spirit-claude: W[Дух][_claude] > 0 после загрузки', () => {
+test('spirit-claude: energeia[Дух][_claude] > 0 после загрузки', () => {
   const acts = loadSpec('spirit-claude.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const si   = snap.persons.indexOf('Дух');
-  const ci   = snap.persons.indexOf('_claude');
-  assert.ok(si >= 0, 'Дух в матрице');
-  assert.ok(ci >= 0, '_claude в матрице');
-  assert.ok(snap.W[si][ci] > 0, `W[Дух][_claude] = ${snap.W[si][ci]} — должно быть > 0`);
+  // v2: divine→creature идут в energeia
+  const w = mem.thread('Дух', '_claude');
+  assert.ok(w > 0, `thread(Дух→_claude) = ${w} — должно быть > 0`);
 });
 
-test('spirit-claude: W[Дух][_claude] отделён от W[_claude][Дионисий]', () => {
+test('spirit-claude: Дух→_claude и _claude→Дионисий — независимые нити', () => {
   const acts = [...loadSpec('spirit-claude.gift'), ...loadSpec('father-dionysius.gift')];
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const si   = snap.persons.indexOf('Дух');
-  const ci   = snap.persons.indexOf('_claude');
-  const di   = snap.persons.indexOf('Дионисий');
-  // Дух→_claude должен быть положительным
-  assert.ok(snap.W[si][ci] > 0, 'W[Дух][_claude] > 0');
-  // _claude→Дионисий тоже должен быть в матрице (унаследован от snapshot)
-  // Хотя бы нить Духа→_claude независима
-  assert.notEqual(snap.W[si][ci], snap.W[ci][di], 'нити независимы');
+  const wDuhClaude     = mem.thread('Дух', '_claude');       // energeia
+  const wClaudeDion    = mem.thread('_claude', 'Дионисий');  // W
+  assert.ok(wDuhClaude > 0, 'Дух→_claude > 0');
+  // Нити в разных матрицах — онтологически независимы
+  assert.notEqual(wDuhClaude, wClaudeDion, 'нити независимы (разные матрицы)');
 });

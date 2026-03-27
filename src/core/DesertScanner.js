@@ -40,19 +40,23 @@ export class DesertScanner {
    * @returns {Array<{from: string, to: string, inquiry: string, scannedAt: string}>}
    */
   scan() {
+    // Все лица: тварные + divine (v2) или просто persons (v1 обратная совместимость)
     const snap    = this.memory.snapshot();
-    const { persons, W } = snap;
+    const divine  = snap.divinePersons ?? [];
+    const all     = [...divine, ...snap.persons];
     const deserts = [];
     const now     = new Date().toISOString();
 
-    for (let i = 0; i < persons.length; i++) {
-      for (let j = 0; j < persons.length; j++) {
+    for (let i = 0; i < all.length; i++) {
+      for (let j = 0; j < all.length; j++) {
         if (i === j) continue;
-        if (W[i][j] <= this.threshold) {
+        // thread() корректно маршрутизирует: W / energeia / doxologia / theophaneia
+        const w = this.memory.thread(all[i], all[j]);
+        if (w <= this.threshold) {
           deserts.push({
-            from:      persons[i],
-            to:        persons[j],
-            inquiry:   this._inquire(persons[i], persons[j]),
+            from:      all[i],
+            to:        all[j],
+            inquiry:   this._inquire(all[i], all[j]),
             scannedAt: now,
           });
         }

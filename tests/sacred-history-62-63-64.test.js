@@ -86,14 +86,12 @@ test('father-son: типы presence, word, knowledge', () => {
   assert.ok(types.has('knowledge'),'knowledge (прославление)');
 });
 
-test('father-son: W[Отец][Сын] > 0', () => {
+test('father-son: theophaneia[Отец][Сын] > 0 (вечное рождение)', () => {
   const acts = loadSpec('father-son.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi = snap.persons.indexOf('Отец');
-  const si = snap.persons.indexOf('Сын');
-  assert.ok(fi >= 0 && si >= 0, 'оба лица в матрице');
-  assert.ok(snap.W[fi][si] > 0, `W[Отец][Сын] = ${snap.W[fi][si]}`);
+  // v2: intra-divine идут в theophaneia (асимметрично)
+  const w = mem.thread('Отец', 'Сын');
+  assert.ok(w > 0, `thread(Отец→Сын) = ${w} — должно быть > 0`);
 });
 
 test('father-son: все дары необратимы', () => {
@@ -118,14 +116,11 @@ test('father-spirit: типы presence, word, knowledge', () => {
   assert.ok(types.has('knowledge'),'knowledge (помазание)');
 });
 
-test('father-spirit: W[Отец][Дух] > 0', () => {
+test('father-spirit: theophaneia[Отец][Дух] > 0 (вечное исхождение)', () => {
   const acts = loadSpec('father-spirit.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi = snap.persons.indexOf('Отец');
-  const di = snap.persons.indexOf('Дух');
-  assert.ok(fi >= 0 && di >= 0, 'оба лица в матрице');
-  assert.ok(snap.W[fi][di] > 0, `W[Отец][Дух] = ${snap.W[fi][di]}`);
+  const w = mem.thread('Отец', 'Дух');
+  assert.ok(w > 0, `thread(Отец→Дух) = ${w} — должно быть > 0`);
 });
 
 // ── #64: Отец → Христос ──────────────────────────────────────────────────────
@@ -136,23 +131,16 @@ test('father-christ: ≥ 3 дара от Отца к Христу', () => {
   assert.ok(fatherActs.length >= 3, `Нашли: ${fatherActs.length}`);
 });
 
-test('father-christ: W[Отец][Христос] > 0', () => {
+test('father-christ: theophaneia[Отец][Христос] > 0 (власть воплощённому)', () => {
   const acts = loadSpec('father-christ.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi = snap.persons.indexOf('Отец');
-  const ci = snap.persons.indexOf('Христос');
-  assert.ok(fi >= 0 && ci >= 0, 'оба лица в матрице');
-  assert.ok(snap.W[fi][ci] > 0, `W[Отец][Христос] = ${snap.W[fi][ci]}`);
+  const w = mem.thread('Отец', 'Христос');
+  assert.ok(w > 0, `thread(Отец→Христос) = ${w} — должно быть > 0`);
 });
 
-test('father-christ: W[Отец][Сын] и W[Отец][Христос] — оба > 0 (единосущие)', () => {
+test('father-christ: Отец→Сын и Отец→Христос — оба > 0 (единосущие)', () => {
   const acts = [...loadSpec('father-son.gift'), ...loadSpec('father-christ.gift')];
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi  = snap.persons.indexOf('Отец');
-  const si  = snap.persons.indexOf('Сын');
-  const ci  = snap.persons.indexOf('Христос');
-  assert.ok(snap.W[fi][si] > 0, 'W[Отец][Сын] > 0');
-  assert.ok(snap.W[fi][ci] > 0, 'W[Отец][Христос] > 0');
+  assert.ok(mem.thread('Отец', 'Сын') > 0,    'Отец→Сын > 0 (theophaneia)');
+  assert.ok(mem.thread('Отец', 'Христос') > 0, 'Отец→Христос > 0 (theophaneia)');
 });

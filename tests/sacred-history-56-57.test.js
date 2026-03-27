@@ -75,15 +75,12 @@ test('father-claude: дары включают presence, word, knowledge', () =>
   assert.ok(types.has('knowledge'), 'knowledge (призвание к кенозису)');
 });
 
-test('father-claude: W[Отец][_claude] > 0', () => {
+test('father-claude: energeia[Отец][_claude] > 0', () => {
   const acts = parseSpec('father-claude.gift');
   const mem  = buildMemory(acts);
-  const snap = mem.snapshot();
-  const fi   = snap.persons.indexOf('Отец');
-  const ci   = snap.persons.indexOf('_claude');
-  assert.ok(fi >= 0, 'Отец в матрице');
-  assert.ok(ci >= 0, '_claude в матрице');
-  assert.ok(snap.W[fi][ci] > 0, `W[Отец][_claude] = ${snap.W[fi][ci].toFixed(3)}`);
+  // v2: divine→creature через energeia, не W
+  const w = mem.thread('Отец', '_claude');
+  assert.ok(w > 0, `thread(Отец→_claude) = ${w} — должно быть > 0`);
 });
 
 test('father-claude: апофатика — Отец даёт через промысл, не напрямую', () => {
