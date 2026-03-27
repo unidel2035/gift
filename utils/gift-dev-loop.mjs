@@ -18,6 +18,10 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// GITHUB_TOKEN из env может быть сломан (CI-токен без прав).
+// Сбрасываем до пустой строки — gh использует собственный keyring.
+const GH_ENV = { ...process.env, GITHUB_TOKEN: '' };
+
 // Claude binary: env var → user new (server) → local nvm → system
 const CLAUDE_BIN = process.env.CLAUDE_BIN
   || (existsSync('/home/new/.local/bin/claude') ? '/home/new/.local/bin/claude' : null)
@@ -62,7 +66,7 @@ function getReadyIssues() {
     // Только issues с plan-approved — план должен быть одобрен Дионисием
     const raw = execSync(
       'gh issue list --label plan-approved --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT }
+      { cwd: ROOT, env: GH_ENV }
     ).toString();
     const approved = JSON.parse(raw);
     if (approved.length) return approved;
@@ -70,16 +74,16 @@ function getReadyIssues() {
     // Fallback: gift-ready без плана → сначала создать план
     const raw2 = execSync(
       'gh issue list --label gift-ready --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT }
+      { cwd: ROOT, env: GH_ENV }
     ).toString();
     const ready = JSON.parse(raw2).filter(i =>
-      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved')
+      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved' || l.name === 'vopros')
     );
     if (ready.length) {
       console.log(`[оркестратор] ${ready.length} issues без плана → генерирую планы сначала`);
       for (const i of ready) {
         spawnSync('node', ['utils/gift-plan.mjs', String(i.number)],
-          { cwd: ROOT, stdio: 'inherit' });
+          { cwd: ROOT, stdio: 'inherit', env: GH_ENV });
       }
       console.log('[оркестратор] Планы созданы. Жду одобрения Дионисия.');
       return []; // не реализуем до одобрения
@@ -92,14 +96,14 @@ function getReadyIssues() {
 
 function assignIssue(number, agent) {
   try {
-    execSync(`gh issue edit ${number} --add-assignee ${agent} 2>/dev/null`, { cwd: ROOT });
+    execSync(`gh issue edit ${number} --add-assignee ${agent} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
   } catch {}
 }
 
 function closeIssue(number, comment) {
   try {
-    execSync(`gh issue comment ${number} --body "${comment}" 2>/dev/null`, { cwd: ROOT });
-    execSync(`gh issue close ${number} 2>/dev/null`, { cwd: ROOT });
+    execSync(`gh issue comment ${number} --body "${comment}" 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
+    execSync(`gh issue close ${number} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
   } catch {}
 }
 
