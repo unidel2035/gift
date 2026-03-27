@@ -1,0 +1,74 @@
+[
+  {
+    "schema": "gift/v1",
+    "from": "_koinon",
+    "to": "koinon-builders",
+    "type": "grace",
+    "weight": 6,
+    "content": "DAO 'koinon-builders' initialised — welcome to the community of gift",
+    "irreversible": true,
+    "timestamp": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Alice",
+    "to": "koinon-builders",
+    "type": "time",
+    "weight": 10,
+    "content": "Drafted the founding charter and onboarding docs (8h)",
+    "irreversible": true,
+    "timestamp": "2026-01-02T09:00:00.000Z",
+    "proof": { "seconds": 28800 }
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Bob",
+    "to": "Alice",
+    "type": "word",
+    "weight": 4,
+    "content": "Reviewed and blessed the charter — deep discernment",
+    "irreversible": true,
+    "timestamp": "2026-01-03T14:30:00.000Z"
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Alice",
+    "to": "Bob",
+    "type": "code",
+    "weight": 5,
+    "content": "Implemented gift-dao CLI init command",
+    "irreversible": true,
+    "timestamp": "2026-01-05T11:00:00.000Z",
+    "proof": { "commit": "a1b2c3d", "repo": "koinon-builders/gift-dao" }
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Bob",
+    "to": "_koinon",
+    "type": "knowledge",
+    "weight": 6,
+    "content": "Wrote 'Why Gift Protocol?' explainer for external DAOs",
+    "irreversible": true,
+    "timestamp": "2026-01-07T16:00:00.000Z"
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Carol",
+    "to": "Alice",
+    "type": "presence",
+    "weight": 8,
+    "content": "Joined two governance calls and held the space with prayer",
+    "irreversible": true,
+    "timestamp": "2026-01-10T19:00:00.000Z"
+  },
+  {
+    "schema": "gift/v1",
+    "from": "Carol",
+    "to": "Bob",
+    "type": "question",
+    "weight": 4,
+    "content": "Asked: what does accountability mean for an AI in our DAO?",
+    "irreversible": true,
+    "timestamp": "2026-01-11T10:00:00.000Z"
+  }
+]

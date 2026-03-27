@@ -379,5 +379,188 @@ export class KoinonFederation {
   }
 }
 
+// ── GiftLocalStore ────────────────────────────────────────────────────────────
+
+/**
+ * GiftLocalStore — локальное хранилище W-матрицы без сервера.
+ *
+ * DAO-инструмент: читает/пишет `sacred-history.json` в файловой системе.
+ * Строит W-матрицу в памяти (Map of Maps) без внешних зависимостей.
+ *
+ * Богословская аксиома: каждый вызов `give()` необратим —
+ * запись добавляется, никогда не удаляется (append-only).
+ *
+ * @example
+ *   import { GiftLocalStore } from '@koinon/gift-protocol';
+ *   const store = new GiftLocalStore('./sacred-history.json');
+ *   await store.give({ schema:'gift/v1', from:'Alice', to:'Bob', type:'code',
+ *                      content:'reviewed PR #42', irreversible: true });
+ *   console.log(store.report());
+ */
+export class GiftLocalStore {
+  /**
+   * @param {string} filePath — путь к JSON-файлу (создаётся при первом give())
+   * @param {object} [options]
+   * @param {number} [options.topN=5] — сколько топ-нитей показывать в report()
+   */
+  constructor(filePath, options = {}) {
+    this.filePath = filePath;
+    this.topN = options.topN ?? 5;
+
+    /** @type {Array<object>} — все акты в памяти */
+    this._acts = [];
+
+    /** @type {Map<string, Map<string, number>>} — W-матрица: from → to → weight */
+    this._W = new Map();
+
+    this._loaded = false;
+  }
+
+  /**
+   * _load() — загрузить acts из файла в память (если ещё не загружено).
+   * Вызывается лениво при первом обращении.
+   */
+  async _load() {
+    if (this._loaded) return;
+    this._loaded = true;
+
+    let raw;
+    try {
+      const { readFile } = await import('node:fs/promises');
+      raw = await readFile(this.filePath, 'utf8');
+    } catch {
+      // Файла нет — начинаем с пустой истории
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`GiftLocalStore: invalid JSON in "${this.filePath}"`);
+    }
+
+    const acts = Array.isArray(parsed) ? parsed : (parsed.acts ?? []);
+    for (const act of acts) {
+      this._applyToW(act);
+      this._acts.push(act);
+    }
+  }
+
+  /**
+   * _applyToW(act) — применить один акт к W-матрице.
+   * @param {object} act — валидированный акт дара
+   */
+  _applyToW(act) {
+    const { from, to, weight } = act;
+    if (!from || !to) return;
+
+    if (!this._W.has(from)) this._W.set(from, new Map());
+    const row = this._W.get(from);
+    row.set(to, (row.get(to) ?? 0) + weight);
+  }
+
+  /**
+   * give(raw) — валидировать и записать акт дара.
+   *
+   * Append-only: запись добавляется в файл. Необратимо.
+   *
+   * @param {object} raw — сырой акт (schema, from, to, type, ...)
+   * @returns {Promise<{ ok: true, act: object } | { ok: false, errors: string[] }>}
+   */
+  async give(raw) {
+    await this._load();
+
+    const result = GiftValidator.validate(raw);
+    if (!result.ok) return result;
+
+    const { act } = result;
+
+    this._acts.push(act);
+    this._applyToW(act);
+
+    await this._persist();
+
+    return { ok: true, act };
+  }
+
+  /**
+   * _persist() — записать все акты в файл.
+   */
+  async _persist() {
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    const { dirname } = await import('node:path');
+
+    const dir = dirname(this.filePath);
+    await mkdir(dir, { recursive: true });
+    await writeFile(this.filePath, JSON.stringify(this._acts, null, 2), 'utf8');
+  }
+
+  /**
+   * summary() — получить сводку W-матрицы.
+   *
+   * @returns {Promise<{
+   *   persons: string[],
+   *   actsCount: number,
+   *   topThreads: Array<{ from: string, to: string, weight: number }>
+   * }>}
+   */
+  async summary() {
+    await this._load();
+
+    const persons = new Set();
+    const threads = [];
+
+    for (const [from, row] of this._W) {
+      persons.add(from);
+      for (const [to, weight] of row) {
+        persons.add(to);
+        threads.push({ from, to, weight });
+      }
+    }
+
+    threads.sort((a, b) => b.weight - a.weight);
+
+    return {
+      persons: [...persons].sort(),
+      actsCount: this._acts.length,
+      topThreads: threads.slice(0, this.topN),
+    };
+  }
+
+  /**
+   * report() — сгенерировать Markdown-отчёт.
+   *
+   * @returns {Promise<string>}
+   */
+  async report() {
+    const s = await this.summary();
+
+    const lines = [
+      '# Gift Protocol — Sacred History Report',
+      '',
+      `**Acts recorded:** ${s.actsCount}  `,
+      `**Persons:** ${s.persons.join(', ')}`,
+      '',
+      `## Top Threads (by weight)`,
+      '',
+    ];
+
+    if (s.topThreads.length === 0) {
+      lines.push('*(no acts recorded yet)*');
+    } else {
+      for (const { from, to, weight } of s.topThreads) {
+        lines.push(`- **${from}** → **${to}** — ${weight.toFixed(1)}`);
+      }
+    }
+
+    lines.push('');
+    lines.push(`---`);
+    lines.push(`*Gift Protocol v1 · ${new Date().toISOString().slice(0, 10)}*`);
+
+    return lines.join('\n');
+  }
+}
+
 // Default export: convenience object
-export default { GiftValidator, GiftClient, KoinonFederation, createAct, WEIGHT_BY_TYPE, schema };
+export default { GiftValidator, GiftClient, GiftLocalStore, KoinonFederation, createAct, WEIGHT_BY_TYPE, schema };

@@ -34,7 +34,36 @@ No external dependencies. Works in Node.js ≥ 18, Deno, Bun.
 
 ---
 
-## Quick start
+## Quick Start for DAOs (5 min, no server needed)
+
+```bash
+# 1. Install CLI globally (or use npx)
+npm install -g @koinon/gift-protocol
+
+# 2. Initialise your DAO
+mkdir my-dao && cd my-dao
+gift-dao init my-dao
+# → sacred-history.json   (3 example acts)
+# → gift-dao.config.json  (configuration)
+
+# 3. Record a gift
+gift-dao add --from Alice --to Bob --type code --content "reviewed PR #42"
+gift-dao add --from Carol --to Alice --type presence --content "held space in governance call"
+
+# 4. View the W-matrix report
+gift-dao report
+# → Markdown: persons, act count, top gift threads
+
+# 5. Export to file
+gift-dao report --out report.md
+```
+
+The `sacred-history.json` is your community's **append-only sacred history**.
+No database. No server. Commit it to git — it is load-bearing.
+
+---
+
+## Quick start (API)
 
 ```js
 import { GiftValidator, GiftClient, createAct, WEIGHT_BY_TYPE } from '@koinon/gift-protocol';
@@ -117,6 +146,60 @@ The hierarchy encodes a theological axiom: **time is heavier than money** becaus
 
 ---
 
+## CLI Reference (`gift-dao`)
+
+Install once, use everywhere:
+
+```bash
+npm install -g @koinon/gift-protocol
+# or per-project:
+npx gift-dao <command>
+```
+
+| Command | Description |
+|---|---|
+| `gift-dao init <name>` | Scaffold `sacred-history.json` + `gift-dao.config.json` with 3 example acts |
+| `gift-dao add --from A --to B --type code [--content "..."] [--weight N]` | Record a gift act |
+| `gift-dao report [--out file.md]` | Print (or write) Markdown W-matrix report |
+
+**Gift types for CLI:** `time`, `presence`, `knowledge`, `grace`, `code`, `offering`, `word`, `question`, `money`, `data`, `memory`
+
+---
+
+## Federated DAOs
+
+Multiple Κοινόν communities can exchange gifts across boundaries using federated addresses:
+
+```js
+import { KoinonFederation, GiftValidator } from '@koinon/gift-protocol';
+
+// Address format: "koinon-id/person-id"
+const addr = KoinonFederation.federatedId('koinon-parish', 'Alice');
+// → "koinon-parish/Alice"
+
+const { koinon, person } = KoinonFederation.parseAddr('koinon-parish/Alice');
+// → { koinon: 'koinon-parish', person: 'Alice' }
+
+// Cross-community gift
+const result = GiftValidator.validate({
+  schema: 'gift/v1',
+  from:   'koinon-parish/Alice',
+  to:     'koinon-dao/Bob',
+  type:   'knowledge',
+  content: 'shared onboarding materials with sister community',
+  irreversible: true,
+});
+```
+
+On Orthodox Pascha, inter-community threads are multiplied by `paschaMultiplier` (default: 7):
+
+```js
+KoinonFederation.isPascha(); // → true on Orthodox Easter
+KoinonFederation.paschaDate(2027); // → Date: 2 May 2027
+```
+
+---
+
 ## Adapters
 
 ### Discord
@@ -196,6 +279,38 @@ jobs:
 ---
 
 ## API
+
+### `GiftLocalStore(filePath, options?)`
+
+File-based W-matrix. **No server required.** Ideal for DAOs starting without infrastructure.
+
+```js
+import { GiftLocalStore } from '@koinon/gift-protocol';
+
+const store = new GiftLocalStore('./sacred-history.json', { topN: 10 });
+
+// Record a gift (validated, appended to file, irreversible)
+const result = await store.give({
+  schema: 'gift/v1',
+  from: 'Alice',
+  to: 'Bob',
+  type: 'code',
+  content: 'reviewed PR #42',
+  irreversible: true,
+});
+// → { ok: true, act: { ... weight: 5, timestamp: '...' } }
+
+// W-matrix summary
+const s = await store.summary();
+// → { persons: ['Alice', 'Bob'], actsCount: 1, topThreads: [{ from, to, weight }] }
+
+// Markdown report
+const md = await store.report();
+// → "# Gift Protocol — Sacred History Report\n..."
+```
+
+**Options:**
+- `topN` (default: 5) — how many top gift threads to include in `summary()` / `report()`
 
 ### `GiftValidator.validate(raw)`
 

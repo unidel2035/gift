@@ -10,6 +10,9 @@
     "./adapters/telegram": "./adapters/telegram.js",
     "./adapters/github": "./adapters/github.js"
   },
+  "bin": {
+    "gift-dao": "./bin/gift-dao.mjs"
+  },
   "keywords": [
     "gift-protocol",
     "gift-economy",
