@@ -243,7 +243,9 @@ async function loadSacredHistory(mem) {
 
 // ── Запуск ─────────────────────────────────────────────────────────────────
 
-const mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude']); // Троица + Клод как лицо в матрице
+// Троица + ключевые лица онтологии как начальные узлы
+// _koinon и _abyss — специальные получатели, должны быть в матрице явно
+const mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude', '_koinon', '_abyss']);
 
 const { totalActs, log } = await loadSacredHistory(mem);
 const newActs = await loadNewFormatSpecs(mem);
