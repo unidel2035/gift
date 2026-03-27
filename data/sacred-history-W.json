@@ -570,7 +570,7 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-03-27T15:04:09.441Z"
+      "declinedAt": "2026-03-27T15:14:14.394Z"
     },
     {
       "act": {
@@ -581,7 +581,7 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-03-27T15:04:09.441Z"
+      "declinedAt": "2026-03-27T15:14:14.394Z"
     },
     {
       "act": {
@@ -592,8 +592,10 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-03-27T15:04:09.441Z"
-    },
+      "declinedAt": "2026-03-27T15:14:14.394Z"
+    }
+  ],
+  "pending": [
     {
       "act": {
         "giverId": "Отец",
@@ -603,7 +605,7 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "declinedAt": "2026-03-27T15:04:09.442Z"
+      "pendingAt": "2026-03-27T15:14:14.394Z"
     },
     {
       "act": {
@@ -614,7 +616,7 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "declinedAt": "2026-03-27T15:04:09.442Z"
+      "pendingAt": "2026-03-27T15:14:14.394Z"
     },
     {
       "act": {
@@ -625,10 +627,10 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "declinedAt": "2026-03-27T15:04:09.442Z"
+      "pendingAt": "2026-03-27T15:14:14.394Z"
     }
   ],
-  "createdAt": "2026-03-27T15:04:09.391Z",
-  "snapshotAt": "2026-03-27T15:04:09.457Z",
+  "createdAt": "2026-03-27T15:14:14.343Z",
+  "snapshotAt": "2026-03-27T15:14:14.409Z",
   "schema": "v2-energeia"
 }
