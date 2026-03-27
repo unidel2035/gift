@@ -74,8 +74,15 @@ export class GiftMemory {
     // λήψις — журнал отверженных даров.
     // Максим Исповедник: αὐτεξούσιον = способность сказать «нет».
     // Дар записан (δόσις необратима), но W не обновляется.
-    // Метанойя (repent()) переводит акт из declined → accepted → W.
-    this._declined = []; // { act, declinedAt }
+    // Метанойя (repent()) переводит акт из declined/pending → accepted → W.
+    this._declined = []; // { act, declinedAt } — reception:declined
+
+    // Ожидание λήψις — эсхатологическая надежда.
+    // reception:pending = δόσις совершена, ответ ещё не дан.
+    // «Се, стою у двери и стучу» (Откр 3:20) — Бог ждёт, не взламывает.
+    // Pending visible in heaviest() но не в W — пустыня Падшего сохраняется.
+    this._pending = []; // { act, pendingAt }
+    this._pendingEdges = new Map(); // `${from}→${to}` → { from, to, weight }
 
     // W — тензор NC×NC float32, Хопфилд для тварных лиц
     this._W = tf.variable(tf.zeros([this.n, this.n]));
@@ -178,12 +185,22 @@ export class GiftMemory {
     const isDivineR = DIVINE_PERSONS.has(act.receiverId);
 
     // ── λήψις: проверить принятие ─────────────────────────────────────
-    // reception = 'declined' | 'pending' → дар записан, W не меняется.
-    // reception = 'accepted' | undefined  → нормальный путь через W.
+    // reception = 'declined'  → дар отвергнут, записан в _declined, W не меняется.
+    // reception = 'pending'   → дар ждёт ответа, записан в _pending + _pendingEdges.
+    // reception = 'accepted' | undefined → нормальный путь через W.
     // Бог не забирает δόσις — но W отражает только принятое.
-    if (act.reception === 'declined' || act.reception === 'pending') {
+    if (act.reception === 'declined') {
       this._declined.push({ act: Object.freeze({ ...act }), declinedAt: new Date().toISOString() });
-      this.actsCount++; // акт произошёл — он в истории
+      this.actsCount++;
+      return new Float32Array(this.n);
+    }
+    if (act.reception === 'pending') {
+      this._pending.push({ act: Object.freeze({ ...act }), pendingAt: new Date().toISOString() });
+      const key = `${act.giverId}→${act.receiverId}`;
+      const edge = this._pendingEdges.get(key) ?? { from: act.giverId, to: act.receiverId, weight: 0 };
+      edge.weight += (act.weight ?? 1);
+      this._pendingEdges.set(key, edge);
+      this.actsCount++;
       return new Float32Array(this.n);
     }
 
@@ -202,17 +219,21 @@ export class GiftMemory {
     // ── Нетварные энергии: Троица → тварь ────────────────────────────
     // energeia[di][ci] += weight. Directed, non-symmetric.
     // Палама: тварь участвует в нетварных энергиях через μέθεξις.
+    // Используем persons.indexOf напрямую (не _idx) — чтобы _koinon/_abyss
+    // тоже могли получать energeia без попадания в Хопфилд-W.
     if (isDivineG && !isDivineR) {
       const di = this._divineIdx(act.giverId);
-      const ci = this._idx(act.receiverId);
+      const ci = this.persons.indexOf(act.receiverId);
       if (di >= 0 && ci >= 0) this._energeia[di][ci] += w;
       return new Float32Array(this.n);
     }
 
     // ── Doxologia: тварь → Троица ─────────────────────────────────────
     // Ἀναγωγή: молитва, хвала, приношение. Directed.
+    // persons.indexOf напрямую: _koinon (Церковь) может молиться Богу
+    // не будучи Хопфилд-узлом в W.
     if (!isDivineG && isDivineR) {
-      const ci = this._idx(act.giverId);
+      const ci = this.persons.indexOf(act.giverId);
       const di = this._divineIdx(act.receiverId);
       if (ci >= 0 && di >= 0) this._doxologia[ci][di] += w;
       return new Float32Array(this.n);
@@ -273,7 +294,29 @@ export class GiftMemory {
     });
 
     const e = this.energy(result);
-    return { pattern: result, decoded: decodeVec(result, this.persons), energy: e };
+    return {
+      pattern:        result,
+      decoded:        decodeVec(result, this.persons),
+      energy:         e,
+      eschatological: this._eschatologicalOpen(partial.giverId ?? null),
+    };
+  }
+
+  // ── Эсхатологическое ожидание: кто ждёт λήψις от данного дарителя ───
+  //
+  // Если giverId задан — фильтруем по нему.
+  // Возвращает map personId → { personId, open: true, pendingFrom: [...] }
+  // или null если pending нет.
+  _eschatologicalOpen(giverId = null) {
+    const open = {};
+    for (const { act } of this._pending) {
+      if (giverId && act.giverId !== giverId) continue;
+      if (!open[act.receiverId])
+        open[act.receiverId] = { personId: act.receiverId, open: true, pendingFrom: [] };
+      if (!open[act.receiverId].pendingFrom.includes(act.giverId))
+        open[act.receiverId].pendingFrom.push(act.giverId);
+    }
+    return Object.keys(open).length > 0 ? open : null;
   }
 
   // ── Энергия (W тварных) ───────────────────────────────────────────────
@@ -342,6 +385,12 @@ export class GiftMemory {
         if (this._theophaneia[di][dj] > 0)
           edges.push({ from: this.divinePersons[di], to: this.divinePersons[dj], weight: this._theophaneia[di][dj] });
 
+    // Pending: дары в эсхатологическом ожидании λήψις (не в W, но видны в онтологии)
+    // «Бог хочет, чтобы все люди спаслись» (1 Тим 2:4) — воля не отозвана
+    for (const edge of this._pendingEdges.values())
+      if (edge.weight > 0)
+        edges.push({ from: edge.from, to: edge.to, weight: edge.weight, pending: true });
+
     return edges.sort((a, b) => b.weight - a.weight).slice(0, k);
   }
 
@@ -388,26 +437,30 @@ export class GiftMemory {
    * «Покайтесь, ибо приблизилось Царство Небесное» (Мф 4:17)
    */
   repent(giverId, receiverId) {
-    const toAccept = this._declined.filter(
-      d => d.act.giverId === giverId && d.act.receiverId === receiverId
-    );
+    const match = d => d.act.giverId === giverId && d.act.receiverId === receiverId;
+    const toAccept = [
+      ...this._declined.filter(match),
+      ...this._pending.filter(match),
+    ];
     if (!toAccept.length) return 0;
 
-    this._declined = this._declined.filter(
-      d => !(d.act.giverId === giverId && d.act.receiverId === receiverId)
-    );
+    this._declined = this._declined.filter(d => !match(d));
+    this._pending  = this._pending.filter(d => !match(d));
+    this._pendingEdges.delete(`${giverId}→${receiverId}`);
 
     let accepted = 0;
     for (const { act } of toAccept) {
-      // Принять — значит войти в W
       this.receive({ ...act, reception: 'accepted' });
       accepted++;
     }
-    return accepted; // количество принятых даров
+    return accepted;
   }
 
   /** declined() — список отвергнутых даров (для анамнезиса грехопадения) */
   declined() { return [...this._declined]; }
+
+  /** pending() — список даров в ожидании λήψις (reception:pending) */
+  pending() { return [...this._pending]; }
 
   // ── Θέωσις: онтологический статус твари ──────────────────────────────
   //
@@ -600,6 +653,8 @@ export class GiftMemory {
     }
     if (this._declined.length)
       lines.push(`Λήψις: ${this._declined.length} отвергнутых дара ждут μετάνοια`);
+    if (this._pending.length)
+      lines.push(`Ожидание: ${this._pending.length} даров reception:pending (eschatological:open)`);
     return lines.join('\n');
   }
 
@@ -614,8 +669,9 @@ export class GiftMemory {
       energeia:     this._energeia.map(row => Array.from(row)),
       doxologia:    this._doxologia.map(row => Array.from(row)),
       theophaneia:  this._theophaneia.map(row => Array.from(row)),
-      // λήψις: история отвергнутых даров — память о грехопадении
+      // λήψις: история отвергнутых и ожидающих даров
       declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
+      pending:      this._pending.map(d => ({ act: { ...d.act }, pendingAt: d.pendingAt })),
       createdAt:    this._createdAt,
       snapshotAt:   new Date().toISOString(),
       schema:       'v2-energeia',       // маркер формата
@@ -644,6 +700,19 @@ export class GiftMemory {
       act: Object.freeze({ ...d.act }),
       declinedAt: d.declinedAt,
     }));
+    if (snap.pending) {
+      m._pending = snap.pending.map(d => ({
+        act: Object.freeze({ ...d.act }),
+        pendingAt: d.pendingAt,
+      }));
+      // Восстановить _pendingEdges из _pending
+      for (const { act } of m._pending) {
+        const key  = `${act.giverId}→${act.receiverId}`;
+        const edge = m._pendingEdges.get(key) ?? { from: act.giverId, to: act.receiverId, weight: 0 };
+        edge.weight += (act.weight ?? 1);
+        m._pendingEdges.set(key, edge);
+      }
+    }
 
     return m;
   }
