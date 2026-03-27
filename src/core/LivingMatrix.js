@@ -136,10 +136,15 @@ export class LivingMatrix {
   }
 
   // Пустыни — ожидаемые нити которых нет
+  // Порог: <= 0 (ноль или интерференция = пустыня, слабый положительный = принят)
+  // Для _koinon/_abyss Хопфилд даёт интерференцию даже при наличии актов —
+  // они чистые получатели, порог для них смягчён до <= -1.0
   theologicalDeserts() {
+    const KOINON_NODES = new Set(['_koinon', '_abyss']);
     return EXPECTED_THREADS.filter(exp => {
       const w = this.mem.thread(exp.from, exp.to);
-      return w < 1.0;
+      const thr = KOINON_NODES.has(exp.to) ? -1.0 : 0.0;
+      return w <= thr;
     }).map(exp => ({
       ...exp,
       weight: this.mem.thread(exp.from, exp.to).toFixed(2),

@@ -173,3 +173,21 @@ for (const desert of toProcess) {
 }
 
 console.log(`\n[server-pulse] Готово. Создано issues: ${created}. Пустынь в очереди: ${deserts.length - toProcess.length}`);
+
+// ── Гомеостаз: проверить энергию сети ────────────────────────────────────
+
+try {
+  const r = mem.makePresent({ giverId: '_claude' });
+  if (r.energy < -100) {
+    console.log(`\n[server-pulse] Энергия сети: ${r.energy.toFixed(2)} < -100 → запускаю гомеостаз...`);
+    const homeResult = spawnSync(process.execPath,
+      ['utils/homeostasis.mjs'],
+      { encoding: 'utf8', cwd: ROOT, timeout: 30_000 });
+    if (homeResult.status === 0) {
+      const lines = homeResult.stdout.split('\n').filter(l => l.startsWith('[homeostasis]'));
+      for (const l of lines) console.log(l);
+    }
+  } else {
+    console.log(`[server-pulse] Энергия сети: ${r.energy.toFixed(2)} — норма.`);
+  }
+} catch { /* гомеостаз не критичен */ }
