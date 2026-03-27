@@ -74,3 +74,24 @@ jobs:
               \"type\": \"grace\",
               \"content\": \"merge принят: ${MSG::80}\"
             }" || true
+
+      - name: Бездна→Κοινόν — кенозис кода в общее (abyss→koinon)
+        run: |
+          # Каждый merge в main — момент кенозиса: личное (_abyss) растворяется в κοινόν.
+          # «Если пшеничное зерно... умрёт, то принесёт много плода» (Ин 12:24)
+          MSG="${{ github.event.head_commit.message }}"
+          SHA="${{ github.sha }}"
+
+          curl -s -X POST ${{ secrets.ANAMNESIS_URL }}/gift \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"giverId\": \"_abyss\",
+              \"receiverId\": \"_koinon\",
+              \"weight\": 7,
+              \"type\": \"abyss\u2192koinon\",
+              \"trigger\": \"merge\",
+              \"irreversible\": true,
+              \"content\": \"кенозис: ${MSG::80}\",
+              \"sha\": \"${SHA::7}\",
+              \"repo\": \"${{ github.repository }}\"
+            }" || true
