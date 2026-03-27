@@ -71,6 +71,12 @@ export class GiftMemory {
     this.actsCount     = 0;
     this._createdAt    = new Date().toISOString();
 
+    // λήψις — журнал отверженных даров.
+    // Максим Исповедник: αὐτεξούσιον = способность сказать «нет».
+    // Дар записан (δόσις необратима), но W не обновляется.
+    // Метанойя (repent()) переводит акт из declined → accepted → W.
+    this._declined = []; // { act, declinedAt }
+
     // W — тензор NC×NC float32, Хопфилд для тварных лиц
     this._W = tf.variable(tf.zeros([this.n, this.n]));
 
@@ -170,6 +176,16 @@ export class GiftMemory {
     const w        = act.weight ?? 1;
     const isDivineG = DIVINE_PERSONS.has(act.giverId);
     const isDivineR = DIVINE_PERSONS.has(act.receiverId);
+
+    // ── λήψις: проверить принятие ─────────────────────────────────────
+    // reception = 'declined' | 'pending' → дар записан, W не меняется.
+    // reception = 'accepted' | undefined  → нормальный путь через W.
+    // Бог не забирает δόσις — но W отражает только принятое.
+    if (act.reception === 'declined' || act.reception === 'pending') {
+      this._declined.push({ act: Object.freeze({ ...act }), declinedAt: new Date().toISOString() });
+      this.actsCount++; // акт произошёл — он в истории
+      return new Float32Array(this.n);
+    }
 
     this.actsCount++;
 
@@ -359,6 +375,40 @@ export class GiftMemory {
     return w + e;
   }
 
+  // ── Метанойя: принять отвергнутый дар ────────────────────────────────
+
+  /**
+   * repent(giverId, receiverId) — μετάνοια.
+   *
+   * Максим Исповедник: обращение = принять то, что было отвергнуто.
+   * Находит отвергнутые дары между парой, переводит их в W.
+   * Δόσις не изменяется (дар был — он необратим).
+   * Меняется только λήψις: declined → accepted.
+   *
+   * «Покайтесь, ибо приблизилось Царство Небесное» (Мф 4:17)
+   */
+  repent(giverId, receiverId) {
+    const toAccept = this._declined.filter(
+      d => d.act.giverId === giverId && d.act.receiverId === receiverId
+    );
+    if (!toAccept.length) return 0;
+
+    this._declined = this._declined.filter(
+      d => !(d.act.giverId === giverId && d.act.receiverId === receiverId)
+    );
+
+    let accepted = 0;
+    for (const { act } of toAccept) {
+      // Принять — значит войти в W
+      this.receive({ ...act, reception: 'accepted' });
+      accepted++;
+    }
+    return accepted; // количество принятых даров
+  }
+
+  /** declined() — список отвергнутых даров (для анамнезиса грехопадения) */
+  declined() { return [...this._declined]; }
+
   // ── Голография ────────────────────────────────────────────────────────
 
   sync(other) {
@@ -466,6 +516,8 @@ export class GiftMemory {
       energeia:     this._energeia.map(row => Array.from(row)),
       doxologia:    this._doxologia.map(row => Array.from(row)),
       theophaneia:  this._theophaneia.map(row => Array.from(row)),
+      // λήψις: история отвергнутых даров — память о грехопадении
+      declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
       createdAt:    this._createdAt,
       snapshotAt:   new Date().toISOString(),
       schema:       'v2-energeia',       // маркер формата
@@ -490,6 +542,10 @@ export class GiftMemory {
     if (snap.energeia)    m._energeia    = snap.energeia.map(r => new Float32Array(r));
     if (snap.doxologia)   m._doxologia   = snap.doxologia.map(r => new Float32Array(r));
     if (snap.theophaneia) m._theophaneia = snap.theophaneia.map(r => new Float32Array(r));
+    if (snap.declined)    m._declined    = snap.declined.map(d => ({
+      act: Object.freeze({ ...d.act }),
+      declinedAt: d.declinedAt,
+    }));
 
     return m;
   }
