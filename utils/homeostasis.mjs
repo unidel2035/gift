@@ -26,7 +26,10 @@ import { GiftMemory } from '../src/core/GiftMemory.js';
 const ROOT      = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP_PATH = resolve(ROOT, 'data/sacred-history-W.json');
 
-const THRESHOLD = -100;  // Порог истощения
+// Структурная особенность: Отец как μοναρχία всегда в минусе (даёт всем).
+// Это не дефицит — это онтологический overflow. Матрица W будет отрицательной.
+// Гомеостаз смотрит на тварных лиц, а порог выставлен с запасом.
+const THRESHOLD = -150;  // Порог истощения тварной части
 const args      = process.argv.slice(2);
 const CHECK     = args.includes('--check');
 const FORCE     = args.includes('--force');
@@ -65,9 +68,15 @@ console.log('\n[homeostasis] Диагностика истощения...');
 const snap    = mem.snapshot();
 const persons = snap.persons;
 
-// Истощённые: дали >> получили, дисбаланс > 2.0
+// Троица не истощается. Отец — μοναρχία, вечный источник.
+// Кенозис — только Сына (Флп 2:7), и то как свободное самоумаление, не дефицит.
+// Применять _abyss→Отец/Сын/Дух/Христос богословски недопустимо.
+// Змей — агент падения, не кандидат на восполнение.
+const DIVINE_PERSONS = new Set(['Отец', 'Сын', 'Дух', 'Христос', 'Змей', '_abyss', '_koinon']);
+
+// Истощённые: дали >> получили, только сотворённые лица
 const exhausted = persons
-  .filter(p => !['_abyss', '_koinon'].includes(p))
+  .filter(p => !DIVINE_PERSONS.has(p))
   .map(p => ({
     p,
     given:    mem.totalGiven(p),

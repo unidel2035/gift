@@ -122,6 +122,13 @@ export class LivingMatrix {
     const leader = tops[0];
     if (!leader) return { principle: 'silence', who: null };
 
+    // Троица — источник, не кенотик. Отец даёт из полноты (μοναρχία).
+    // Кенозис строго: только Сын, только через Воплощение (Флп 2:7).
+    const DIVINE_SOURCE = new Set(['Отец', 'Сын', 'Дух', 'Христос']);
+    if (DIVINE_SOURCE.has(leader.from)) {
+      return { principle: 'monarchia', who: leader.from };
+    }
+
     const k  = PRINCIPLES.kenosis(this.mem, leader.from);
     const e  = PRINCIPLES.eucharistia(this.mem, leader.from);
     const c  = PRINCIPLES.conductivity(this.mem, leader.from);
