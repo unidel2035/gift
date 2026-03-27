@@ -167,15 +167,18 @@ function parseNewFormatSpec(src) {
         const typeM   = block.match(/тип:\s*(\w+)/);
         const weightM = block.match(/вес:\s*(\d+(?:\.\d+)?)/);
         const irrevM  = block.match(/необратим:\s*(да|нет)/);
+        const recepM  = block.match(/reception:\s*(\w+)/);
         if (fromM && toM) {
           const type   = typeM ? typeM[1] : 'presence';
           const weight = weightM ? parseFloat(weightM[1]) : (TYPE_WEIGHTS_NEW[type] ?? 4);
-          acts.push({
+          const act = {
             giverId:     fromM[1],
             receiverId:  toM[1],
             type, weight,
             irreversible: !irrevM || irrevM[1] === 'да',
-          });
+          };
+          if (recepM) act.reception = recepM[1]; // λήψις: declined|pending|accepted
+          acts.push(act);
         }
         inGift = false; block = ''; depth = 0;
       }
