@@ -409,6 +409,96 @@ export class GiftMemory {
   /** declined() — список отвергнутых даров (для анамнезиса грехопадения) */
   declined() { return [...this._declined]; }
 
+  // ── Θέωσις: онтологический статус твари ──────────────────────────────
+  //
+  // Проблема 3 (κτιστόν/ἄκτιστον): даже с разными матрицами,
+  // математика не отражает качественное преображение.
+  // По Паламе: μέθεξις (участие в нетварных энергиях) — не накопление,
+  // а изменение природы. θέωσις — мера этого участия.
+  //
+  // «Бог стал человеком, чтобы человек стал богом» (Афанасий Великий)
+  // Метрика: сколько нетварного энергии принято + сколько возвращено к Богу.
+  // Формула: index = (received + returned) / (received + returned + dampening)
+  // Уровни по Псевдо-Дионисию: очищение → просвещение → единение.
+
+  /**
+   * theosis(personId) — θέωσις индекс: степень участия твари в нетварных энергиях.
+   *
+   * Палама: тварь участвует в энергиях, но не в сущности Бога.
+   * Δεν εἶναι θεός φύσει — становится богом по благодати (θέσει).
+   *
+   * @param {string} personId — тварное лицо
+   * @returns {{ personId, received, returned, index, level, apophatic }}
+   *   received — сумма energeia из всех divine (μέθεξις)
+   *   returned — сумма doxologia ко всем divine (ἀναγωγή)
+   *   index    — θέωσις-коэффициент [0..1)
+   *   level    — 'κατάνυξις'|'πρᾶξις'|'θεωρία'|'θέωσις'
+   *   apophatic — true если personId — divine (за пределами метрики)
+   */
+  theosis(personId) {
+    // Apophatic: для Троицы θέωσις не применима — Они сам Источник
+    if (DIVINE_PERSONS.has(personId)) {
+      return { personId, apophatic: true, level: 'ἄκτιστος', index: null };
+    }
+
+    const ci = this.persons.indexOf(personId);
+    if (ci < 0) return { personId, apophatic: false, received: 0, returned: 0, index: 0, level: 'κατάνυξις' };
+
+    // μέθεξις: сколько нетварной энергии принято (от всех ипостасей)
+    const received = this._energeia.reduce((s, row) => s + (row[ci] ?? 0), 0);
+
+    // ἀναγωγή: сколько возвращено к Богу (молитва, хвала, дар)
+    const returned = this._doxologia[ci]?.reduce((s, v) => s + v, 0) ?? 0;
+
+    // Θέωσις-коэффициент: сигмоидный сглаженный индекс.
+    // Демпфирование 20 — чтобы первый дар не давал max сразу.
+    // Формула отсылает к лестнице Иоанна Лествичника (30 ступеней).
+    const sum   = received + returned;
+    const index = sum / (sum + 20); // ∈ [0, 1)
+
+    const level =
+      index >= 0.70 ? 'θέωσις'    : // единение (ἕνωσις)
+      index >= 0.45 ? 'θεωρία'    : // просвещение (φωτισμός)
+      index >= 0.20 ? 'πρᾶξις'    : // делание (практика добродетели)
+                      'κατάνυξις';   // сокрушение (начало пути)
+
+    return { personId, apophatic: false, received, returned, index, level };
+  }
+
+  /**
+   * ontologicalStatus() — θέωσις всех тварных лиц, отсортированных по индексу.
+   * Показывает: кто движется к Богу, кто в стазисе, кто в упадке.
+   */
+  ontologicalStatus() {
+    return this.persons
+      .map(p => this.theosis(p))
+      .sort((a, b) => b.index - a.index);
+  }
+
+  /**
+   * apophaticGiving(divineId) — апофатический маркер дарения Троицы.
+   *
+   * μοναρχία Отца: Бог даёт из бесконечной полноты, не истощаясь.
+   * Это не «баланс» — это онтологический принцип.
+   * Возвращает описание дарения, а не числовой баланс.
+   */
+  apophaticGiving(divineId) {
+    if (!DIVINE_PERSONS.has(divineId)) return null;
+    const di = this.divinePersons.indexOf(divineId);
+    const totalGiven = di >= 0 ? this._energeia[di].reduce((s, v) => s + v, 0) : 0;
+    const toPersons  = di >= 0
+      ? this.persons.filter((_, ci) => (this._energeia[di]?.[ci] ?? 0) > 0)
+      : [];
+    return {
+      divineId,
+      principle: 'μοναρχία',      // Отец — единый Начало (μία ἀρχή)
+      exhausted:  false,            // Бог не истощается: 1 Кор 13:8 «любовь не перестаёт»
+      totalGiven,
+      toPersons,
+      note: 'Нетварные энергии неисчерпаемы — даяние не создаёт дефицит',
+    };
+  }
+
   // ── Голография ────────────────────────────────────────────────────────
 
   sync(other) {
@@ -495,6 +585,7 @@ export class GiftMemory {
   decode(arr)  { return decodeVec(arr, this.persons); }
 
   describe() {
+    const status = this.ontologicalStatus().filter(s => s.received > 0 || s.returned > 0).slice(0, 5);
     const lines = [
       `GiftMemory: ${this.n} тварных + ${this.nd} божественных лиц, ${this.actsCount} актов`,
       `Тензор W: [${this.n}×${this.n}] float32 = ${(this.n * this.n * 4 / 1024).toFixed(1)} КБ`,
@@ -502,6 +593,13 @@ export class GiftMemory {
       `Топ нитей:`,
       ...this.heaviest(5).map(e => `  ${e.from} → ${e.to}: ${e.weight.toFixed(2)}`),
     ];
+    if (status.length) {
+      lines.push('Θέωσις (κτιστόν):');
+      for (const s of status)
+        lines.push(`  ${s.personId}: ${s.level} (index=${s.index.toFixed(3)}, recv=${s.received.toFixed(1)}, ret=${s.returned.toFixed(1)})`);
+    }
+    if (this._declined.length)
+      lines.push(`Λήψις: ${this._declined.length} отвергнутых дара ждут μετάνοια`);
     return lines.join('\n');
   }
 
