@@ -44,10 +44,25 @@ function calcCommunityImpact(entry) {
 // ── GiftLedger ───────────────────────────────────────────────────────────────
 
 export class GiftLedger {
-  constructor() {
+  /**
+   * @param {object|null} freedomGuard — FreedomGuard instance (optional).
+   *   Если передан, `accept()` проверяет свободу получателя перед записью в историю.
+   *   «Дар без свободы принятия — насилие» (A5).
+   */
+  constructor(freedomGuard = null) {
     // Append-only. Никогда не мутируем существующие записи.
     this._entries = [];
     this._nextId = 1;
+
+    // Lifecycle: offered → accepted/declined → recorded
+    // Pending offers ждут решения получателя.
+    // В историю (_entries) попадают только принятые дары.
+    this._pending = new Map();   // offerId → frozen offer object
+    this._declined = [];         // declined offers — не история, а свидетельство свободы
+    this._nextOfferId = 1;
+
+    // FreedomGuard — страж свободы принятия (опционален)
+    this._freedom = freedomGuard || null;
   }
 
   // ── Append ──────────────────────────────────────────────────────────────
@@ -78,6 +93,125 @@ export class GiftLedger {
 
     this._entries.push(entry);
     return entry;
+  }
+
+  // ── Lifecycle: offered → accepted/declined → recorded ───────────────────
+  //
+  // Богословский смысл:
+  //   Агапе предполагает кеносис дающего И свободу получателя.
+  //   Предложенный дар ещё не принятый — не в истории.
+  //   В историю входит только то, что свободно принято.
+  //   «Дар без свободы принятия — насилие» (A5: Свобода).
+
+  /**
+   * Предложить дар — создаёт ожидающее предложение (не в истории).
+   *
+   * @param {object} params — те же поля, что у append()
+   * @returns {object} замороженный offer с offerId и status: 'offered'
+   */
+  offer({ from, to, type, weight = 0, proof = '', timestamp } = {}) {
+    const offerId = `offer-${this._nextOfferId++}`;
+    const pending = Object.freeze({
+      offerId,
+      from:      String(from || '_abyss'),
+      to:        Array.isArray(to) ? Object.freeze([...to]) : String(to || '_koinon'),
+      type:      String(type || 'gift'),
+      weight:    Number(weight) || 0,
+      proof:     String(proof || ''),
+      timestamp: timestamp || new Date().toISOString(),
+      status:    'offered',
+    });
+    this._pending.set(offerId, pending);
+    return pending;
+  }
+
+  /**
+   * Принять дар — FreedomGuard проверяет свободу, затем запись в историю.
+   *
+   * Только здесь дар становится частью священной истории (append).
+   * FreedomGuard блокирует запись если получатель отказывается или недоступен.
+   *
+   * @param {string} offerId — id из offer()
+   * @param {object} [transformation] — необязательные данные трансформации
+   * @returns {object} замороженная запись истории
+   * @throws {Error} если offer не найден или FreedomGuard блокирует
+   */
+  accept(offerId, transformation = {}) {
+    const pending = this._pending.get(offerId);
+    if (!pending) throw new Error(`Offer ${offerId} not found or already resolved`);
+
+    // FreedomGuard: получатель должен быть свободен принять дар
+    if (this._freedom) {
+      const receiver = Array.isArray(pending.to) ? pending.to[0] : pending.to;
+      if (this._freedom.isRefusing(receiver, pending.from)) {
+        throw new Error(
+          `FreedomGuard: ${receiver} refuses gifts from ${pending.from}. ` +
+          'Call decline() to exercise freedom consciously.'
+        );
+      }
+      if (!this._freedom.isAvailable(receiver)) {
+        throw new Error(
+          `FreedomGuard: ${receiver} is currently unavailable (sabbath/contemplation). ` +
+          'Wait or call decline().'
+        );
+      }
+      // Записать акт свободного принятия в историю FreedomGuard
+      this._freedom.recordAcceptance(receiver, pending.from, offerId);
+    }
+
+    this._pending.delete(offerId);
+
+    // Только после явного accept() — дар попадает в историю
+    return this.append({
+      from:      pending.from,
+      to:        pending.to,
+      type:      pending.type,
+      weight:    pending.weight,
+      proof:     pending.proof,
+      timestamp: pending.timestamp,
+      ...transformation,
+    });
+  }
+
+  /**
+   * Отклонить дар — свобода, не ошибка.
+   *
+   * Отклонённый дар не попадает в историю (_entries).
+   * Записывается отдельно как свидетельство свободы.
+   *
+   * @param {string} offerId — id из offer()
+   * @param {string} [reason] — причина (свобода может быть без объяснений)
+   * @returns {object} замороженная запись об отклонении
+   * @throws {Error} если offer не найден
+   */
+  decline(offerId, reason) {
+    const pending = this._pending.get(offerId);
+    if (!pending) throw new Error(`Offer ${offerId} not found or already resolved`);
+
+    this._pending.delete(offerId);
+
+    const declined = Object.freeze({
+      ...pending,
+      status:    'declined',
+      reason:    reason || 'Freedom exercised without explanation (which is also freedom)',
+      declinedAt: new Date().toISOString(),
+    });
+    this._declined.push(declined);
+    return declined;
+  }
+
+  /**
+   * Список ожидающих предложений (ещё не принятых и не отклонённых).
+   */
+  pendingOffers() {
+    return [...this._pending.values()];
+  }
+
+  /**
+   * Список отклонённых предложений — свидетельство свободы.
+   */
+  declinedOffers() {
+    return [...this._declined];
   }
 
   // ── Read ────────────────────────────────────────────────────────────────
