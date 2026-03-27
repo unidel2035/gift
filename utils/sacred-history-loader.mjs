@@ -10,8 +10,13 @@
  */
 
 import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { readdirSync } from 'fs';
 import { GiftMemory } from '../src/core/GiftMemory.js';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SPECS_NEW = join(ROOT, 'specs', 'sacred-history');
 
 const GIFT_ONTOLOGY = '/home/unidel/dronedoc2026/language/gift-lang/ontology';
 
@@ -134,6 +139,70 @@ function extractFromGiftSource(src, filename) {
   return { acts, persons: [...persons] };
 }
 
+// ── Парсер нового формата (brace-counting, Cyrillic-aware) ────────────────
+
+const TYPE_WEIGHTS_NEW = {
+  presence: 8, word: 5, knowledge: 6, time: 10, code: 8, money: 3, data: 4,
+};
+
+function parseNewFormatSpec(src) {
+  const acts = [];
+  const text = src.replace(/\/\/[^\n]*/g, '\n');
+  const lines = text.split('\n');
+  let inGift = false, depth = 0, block = '';
+  for (const line of lines) {
+    if (!inGift) {
+      if (/дар\s+[\wА-яёЁ_]+\s*\{/.test(line)) {
+        inGift = true;
+        depth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+        block = line;
+      }
+    } else {
+      block += '\n' + line;
+      depth += (line.match(/\{/g) || []).length;
+      depth -= (line.match(/\}/g) || []).length;
+      if (depth <= 0) {
+        const fromM   = block.match(/от:\s*([\wА-яёЁ_:]+)/);
+        const toM     = block.match(/кому:\s*([\wА-яёЁ_:]+)/);
+        const typeM   = block.match(/тип:\s*(\w+)/);
+        const weightM = block.match(/вес:\s*(\d+(?:\.\d+)?)/);
+        const irrevM  = block.match(/необратим:\s*(да|нет)/);
+        if (fromM && toM) {
+          const type   = typeM ? typeM[1] : 'presence';
+          const weight = weightM ? parseFloat(weightM[1]) : (TYPE_WEIGHTS_NEW[type] ?? 4);
+          acts.push({
+            giverId:     fromM[1],
+            receiverId:  toM[1],
+            type, weight,
+            irreversible: !irrevM || irrevM[1] === 'да',
+          });
+        }
+        inGift = false; block = ''; depth = 0;
+      }
+    }
+  }
+  return acts;
+}
+
+async function loadNewFormatSpecs(mem) {
+  let files;
+  try { files = readdirSync(SPECS_NEW).filter(f => f.endsWith('.gift')).sort(); }
+  catch { return 0; }
+
+  let totalActs = 0;
+  console.log('\n═══ Новые спеки specs/sacred-history/ ═══\n');
+  for (const file of files) {
+    const src = await readFile(join(SPECS_NEW, file), 'utf8');
+    const acts = parseNewFormatSpec(src);
+    for (const act of acts) mem.receive(act);
+    if (acts.length > 0)
+      console.log(`  ${file.padEnd(35)} → ${String(acts.length).padStart(3)} актов`);
+    totalActs += acts.length;
+  }
+  console.log(`\n  Новых актов из specs/: ${totalActs}\n`);
+  return totalActs;
+}
+
 // ── Загрузка ───────────────────────────────────────────────────────────────
 
 async function loadSacredHistory(mem) {
@@ -177,6 +246,7 @@ async function loadSacredHistory(mem) {
 const mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude']); // Троица + Клод как лицо в матрице
 
 const { totalActs, log } = await loadSacredHistory(mem);
+const newActs = await loadNewFormatSpecs(mem);
 
 console.log(mem.describe());
 

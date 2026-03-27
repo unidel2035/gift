@@ -31,6 +31,9 @@ const args      = process.argv.slice(2);
 const DRY_RUN   = args.includes('--dry-run');
 const MAX       = parseInt(args.find(a => a.startsWith('--max'))?.split('=')[1] ?? args[args.indexOf('--max')+1] ?? '3');
 
+// gh CLI: снять GITHUB_TOKEN env если он сломан (может переопределять локальный auth)
+const GH_ENV = { ...process.env, GITHUB_TOKEN: '' };
+
 // ── Загрузить матрицу ─────────────────────────────────────────────────────────
 
 let mem;
@@ -50,7 +53,7 @@ let existingTitles = new Set();
 try {
   const out = spawnSync('gh', ['issue', 'list', '--repo', REPO,
     '--label', 'gift-ready', '--limit', '50', '--json', 'title'],
-    { encoding: 'utf8', cwd: ROOT });
+    { encoding: 'utf8', cwd: ROOT, env: GH_ENV });
   if (out.status === 0) {
     const issues = JSON.parse(out.stdout);
     for (const i of issues) existingTitles.add(i.title);
@@ -142,12 +145,28 @@ for (const desert of toProcess) {
     '--label', 'gift-ready',
     '--title', title,
     '--body', body,
-  ], { encoding: 'utf8', cwd: ROOT });
+  ], { encoding: 'utf8', cwd: ROOT, env: GH_ENV });
 
   if (result.status === 0) {
     const url = result.stdout.trim();
     console.log(`  ✓ Создан: ${url}`);
     created++;
+
+    // Авто-план + авто-approve чтобы dev-loop мог подхватить
+    const issueNum = url.split('/').pop();
+    const env = GH_ENV;
+
+    const planResult = spawnSync(process.execPath, ['utils/gift-plan.mjs', issueNum],
+      { encoding: 'utf8', cwd: ROOT, env, timeout: 60_000 });
+    if (planResult.status === 0) {
+      console.log(`  ✓ План создан #${issueNum}`);
+      const approveResult = spawnSync('gh', ['issue', 'edit', issueNum,
+        '--add-label', 'plan-approved'], { encoding: 'utf8', cwd: ROOT, env });
+      if (approveResult.status === 0)
+        console.log(`  ✓ plan-approved → готов для dev-loop`);
+    } else {
+      console.error(`  ⚠ gift-plan.mjs failed: ${planResult.stderr?.slice(0, 120)}`);
+    }
   } else {
     console.error(`  ✗ Ошибка: ${result.stderr}`);
   }

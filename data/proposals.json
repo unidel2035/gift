@@ -59,17 +59,17 @@
     "id": 8,
     "text": "Матрица → генерация предложений: пустые нити → новые вопрошания автоматически",
     "cat": "agent",
-    "status": "pending",
+    "status": "done",
     "created": "2026-03-26T09:02:37.336Z",
-    "done_at": null
+    "done_at": "2026-03-27T12:55:23.642Z"
   },
   {
     "id": 9,
     "text": "Бот → матрица: дары из Telegram-бота попадают в тензор W",
     "cat": "community",
-    "status": "pending",
+    "status": "done",
     "created": "2026-03-26T09:02:37.355Z",
-    "done_at": null
+    "done_at": "2026-03-27T12:55:23.678Z"
   },
   {
     "id": 10,
