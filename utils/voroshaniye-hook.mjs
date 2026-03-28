@@ -94,11 +94,11 @@ try {
   }
 } catch { /* сеть недоступна — продолжаем */ }
 
-// ── 1b. Авто-план + plan-approved: Дионисий всегда одобряет ─────────────────
-// Вопрошание создаётся → план немедленно → plan-approved → dev-loop подберёт
+// ── 1b. Авто-план → plan-approved → dev-loop немедленно ─────────────────────
+// Полный конвейер без ожидания: создали → запланировали → реализуем прямо сейчас
 if (issueNumber) {
   try {
-    const { spawnSync } = await import('child_process');
+    const { spawnSync, spawn } = await import('child_process');
     const GH_ENV = { ...process.env, GITHUB_TOKEN: '' };
 
     // Создать план
@@ -106,10 +106,19 @@ if (issueNumber) {
       cwd: ROOT, timeout: 30_000, stdio: 'ignore', env: GH_ENV,
     });
 
-    // Одобрить план (Дионисий всегда одобряет вопрошания)
+    // Одобрить план
     spawnSync('gh', ['issue', 'edit', String(issueNumber), '--add-label', 'plan-approved'], {
       cwd: ROOT, timeout: 10_000, stdio: 'ignore', env: GH_ENV,
     });
+
+    // Запустить dev-loop немедленно в фоне (не блокируем хук)
+    const LOG = resolve(ROOT, 'data/dev-loop.log');
+    const { openSync } = await import('fs');
+    const logFd = openSync(LOG, 'a');
+    spawn('node', ['utils/gift-dev-loop.mjs', '--once'], {
+      cwd: ROOT, env: GH_ENV,
+      detached: true, stdio: ['ignore', logFd, logFd],
+    }).unref();
   } catch { /* не критично */ }
 }
 
