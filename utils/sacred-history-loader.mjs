@@ -288,14 +288,14 @@ console.log('  Энергия:    ', r.energy.toFixed(2));
 
 // Сохранить снапшот W
 const snap = mem.snapshot();
-const snapPath = '/home/unidel/gift/data/sacred-history-W.json';
+const snapPath = join(ROOT, 'data', 'sacred-history-W.json');
 await writeFile(
-  '/home/unidel/gift/data/sacred-history-W.json',
+  snapPath,
   JSON.stringify(snap, null, 2)
 ).catch(async () => {
   // создать папку если нет
   const { mkdirSync } = await import('fs');
-  mkdirSync('/home/unidel/gift/data', { recursive: true });
+  mkdirSync(join(ROOT, 'data'), { recursive: true });
   await writeFile(snapPath, JSON.stringify(snap, null, 2));
 });
 
