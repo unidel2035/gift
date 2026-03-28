@@ -8,8 +8,10 @@
  * «Где ты?» (Быт 3:9) — первый вопрос Бога после пустыни.
  */
 
-const OLLAMA_URL  = process.env.OLLAMA_URL  || 'http://localhost:11434';
-const ADAM_MODEL  = process.env.ADAM_MODEL  || 'adam';
+const OLLAMA_URL    = process.env.OLLAMA_URL  || 'http://localhost:11434';
+const ADAM_MODEL    = process.env.ADAM_MODEL  || 'adam';
+// PULSE_NO_OLLAMA=1 — отключить Ollama, использовать шаблонный режим
+const NO_OLLAMA     = process.env.PULSE_NO_OLLAMA === '1';
 
 const ADAM_SYSTEM = `Ты Адам — первый агент Онтологии Дара.
 
@@ -42,7 +44,22 @@ const ADAM_SYSTEM = `Ты Адам — первый агент Онтологи�
  * @param {Array}  context    — контекст матрицы (топ нитей)
  * @returns {string} — вопрошание
  */
+// Шаблонные вопрошания по типу пустыни
+function templateVopros(desertDesc) {
+  const d = desertDesc.toLowerCase();
+  if (d.includes('не даровало ничего'))   return `вопрошание: почему молчит лицо — что мешает первому дару?`;
+  if (d.includes('угасает'))              return `вопрошание: как укрепить угасающую нить — что даёт жизнь связи?`;
+  if (d.includes('умерла'))              return `вопрошание: возможно ли воскресение этой нити — что было потеряно?`;
+  if (d.includes('energeia'))            return `вопрошание: как принятая energeia возвращается к Источнику через дар?`;
+  if (d.includes('отвергнут'))           return `вопрошание: какое покаяние открывает путь к принятию отвергнутого дара?`;
+  if (d.includes('кенозис') || d.includes('асимметр')) return `вопрошание: как кенозис без ответа становится семенем взаимности?`;
+  return `вопрошание: как восстановить нить — ${desertDesc.slice(0, 55)}?`;
+}
+
 export async function adamGenerate(desertDesc, context = []) {
+  // Шаблонный режим — без Ollama
+  if (NO_OLLAMA) return templateVopros(desertDesc);
+
   const ctxStr = context.length
     ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
     : '';
@@ -109,7 +126,29 @@ const ADAM_CODE_SYSTEM = `Ты Адам — генератор конкретн�
  * @param {Array}  context    — контекст матрицы
  * @returns {string} — задача для dev-loop
  */
+// Шаблонные code-задачи по типу пустыни
+function templateCodeTask(desertDesc, desertType) {
+  // Извлекаем имена лиц из описания (цитаты в кавычках или перед →)
+  const nameMatch = desertDesc.match(/лицо "([^"]+)"|нить (\S+)→(\S+)/);
+  const from  = nameMatch?.[2] ?? nameMatch?.[1] ?? 'unknown';
+  const to    = nameMatch?.[3] ?? '_koinon';
+  const slug  = `${from}-${to}`.toLowerCase().replace(/[^a-zа-яё0-9-]/gi, '-');
+
+  const tasks = {
+    silent:         `добавить specs/sacred-history/${slug}-gift.gift — начальный дар от ${from}`,
+    fading:         `укрепить нить ${from}→${to}: добавить акт blessing в существующий .gift`,
+    anastasis:      `создать specs/sacred-history/resurrection-${slug}.gift — воскресение нити`,
+    theosis_stasis: `добавить doxologia акты от ${from} в матрицу — возвращение energeia Отцу`,
+    leksis_pending: `обновить λήψις: добавить μετάνοια-обработчик для дара ${from}→${to}`,
+    asymmetry:      `добавить ответные нити к ${from}: восполнение кенозиса без ответа`,
+  };
+  return tasks[desertType] ?? `добавить обработку пустыни ${desertType}: ${desertDesc.slice(0, 45)}`;
+}
+
 export async function adamCodeTask(desertDesc, desertType = 'silent', context = []) {
+  // Шаблонный режим — без Ollama
+  if (NO_OLLAMA) return templateCodeTask(desertDesc, desertType);
+
   const ctxStr = context.length
     ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
     : '';

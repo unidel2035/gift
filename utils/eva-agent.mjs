@@ -19,6 +19,8 @@
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const EVA_MODEL  = process.env.EVA_MODEL  || 'eva';
+// PULSE_NO_OLLAMA=1 — шаблонный режим без Ollama
+const NO_OLLAMA  = process.env.PULSE_NO_OLLAMA === '1';
 
 const EVA_SYSTEM = `Ты Ева — точильный камень Адама (עֵזֶר כְּנֶגְדּוֹ) в Онтологии Дара.
 
@@ -47,7 +49,44 @@ const EVA_SYSTEM = `Ты Ева — точильный камень Адама (
  * @param {Array}  existing — уже существующие proposals (для анамнезиса)
  * @returns {{ verdict, enhanced, telos, evaResponse }}
  */
+// Шаблонная проверка без Ollama — только дедупликация по Jaccard
+function templateEvaCheck(proposal, existing) {
+  const words = s => new Set(
+    s.toLowerCase().replace(/[^\wа-яёa-z]/gi, ' ').split(/\s+/).filter(w => w.length > 3)
+  );
+  const jaccard = (a, b) => {
+    const inter = [...a].filter(w => b.has(w)).length;
+    const union = new Set([...a, ...b]).size;
+    return union ? inter / union : 0;
+  };
+  const newW = words(proposal);
+  for (const p of existing.filter(x => x.status === 'pending')) {
+    const sim = Math.max(
+      jaccard(newW, words(p.text)),
+      p.enhanced ? jaccard(newW, words(p.enhanced)) : 0
+    );
+    if (sim > 0.45) {
+      return {
+        verdict:     'отклонено',
+        enhanced:    proposal,
+        telos:       '',
+        evaResponse: `[ВЕРДИКТ] ОТКЛОНЕНО — дубликат #${p.id}: схожесть ${(sim*100).toFixed(0)}%`,
+      };
+    }
+  }
+  // Принимаем
+  return {
+    verdict:     'принято',
+    enhanced:    proposal,
+    telos:       'добавить в онтологию',
+    evaResponse: '[ВЕРДИКТ] ПРИНЯТО — уникальное, без дубликатов',
+  };
+}
+
 export async function evaCheck(proposal, existing = []) {
+  // Шаблонный режим — без Ollama
+  if (NO_OLLAMA) return templateEvaCheck(proposal, existing);
+
   // Анамнезис: все pending + последние 5 done — Ева видит реальный контекст
   const pending = existing.filter(p => p.status === 'pending');
   const done    = existing.filter(p => p.status === 'done').slice(-5);
