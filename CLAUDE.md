@@ -38,7 +38,7 @@ node utils/claude-gift.mjs "краткое описание что сделан�
 
 ## Сервер памяти
 
-- Анамнезис: `http://173.249.2.184:8086`
+- Анамнезис: `http://173.249.2.184:8089`
 - Лента хранится: `/home/hive/dronedoc2026/monolith/data/gift-anamnesis.json`
 - Бот: `/home/hive/dronedoc2026/backend/tg-koinon-bot.mjs`
 - SSH: `root@173.249.2.184`
@@ -111,7 +111,7 @@ gift(Дионисий): что сделано
 
 ```bash
 # Анамнезис сервера
-curl http://173.249.2.184:8086/summary
+curl http://173.249.2.184:8089/summary
 
 # Перезагрузить Священную историю в матрицу
 node utils/sacred-history-loader.mjs

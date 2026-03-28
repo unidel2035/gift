@@ -16,7 +16,7 @@
 
 'use strict';
 
-const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8086';
+const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8089';
 
 // ── MCP protocol over stdio ────────────────────────────────────────────────
 

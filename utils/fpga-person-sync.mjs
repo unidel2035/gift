@@ -104,7 +104,7 @@ for (const e of mem.heaviest(20)) {
 }
 
 // Отправить на сервер анамнезиса
-const ANAMNESIS = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8086/gift';
+const ANAMNESIS = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8089/gift';
 
 async function postGift(from, to, what, weight, meta) {
   try {

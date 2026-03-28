@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 const ROOT  = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP  = resolve(ROOT, 'data/sacred-history-W.json');
 const CACHE = resolve(ROOT, 'data/.anamnesis-cache.json');
-const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8086';
+const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8089';
 const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 минут
 
 if (!existsSync(SNAP)) process.exit(0);

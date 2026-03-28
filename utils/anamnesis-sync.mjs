@@ -23,7 +23,7 @@ const SNAP_PATH  = join(ROOT, 'data', 'sacred-history-W.json');
 const STATE_PATH = join(ROOT, 'data', 'anamnesis-sync-state.json');
 const LOG_PATH   = join(ROOT, 'data', 'anamnesis-sync.log');
 
-const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8086';
+const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8089';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // Веса по типу акта (богословская шкала)
