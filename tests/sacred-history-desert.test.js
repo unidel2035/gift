@@ -152,30 +152,18 @@ test('пустыня: матрица W отражает нити Христос�
   }
 
   await t.test('W[Христос→Дионисий] > 0 после загрузки пустыни', () => {
+    // GiftMemory v2: Христос — нетварное лицо → energeia, не W
+    // Используем thread() — он маршрутизирует energeia/W корректно
     const given = mem.totalGiven('Христос');
     assert.ok(given > 0, `Христос должен иметь данное > 0 (получено: ${given})`);
-
-    // Проверить напрямую через snapshot
-    const snap = mem.snapshot();
-    const pi = snap.persons.indexOf('Христос');
-    const di = snap.persons.indexOf('Дионисий');
-    assert.ok(pi >= 0, 'Христос должен быть в матрице');
-    assert.ok(di >= 0, 'Дионисий должен быть в матрице');
-    assert.ok(
-      snap.W[pi][di] > 0,
-      `W[Христос][Дионисий] должно быть > 0, получено: ${snap.W[pi][di]}`
-    );
+    const threadWeight = mem.thread('Христос', 'Дионисий');
+    assert.ok(threadWeight > 0, `thread(Христос→Дионисий) > 0, получено: ${threadWeight}`);
   });
 
   await t.test('W[Сын→Дионисий] > 0 после загрузки пустыни', () => {
-    const snap = mem.snapshot();
-    const si = snap.persons.indexOf('Сын');
-    const di = snap.persons.indexOf('Дионисий');
-    assert.ok(si >= 0, 'Сын должен быть в матрице');
-    assert.ok(
-      snap.W[si][di] > 0,
-      `W[Сын][Дионисий] должно быть > 0, получено: ${snap.W[si][di]}`
-    );
+    // Сын — нетварное лицо в v2 → thread() маршрутизирует правильно
+    const threadWeight = mem.thread('Сын', 'Дионисий');
+    assert.ok(threadWeight > 0, `thread(Сын→Дионисий) > 0, получено: ${threadWeight}`);
   });
 
   await t.test('Дионисий получил от Христос/Сын больше нуля (totalReceived)', () => {

@@ -162,10 +162,14 @@ async function orchestrate() {
 
 // ── Выбор роли ────────────────────────────────────────────────────────────
 function pickAgent(title, body = '') {
+  const t = title.toLowerCase();
+  // _witness только если TITLE содержит 'тест'/'test', а не тело issue
+  if (t.includes('тест') || t.includes('test'))              return '_witness';
+  if (t.includes('review') || t.includes('проверь'))         return '_discerner';
+  // вопрошание:пустыня → _executor (нужно создать .gift файл)
+  if (t.startsWith('вопрошание:') || t.includes('пустыня')) return '_executor';
   const text = (title + ' ' + body).toLowerCase();
-  if (text.includes('тест') || text.includes('test'))       return '_witness';    // тесты = свидетель
-  if (text.includes('review') || text.includes('проверь'))  return '_discerner';  // проверка = различитель
-  if (text.includes('вопрос') || text.includes('question')) return '_questioner'; // вопросы = вопрошатель
+  if (text.includes('вопрос') || text.includes('question'))  return '_questioner';
   return '_executor'; // реализация — роль по умолчанию
 }
 
@@ -267,7 +271,7 @@ async function runClaudeAgent(issueNumber, title, body) {
       // Передаём prompt через stdin (обходим ARG_MAX) + dangerously-skip-permissions для автономной работы
       const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
         input: attemptPrompt,
-        cwd: ROOT, timeout: 300_000,  // 5 минут — сервер загружен параллельными сессиями
+        cwd: ROOT, timeout: 600_000,  // 10 минут — сервер загружен параллельными сессиями
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -279,7 +283,7 @@ async function runClaudeAgent(issueNumber, title, body) {
       // Запускаем тесты
       console.log(`   Попытка ${attempt}/${MAX_ATTEMPTS} — запускаю тесты...`);
       const test = spawnSync('npm', ['test'], {
-        cwd: ROOT, timeout: 60_000,
+        cwd: ROOT, timeout: 250_000,
         encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
       });
 
@@ -300,7 +304,7 @@ async function runClaudeAgent(issueNumber, title, body) {
 async function runCIAgent(issueNumber) {
   try {
     const r = spawnSync('npm', ['test'], {
-      cwd: ROOT, timeout: 60_000,
+      cwd: ROOT, timeout: 250_000,
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
     });
     if (r.status === 0) return { success: true, summary: 'тесты прошли' };

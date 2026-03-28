@@ -2113,7 +2113,7 @@ setInterval(() => {
   for (const [key, lock] of objectLocks) {
     if (now - lock.ts > 300000) objectLocks.delete(key)
   }
-}, 60000)
+}, 60000).unref()
 
 // ── 5. Pipeline Recovery (rollback on failure) ──────────────────────────────
 
@@ -2521,7 +2521,7 @@ setInterval(() => {
       jobQueue.delete(jid)
     }
   }
-}, 300000)
+}, 300000).unref()
 
 // ── 10. Schema Caching ──────────────────────────────────────────────────────
 // Memoize expensive schema/stats queries with TTL
