@@ -26,6 +26,7 @@
     "spec:search": "node utils/spec-search.mjs",
     "pulse": "node utils/ontology-pulse.mjs",
     "pulse:dry": "node utils/ontology-pulse.mjs --dry-run",
+    "portal": "node utils/gift-portal-server.mjs",
     "viz": "node utils/gift-viz.mjs",
     "proposals": "node utils/proposals.mjs",
     "auto-issues": "node utils/auto-issues.mjs",
