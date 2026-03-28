@@ -17,7 +17,7 @@
  */
 
 const OLLAMA_URL   = process.env.OLLAMA_URL    || 'http://localhost:11434';
-const SERAFIM_MODEL = process.env.SERAFIM_MODEL || 'eva';   // по умолчанию eva (малая, быстрая)
+const SERAFIM_MODEL = process.env.SERAFIM_MODEL || 'serafim'; // serafim:latest (qwen2.5:0.5b, 397MB, быстрый)
 const ADAM_MODEL    = process.env.ADAM_MODEL    || 'adam';
 
 // ── L1: Рефлексная таблица (без LLM) ──────────────────────────────────────
