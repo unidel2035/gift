@@ -19,9 +19,9 @@
     "id": 3,
     "text": "Agent evals — давать issue трём агентам, сравнивать решения",
     "cat": "agent",
-    "status": "pending",
+    "status": "done",
     "created": "2026-03-26T09:02:37.229Z",
-    "done_at": null
+    "done_at": "2026-03-28T02:35:31.192Z"
   },
   {
     "id": 4,
