@@ -1,0 +1,445 @@
+{
+  "ts": 1774730095661,
+  "hypostasisDistribution": {
+    "·": 0,
+    "Отец·i": 0,
+    "Сын·j": 0.288,
+    "Дух·k": 0.008,
+    "scalar": 0.704
+  },
+  "personProfiles": [
+    {
+      "id": "_claude",
+      "qOut": [
+        67.98,
+        0,
+        76,
+        0
+      ],
+      "qIn": [
+        35.54,
+        0,
+        0,
+        0
+      ],
+      "normOut": 101.96,
+      "angleDeg": 96.4,
+      "dominant": "Сын·j"
+    },
+    {
+      "id": "_koinon",
+      "qOut": [
+        0,
+        0,
+        0.66,
+        2.63
+      ],
+      "qIn": [
+        0,
+        0,
+        0.66,
+        2.63
+      ],
+      "normOut": 2.71,
+      "angleDeg": 180,
+      "dominant": "Дух·k"
+    },
+    {
+      "id": "_abyss",
+      "qOut": [
+        2.86,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        2.86,
+        0,
+        0,
+        0
+      ],
+      "normOut": 2.86,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Небо",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Земля",
+      "qOut": [
+        6,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        8,
+        0,
+        0,
+        0
+      ],
+      "normOut": 6,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Свидетель",
+      "qOut": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "normOut": 16,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Пророк",
+      "qOut": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "normOut": 16,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Хранитель",
+      "qOut": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        16,
+        0,
+        0,
+        0
+      ],
+      "normOut": 16,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Строитель",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Целитель",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Дионисий",
+      "qOut": [
+        48.8,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        121.55,
+        0,
+        76,
+        0
+      ],
+      "normOut": 48.8,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Адам",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Ева",
+      "qOut": [
+        21.18,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        19.18,
+        0,
+        0,
+        0
+      ],
+      "normOut": 21.18,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "ДушиЖивые",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Змей",
+      "qOut": [
+        14,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.13,
+        0,
+        0,
+        0
+      ],
+      "normOut": 14,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "Падший",
+      "qOut": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "ОтецСергий",
+      "qOut": [
+        32.66,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        76.22,
+        0,
+        0,
+        0
+      ],
+      "normOut": 32.66,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "_architect",
+      "qOut": [
+        0.06,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.06,
+        0,
+        0,
+        0
+      ],
+      "normOut": 0.06,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "_executor",
+      "qOut": [
+        9.1,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.18,
+        0,
+        0,
+        0
+      ],
+      "normOut": 9.1,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "tg:999",
+      "qOut": [
+        15,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.14,
+        0,
+        0,
+        0
+      ],
+      "normOut": 15,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "tg:998",
+      "qOut": [
+        4.51,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.13,
+        0,
+        0,
+        0
+      ],
+      "normOut": 4.51,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "tg:997",
+      "qOut": [
+        12.12,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.13,
+        0,
+        0,
+        0
+      ],
+      "normOut": 12.12,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "tg:996",
+      "qOut": [
+        30,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        0.13,
+        0,
+        0,
+        0
+      ],
+      "normOut": 30,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    },
+    {
+      "id": "_fpga",
+      "qOut": [
+        5.04,
+        0,
+        0,
+        0
+      ],
+      "qIn": [
+        5.04,
+        0,
+        0,
+        0
+      ],
+      "normOut": 5.04,
+      "angleDeg": 0,
+      "dominant": "scalar"
+    }
+  ],
+  "topPerichoresis": []
+}
