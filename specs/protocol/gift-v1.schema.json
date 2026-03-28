@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/unidel2035/gift/specs/protocol/gift-v1.schema.json",
+  "title": "GiftAct v1",
+  "description": "Онтология Дара — универсальный протокол акта дара между лицами. Дар необратим: это богословская аксиома, не техническое решение.",
+  "type": "object",
+  "required": ["schema", "from", "to", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "gift/v1",
+      "description": "Версия протокола"
+    },
+    "from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "personId дарителя. _abyss — дар без дарителя (gratia gratis data). Формат федерации: person@nous-host"
+    },
+    "to": {
+      "type": "string",
+      "minLength": 1,
+      "description": "personId получателя. _koinon — общий получатель. Формат федерации: _koinon@nous-host"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["time", "presence", "knowledge", "code", "offering", "word", "question", "grace", "money", "data", "memory", "direction", "covenant"],
+      "description": "Тип дара. Вес определяется типом: time=10, grace=6, code=5, word=4, money=3"
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10,
+      "description": "Вес акта. Если не указан — берётся из типа. Время тяжелее денег: это богословская аксиома."
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Краткое описание дара"
+    },
+    "irreversible": {
+      "const": true,
+      "description": "Дар необратим. Всегда true. Нельзя отозвать."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601"
+    },
+    "linkedIssue": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "GitHub issue, породивший этот акт (провенанс)"
+    },
+    "proof": {
+      "type": "object",
+      "description": "Доказательство реальности дара",
+      "oneOf": [
+        {
+          "required": ["commit", "repo"],
+          "properties": {
+            "commit": { "type": "string", "minLength": 7 },
+            "repo":   { "type": "string", "pattern": ".+/.+" }
+          }
+        },
+        {
+          "required": ["tg_message_id", "chat_id"],
+          "properties": {
+            "tg_message_id": { "type": "integer" },
+            "chat_id":       { "type": "integer" }
+          }
+        },
+        {
+          "required": ["issue", "repo"],
+          "properties": {
+            "issue": { "type": "integer", "minimum": 1 },
+            "repo":  { "type": "string", "pattern": ".+/.+" }
+          }
+        },
+        {
+          "required": ["seconds"],
+          "properties": {
+            "seconds": { "type": "number", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "federation": {
+      "type": "object",
+      "description": "Метаданные федерации — откуда пришёл акт",
+      "required": ["origin"],
+      "properties": {
+        "origin":    { "type": "string", "description": "nous instance URL" },
+        "relayed":   { "type": "boolean", "default": false },
+        "relayedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema": "gift/v1",
+      "from": "_claude",
+      "to": "Дионисий",
+      "type": "code",
+      "weight": 4,
+      "content": "реализовал федерацию nous",
+      "irreversible": true,
+      "timestamp": "2026-03-28T10:00:00Z",
+      "proof": { "commit": "abc1234", "repo": "unidel2035/gift" }
+    },
+    {
+      "schema": "gift/v1",
+      "from": "tg:12345",
+      "to": "_koinon",
+      "type": "money",
+      "weight": 3,
+      "content": "дар через бот",
+      "irreversible": true,
+      "federation": { "origin": "http://173.249.2.184:9087" }
+    }
+  ]
+}
