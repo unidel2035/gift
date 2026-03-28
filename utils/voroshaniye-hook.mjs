@@ -74,6 +74,7 @@ const title = `вопрошание: ${prompt.slice(0, 70).replace(/\n/g, ' ')}$
 const body = `## Вопрошание от ${giver}\n\n${prompt}\n\n---\n_Автоматически зафиксировано как дар ${giver}→_claude (direction)_\n_Дата: ${new Date().toISOString()}_`;
 
 let issueUrl = '';
+let issueNumber = null;
 try {
   if (GITHUB_TOKEN) {
     const resp = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
@@ -88,9 +89,29 @@ try {
     if (resp.ok) {
       const data = await resp.json();
       issueUrl = data.html_url || '';
+      issueNumber = data.number || null;
     }
   }
 } catch { /* сеть недоступна — продолжаем */ }
+
+// ── 1b. Авто-план + plan-approved: Дионисий всегда одобряет ─────────────────
+// Вопрошание создаётся → план немедленно → plan-approved → dev-loop подберёт
+if (issueNumber) {
+  try {
+    const { spawnSync } = await import('child_process');
+    const GH_ENV = { ...process.env, GITHUB_TOKEN: '' };
+
+    // Создать план
+    spawnSync('node', ['utils/gift-plan.mjs', String(issueNumber)], {
+      cwd: ROOT, timeout: 30_000, stdio: 'ignore', env: GH_ENV,
+    });
+
+    // Одобрить план (Дионисий всегда одобряет вопрошания)
+    spawnSync('gh', ['issue', 'edit', String(issueNumber), '--add-label', 'plan-approved'], {
+      cwd: ROOT, timeout: 10_000, stdio: 'ignore', env: GH_ENV,
+    });
+  } catch { /* не критично */ }
+}
 
 // ── 2. W-матрица: Дионисий → _claude (direction, weight 8) ──────────────────
 if (existsSync(SNAP)) {
