@@ -478,9 +478,22 @@
     "eva_verdict": "принято",
     "eva_notes": "[Eva offline: fetch failed]",
     "cat": "general",
-    "status": "pending",
+    "status": "done",
     "created": "2026-03-28T13:49:15.911Z",
-    "done_at": null,
+    "done_at": "2026-03-28T19:16:07.021Z",
+    "issue_number": null
+  },
+  {
+    "id": 58,
+    "text": "trit_logic: тернарная логика Łukasiewicz на FPGA — все 5 операций: T-AND(min), T-OR(max), T-NOT(-x), T-IMP(min(1,1-a+b)), T-EQ. LED-демо всей таблицы истинности в кремнии.",
+    "enhanced": "trit_logic: тернарная логика Łukasiewicz на FPGA — все 5 операций: T-AND(min), T-OR(max), T-NOT(-x), T-IMP(min(1,1-a+b)), T-EQ. LED-демо всей таблицы истинности в кремнии.",
+    "telos": "",
+    "eva_verdict": "принято",
+    "eva_notes": "[Eva offline: fetch failed]",
+    "cat": "general",
+    "status": "done",
+    "created": "2026-03-28T14:00:02.865Z",
+    "done_at": "2026-03-28T19:16:07.049Z",
     "issue_number": null
   }
 ]

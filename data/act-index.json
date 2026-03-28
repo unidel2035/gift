@@ -88,5 +88,65 @@
     "content": "gift/v1 протокол — JSON Schema с поддержкой федерации",
     "linkedIssue": null,
     "commit": "cc99c3b84bbd"
+  },
+  {
+    "ts": "2026-03-28T13:49:34.572Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T18:48:26.776Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T19:08:22.968Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T19:15:13.801Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T19:19:03.040Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T19:26:31.108Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
+    "linkedIssue": 57,
+    "commit": "22fd02e46997"
   }
 ]
