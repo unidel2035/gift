@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/unidel2035/gift/data/gift-act.schema.json",
+  "title": "GiftAct",
+  "description": "Онтологический акт дара — единица Священной истории",
+  "type": "object",
+
+  "required": ["giverId", "receiverId", "type", "weight"],
+
+  "properties": {
+    "giverId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Даритель — лицо в матрице"
+    },
+    "receiverId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Получатель — лицо в матрице"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "word",        "presence",    "knowledge",   "time",
+        "money",       "code",        "hope",        "kenosis",
+        "incarnation", "gift",        "witness",     "sacrifice",
+        "resurrection","grace",       "question",    "covenant",
+        "offering",    "labour",      "prayer",      "anamnesis"
+      ],
+      "description": "Тип дара — богословская категория"
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 10,
+      "description": "Онтологический вес. Время=10, присутствие=9, слово=8, знание=7, код=5, деньги=3"
+    },
+    "irreversible": {
+      "type": "boolean",
+      "default": true,
+      "description": "Необратимость дара — богословская аксиома (Object.freeze)"
+    },
+    "reception": {
+      "type": "string",
+      "enum": ["accepted", "declined", "pending"],
+      "description": "λήψις: принят / отвергнут / ожидает (эсхатологически)"
+    },
+    "era": {
+      "type": "string",
+      "description": "Эпоха Священной истории"
+    },
+    "linkedIssue": {
+      "type": ["string", "number"],
+      "description": "GitHub issue — источник дара"
+    },
+    "note": {
+      "type": "string",
+      "description": "Богословский комментарий"
+    }
+  },
+
+  "additionalProperties": true,
+
+  "if": {
+    "properties": {
+      "giverId": { "const": "_abyss" }
+    }
+  },
+  "then": {
+    "properties": {
+      "weight": { "minimum": 0.5 }
+    }
+  },
+
+  "$defs": {
+    "divinePersons": {
+      "enum": ["Отец", "Сын", "Христос", "Дух", "СвятойДух", "Бог", "Троица"],
+      "description": "Нетварные лица — источники нетварных энергий (Палама)"
+    },
+    "specialPersons": {
+      "enum": ["_abyss", "_koinon", "_claude", "_ci", "_questioner", "_executor"],
+      "description": "Системные лица онтологии"
+    }
+  }
+}

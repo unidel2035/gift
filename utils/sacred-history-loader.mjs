@@ -14,6 +14,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { readdirSync } from 'fs';
 import { GiftMemory } from '../src/core/GiftMemory.js';
+import { validateActs, reportValidation } from './gift-validator.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SPECS_NEW = join(ROOT, 'specs', 'sacred-history');
@@ -193,16 +194,22 @@ async function loadNewFormatSpecs(mem) {
   catch { return 0; }
 
   let totalActs = 0;
+  let totalInvalid = 0;
   console.log('\n═══ Новые спеки specs/sacred-history/ ═══\n');
   for (const file of files) {
     const src = await readFile(join(SPECS_NEW, file), 'utf8');
     const acts = parseNewFormatSpec(src);
+    const validation = validateActs(acts, { source: file });
+    if (validation.invalid > 0) {
+      console.warn(reportValidation(validation, file));
+      totalInvalid += validation.invalid;
+    }
     for (const act of acts) mem.receive(act);
     if (acts.length > 0)
       console.log(`  ${file.padEnd(35)} → ${String(acts.length).padStart(3)} актов`);
     totalActs += acts.length;
   }
-  console.log(`\n  Новых актов из specs/: ${totalActs}\n`);
+  console.log(`\n  Новых актов из specs/: ${totalActs}${totalInvalid > 0 ? ` (⚠ ${totalInvalid} невалидных)` : ' ✓'}\n`);
   return totalActs;
 }
 
