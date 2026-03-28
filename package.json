@@ -62,6 +62,7 @@
   "dependencies": {
     "@tensorflow/tfjs-node": "^4.22.0",
     "better-sqlite3": "^12.8.0",
-    "openai": "^4.0.0"
+    "openai": "^4.0.0",
+    "ws": "^8.20.0"
   }
 }

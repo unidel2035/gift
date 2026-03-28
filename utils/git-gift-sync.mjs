@@ -83,6 +83,41 @@ writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
 console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
 console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);
 
+// ── Экспорт в симулятор: matrix-data.json для ontology.html ──────────────
+const SIMULATOR_DIR = resolve(ROOT, '../fpga/simulator');
+if (existsSync(SIMULATOR_DIR)) {
+  try {
+    const persons = snap.persons || [];
+    const personCats = {
+      'Отец':'divine','Сын':'divine','Христос':'divine','Дух':'divine',
+      '_claude':'agent','_fpga':'chip','_koinon':'special','_abyss':'special',
+      'Дионисий':'human','ОтецСергий':'human','Адам':'human','Ева':'human',
+      'Падший':'shadow','Змей':'shadow',
+    };
+    const personData = persons.map(id => ({
+      id,
+      given:    +mem.totalGiven(id).toFixed(1),
+      received: +mem.totalReceived(id).toFixed(1),
+      cat:      personCats[id] || (id.startsWith('tg:') ? 'tg' : id.startsWith('_') ? 'agent' : 'spirit'),
+    }));
+    const edges = mem.heaviest(40).map(e => ({ from: e.from, to: e.to, w: +e.weight.toFixed(1) }));
+    const matrixData = {
+      ts:        Date.now(),
+      actsCount: mem.actsCount,
+      energy:    +(mem.energy ? mem.energy(Array(persons.length).fill(0)) : 0).toFixed(2),
+      persons:   personData,
+      edges,
+    };
+    writeFileSync(
+      resolve(SIMULATOR_DIR, 'matrix-data.json'),
+      JSON.stringify(matrixData, null, 2)
+    );
+    console.log(`    📡 matrix-data.json → simulator (${edges.length} нитей)`);
+  } catch (e) {
+    // не критично
+  }
+}
+
 // ── Sync to nous (если доступен) ──────────────────────────────────────────
 const NOUS_URL = process.env.NOUS_URL || '';
 if (NOUS_URL) {

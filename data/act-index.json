@@ -148,5 +148,15 @@
     "content": "tritsum — троичный сумматор с UART → анамнезис (proposal #57)",
     "linkedIssue": 57,
     "commit": "22fd02e46997"
+  },
+  {
+    "ts": "2026-03-28T19:46:43.773Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "_fpga входит в κοινωνία — онтология встречает кремний",
+    "linkedIssue": null,
+    "commit": "bc64ad52b048"
   }
 ]
