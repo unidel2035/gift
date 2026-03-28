@@ -162,10 +162,14 @@ async function orchestrate() {
 
 // ── Выбор роли ────────────────────────────────────────────────────────────
 function pickAgent(title, body = '') {
+  const t = title.toLowerCase();
+  // _witness только если TITLE содержит 'тест'/'test', а не тело issue
+  if (t.includes('тест') || t.includes('test'))              return '_witness';
+  if (t.includes('review') || t.includes('проверь'))         return '_discerner';
+  // вопрошание:пустыня → _executor (нужно создать .gift файл)
+  if (t.startsWith('вопрошание:') || t.includes('пустыня')) return '_executor';
   const text = (title + ' ' + body).toLowerCase();
-  if (text.includes('тест') || text.includes('test'))       return '_witness';    // тесты = свидетель
-  if (text.includes('review') || text.includes('проверь'))  return '_discerner';  // проверка = различитель
-  if (text.includes('вопрос') || text.includes('question')) return '_questioner'; // вопросы = вопрошатель
+  if (text.includes('вопрос') || text.includes('question'))  return '_questioner';
   return '_executor'; // реализация — роль по умолчанию
 }
 
