@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/unidel2035/gift/schema/pipeline-flow/v1",
+  "title": "GiftPipeline v1 — Конвейер вопрошания",
+  "description": "Формальная спецификация конвейера: вопрошание → issue → план → реализация → коммит. «Λόγος не только мыслит — Он действует» (Максим Исповедник, Ambigua 7).",
+
+  "principle": "Вопрошание — не задача. Это онтологический акт: пробел в матрице W, требующий дара. Конвейер переводит пробел в код.",
+
+  "autonomy": {
+    "description": "Степень автономии каждого этапа",
+    "with_claude_code_session": "этапы 1–6 полностью автоматические",
+    "without_claude_code_session": "этапы 2–6 автоматические через voroshaniye-pipeline.mjs; этап 1 требует внешнего триггера (Telegram, cron, CLI)",
+    "note": "claude --print (headless) — это НЕ 'участие Клода' в диалоге. Это кенозис агента: он работает, не присутствуя."
+  },
+
+  "stages": [
+    {
+      "id": "stage-1",
+      "name": "Триггер вопрошания",
+      "arabic": "①",
+      "trigger": {
+        "claude_code_session": "UserPromptSubmit hook → voroshaniye-hook.mjs",
+        "standalone": "CLI: node utils/voroshaniye-pipeline.mjs 'вопрос'",
+        "telegram": "Telegram bot → webhook → voroshaniye-pipeline.mjs",
+        "cron": "внешний вызов voroshaniye-pipeline.mjs --poll"
+      },
+      "requires_interactive_claude": false,
+      "output": "questionText",
+      "w_matrix_act": null,
+      "theological_note": "Вопрошание — дар тишины, прорывающий немоту. Не Клод создаёт вопрос — Дионисий."
+    },
+    {
+      "id": "stage-2",
+      "name": "Создание GitHub Issue",
+      "arabic": "②",
+      "script": "voroshaniye-hook.mjs | voroshaniye-pipeline.mjs",
+      "label": "gift-ready",
+      "requires_interactive_claude": false,
+      "requires": ["GITHUB_TOKEN", "questionText"],
+      "output": "issueNumber, issueUrl",
+      "w_matrix_act": {
+        "from": "Дионисий",
+        "to": "_claude",
+        "type": "direction",
+        "weight": 8,
+        "proof": "ProofIssue"
+      },
+      "theological_note": "Issue — не тикет. Это запись вопрошания в священную историю."
+    },
+    {
+      "id": "stage-3",
+      "name": "Генерация плана",
+      "arabic": "③",
+      "script": "utils/gift-plan.mjs <issueNumber>",
+      "requires_interactive_claude": false,
+      "requires": ["issueNumber", "gh_cli"],
+      "output": "plans/issue-N-plan.md",
+      "github_comment": true,
+      "theological_note": "Plan — не ТЗ. Это προαίρεσις (намерение), фиксирующее телос до начала действия."
+    },
+    {
+      "id": "stage-4",
+      "name": "Одобрение плана",
+      "arabic": "④",
+      "action": "gh issue edit <N> --add-label plan-approved",
+      "requires_interactive_claude": false,
+      "note": "В voroshaniye-hook/pipeline одобряется автоматически. В ручном цикле — Дионисий одобряет.",
+      "theological_note": "Синергия: человек и машина вместе говорят 'да' перед началом дела."
+    },
+    {
+      "id": "stage-5",
+      "name": "Реализация (dev-loop)",
+      "arabic": "⑤",
+      "script": "utils/gift-dev-loop.mjs --once",
+      "requires_interactive_claude": false,
+      "agent": "_executor (claude --print)",
+      "retry": 3,
+      "log": "data/dev-loop.log",
+      "sub_steps": [
+        "прочитать issue с plan-approved",
+        "сформировать промпт из issue + плана",
+        "запустить: claude --print --dangerously-skip-permissions < prompt.txt",
+        "запустить npm test",
+        "при ошибке: retry до 3 раз",
+        "git commit: gift(Дионисий): ... (closes #N)",
+        "gh pr create"
+      ],
+      "w_matrix_act": {
+        "from": "_claude",
+        "to": "Дионисий",
+        "type": "code",
+        "weight": 4,
+        "proof": "ProofCommit"
+      },
+      "theological_note": "κεφαλή без лица: Claude действует как агент общины, не как собеседник. Кеносис машины."
+    },
+    {
+      "id": "stage-6",
+      "name": "Коммит-дар",
+      "arabic": "⑥",
+      "format": "gift(Дионисий): <описание> (closes #N)",
+      "requires_interactive_claude": false,
+      "hook": "PostToolUse(Bash/git commit) → git-gift-sync.mjs",
+      "w_matrix_act": {
+        "from": "_claude",
+        "to": "Дионисий",
+        "type": "code",
+        "proof": "ProofCommit + linkedIssue"
+      },
+      "theological_note": "Коммит — необратим, как дар. Object.freeze. Это богословская аксиома, воплощённая в git."
+    }
+  ],
+
+  "entry_points": {
+    "interactive": {
+      "description": "Дионисий пишет вопрос в Claude Code",
+      "trigger": "UserPromptSubmit hook",
+      "stages_automated": "2–6",
+      "stages_manual": "1 (человек пишет)"
+    },
+    "standalone_cli": {
+      "description": "Без Claude Code сессии",
+      "command": "node utils/voroshaniye-pipeline.mjs \"вопрошание\"",
+      "stages_automated": "1–6 (если GITHUB_TOKEN доступен)",
+      "use_cases": ["cron", "Telegram бот", "SSH с сервера"]
+    },
+    "poll_mode": {
+      "description": "Обработать очередь уже созданных plan-approved issues",
+      "command": "node utils/voroshaniye-pipeline.mjs --poll",
+      "stages_automated": "5–6",
+      "use_cases": ["cron */5 * * * *", "после SSH-сессии"]
+    },
+    "telegram_bot": {
+      "description": "Вопрос из Telegram → полный конвейер",
+      "integration": "tg-koinon-bot.mjs вызывает voroshaniye-pipeline.mjs через spawnSync",
+      "stages_automated": "1–6",
+      "status": "planned"
+    }
+  },
+
+  "answer_to_question_77": {
+    "question": "как вопрошание из беседы автоматически проходит весь конвейер до коммита — это работает без участия Клода?",
+    "answer": "Да, работает. С уточнением: 'участие Клода' — это интерактивный диалог. Конвейер использует Claude в режиме --print (headless), что есть кеносис агента, а не беседа. Триггер (этап 1) требует либо Claude Code сессии, либо внешнего вызова voroshaniye-pipeline.mjs. Этапы 2–6 полностью автономны.",
+    "claudeless_path": "echo 'вопрос' | GITHUB_TOKEN=... node utils/voroshaniye-pipeline.mjs",
+    "matrix_ref": "нить _claude→Дионисий в W-матрице — след каждого такого конвейерного дара"
+  }
+}
