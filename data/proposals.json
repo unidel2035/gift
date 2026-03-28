@@ -469,5 +469,18 @@
     "created": "2026-03-28T08:12:39.981Z",
     "done_at": "2026-03-28T08:37:29.599Z",
     "issue_number": null
+  },
+  {
+    "id": 57,
+    "text": "Подключить FPGA к анамнезису: trit-listen.py читает UART из tritsum → POST /gift на сервер → кремний становится лицом в матрице (_fpga). Каждое вычисление Троицы оставляет нить.",
+    "enhanced": "Подключить FPGA к анамнезису: trit-listen.py читает UART из tritsum → POST /gift на сервер → кремний становится лицом в матрице (_fpga). Каждое вычисление Троицы оставляет нить.",
+    "telos": "",
+    "eva_verdict": "принято",
+    "eva_notes": "[Eva offline: fetch failed]",
+    "cat": "general",
+    "status": "pending",
+    "created": "2026-03-28T13:49:15.911Z",
+    "done_at": null,
+    "issue_number": null
   }
 ]

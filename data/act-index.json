@@ -48,5 +48,45 @@
     "content": "nous интеграция — NOUS_URL fallback в хуках + spec-index 128 файлов",
     "linkedIssue": null,
     "commit": "461125e9d038"
+  },
+  {
+    "ts": "2026-03-28T08:55:43.199Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "триада замкнулась — nous на сервере, бот подключён (closes #0)",
+    "linkedIssue": 0,
+    "commit": "acd8deae9c6c"
+  },
+  {
+    "ts": "2026-03-28T09:12:59.005Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "триада замкнулась — nous на сервере, бот подключён (closes #0)",
+    "linkedIssue": 0,
+    "commit": "acd8deae9c6c"
+  },
+  {
+    "ts": "2026-03-28T09:13:06.859Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "gift/v1 протокол — JSON Schema с поддержкой федерации",
+    "linkedIssue": null,
+    "commit": "cc99c3b84bbd"
+  },
+  {
+    "ts": "2026-03-28T09:45:24.184Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "gift/v1 протокол — JSON Schema с поддержкой федерации",
+    "linkedIssue": null,
+    "commit": "cc99c3b84bbd"
   }
 ]
