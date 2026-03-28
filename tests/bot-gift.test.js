@@ -68,7 +68,13 @@ test('bot-gift: увеличивает actsCount', async () => {
 });
 
 test('bot-gift: крупная сумма логарифмически нормируется (не > baseWeight)', async () => {
-  // 100 единиц времени — weight = 10 * log(101)/log(101) = 10 (baseWeight)
+  // Проверяем ДЕЛЬТУ — матрица накапливает вес от предыдущих запусков теста
+  const before = loadMatrix();
+  const bSnap = before.snapshot();
+  const bgi = bSnap.persons.indexOf('tg:996');
+  const bri = bSnap.persons.indexOf('Дионисий');
+  const wBefore = (bgi >= 0 && bri >= 0) ? bSnap.W[bgi][bri] : 0;
+
   runBotGift(['tg:996', '_koinon', 'time', 'марафон', '100']);
   const mem = loadMatrix();
   const snap = mem.snapshot();
@@ -76,8 +82,9 @@ test('bot-gift: крупная сумма логарифмически норм�
   const ri = snap.persons.indexOf('Дионисий');
   assert.ok(gi >= 0, 'tg:996 в матрице');
   assert.ok(snap.W[gi][ri] > 0, 'W[tg:996][Дионисий] > 0');
-  // Логарифмическая нормировка: для amount=100 weight = baseWeight = 10
-  assert.ok(snap.W[gi][ri] <= 12, 'Вес не превышает 12 даже для крупного дара');
+  // Логарифмическая нормировка: дельта от одного дара не > baseWeight + допуск Хопфилда
+  const delta = snap.W[gi][ri] - wBefore;
+  assert.ok(delta <= 12, 'Дельта веса не превышает 12 даже для крупного дара');
 });
 
 test('bot-gift: без аргументов — exit code 1', async () => {
