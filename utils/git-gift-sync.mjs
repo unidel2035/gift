@@ -82,3 +82,25 @@ writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
 
 console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
 console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);
+
+// ── Sync to nous (если доступен) ──────────────────────────────────────────
+const NOUS_URL = process.env.NOUS_URL || '';
+if (NOUS_URL) {
+  const act = {
+    ts: new Date().toISOString(), from: '_claude', to: receiver,
+    type: 'code', weight: 4, content: description,
+    linkedIssue: linkedIssue ?? null, commit: commitHash,
+  };
+  fetch(`${NOUS_URL}/acts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(act),
+    signal: AbortSignal.timeout(3000),
+  }).catch(() => {});
+  fetch(`${NOUS_URL}/matrix/receive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ giverId: '_claude', receiverId: receiver, weight: 4, type: 'code', content: description, linkedIssue, irreversible: true }),
+    signal: AbortSignal.timeout(3000),
+  }).catch(() => {});
+}

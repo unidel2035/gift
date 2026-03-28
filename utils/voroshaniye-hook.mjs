@@ -159,6 +159,20 @@ if (existsSync(SNAP)) {
     });
     if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
     writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
+
+    // Sync to nous
+    const NOUS_URL = process.env.NOUS_URL || '';
+    if (NOUS_URL) {
+      const actPayload = {
+        ts: new Date().toISOString(), from: giver, to: '_claude',
+        type: 'direction', weight: 8, content: prompt.slice(0, 160),
+        linkedIssue: issueNumber ?? null, issueUrl: issueUrl || null,
+      };
+      fetch(`${NOUS_URL}/acts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actPayload), signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    }
   } catch { /* TF не загрузился */ }
 }
 
