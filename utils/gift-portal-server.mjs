@@ -56,7 +56,18 @@ const server = createServer(async (req, res) => {
   const url = req.url.split('?')[0];
 
   if (url === '/' || url === '/gift-portal.html') {
-    return serveHTML(res, join(ROOT, 'public', 'gift-portal.html'));
+    // Инжектировать данные прямо в HTML — нет сетевых запросов от браузера
+    try {
+      let html   = readFileSync(join(ROOT, 'public', 'gift-portal.html'), 'utf8');
+      const matrix = readFileSync(join(ROOT, 'data', 'sacred-history-W.json'), 'utf8');
+      const acts   = readFileSync(join(ROOT, 'data', 'act-index.json'), 'utf8');
+      const inject = `<script>window.__GIFT_MATRIX__=${matrix};window.__GIFT_ACTS__=${acts};</script>`;
+      html = html.replace('</head>', inject + '\n</head>');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(html);
+    } catch {
+      return serveHTML(res, join(ROOT, 'public', 'gift-portal.html'));
+    }
   }
   if (url === '/api/matrix') {
     return serveJSON(res, join(ROOT, 'data', 'sacred-history-W.json'));
