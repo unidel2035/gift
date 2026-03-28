@@ -10,8 +10,14 @@
  */
 
 import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { readdirSync } from 'fs';
 import { GiftMemory } from '../src/core/GiftMemory.js';
+import { validateActs, reportValidation } from './gift-validator.mjs';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SPECS_NEW = join(ROOT, 'specs', 'sacred-history');
 
 const GIFT_ONTOLOGY = '/home/unidel/dronedoc2026/language/gift-lang/ontology';
 
@@ -134,6 +140,79 @@ function extractFromGiftSource(src, filename) {
   return { acts, persons: [...persons] };
 }
 
+// ── Парсер нового формата (brace-counting, Cyrillic-aware) ────────────────
+
+const TYPE_WEIGHTS_NEW = {
+  presence: 8, word: 5, knowledge: 6, time: 10, code: 8, money: 3, data: 4,
+};
+
+function parseNewFormatSpec(src) {
+  const acts = [];
+  const text = src.replace(/\/\/[^\n]*/g, '\n');
+  const lines = text.split('\n');
+  let inGift = false, depth = 0, block = '';
+  for (const line of lines) {
+    if (!inGift) {
+      if (/дар\s+[\wА-яёЁ_]+\s*\{/.test(line)) {
+        inGift = true;
+        depth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+        block = line;
+      }
+    } else {
+      block += '\n' + line;
+      depth += (line.match(/\{/g) || []).length;
+      depth -= (line.match(/\}/g) || []).length;
+      if (depth <= 0) {
+        const fromM   = block.match(/от:\s*([\wА-яёЁ_:]+)/);
+        const toM     = block.match(/кому:\s*([\wА-яёЁ_:]+)/);
+        const typeM   = block.match(/тип:\s*(\w+)/);
+        const weightM = block.match(/вес:\s*(\d+(?:\.\d+)?)/);
+        const irrevM  = block.match(/необратим:\s*(да|нет)/);
+        const recepM  = block.match(/reception:\s*(\w+)/);
+        if (fromM && toM) {
+          const type   = typeM ? typeM[1] : 'presence';
+          const weight = weightM ? parseFloat(weightM[1]) : (TYPE_WEIGHTS_NEW[type] ?? 4);
+          const act = {
+            giverId:     fromM[1],
+            receiverId:  toM[1],
+            type, weight,
+            irreversible: !irrevM || irrevM[1] === 'да',
+          };
+          if (recepM) act.reception = recepM[1]; // λήψις: declined|pending|accepted
+          acts.push(act);
+        }
+        inGift = false; block = ''; depth = 0;
+      }
+    }
+  }
+  return acts;
+}
+
+async function loadNewFormatSpecs(mem) {
+  let files;
+  try { files = readdirSync(SPECS_NEW).filter(f => f.endsWith('.gift')).sort(); }
+  catch { return 0; }
+
+  let totalActs = 0;
+  let totalInvalid = 0;
+  console.log('\n═══ Новые спеки specs/sacred-history/ ═══\n');
+  for (const file of files) {
+    const src = await readFile(join(SPECS_NEW, file), 'utf8');
+    const acts = parseNewFormatSpec(src);
+    const validation = validateActs(acts, { source: file });
+    if (validation.invalid > 0) {
+      console.warn(reportValidation(validation, file));
+      totalInvalid += validation.invalid;
+    }
+    for (const act of acts) mem.receive(act);
+    if (acts.length > 0)
+      console.log(`  ${file.padEnd(35)} → ${String(acts.length).padStart(3)} актов`);
+    totalActs += acts.length;
+  }
+  console.log(`\n  Новых актов из specs/: ${totalActs}${totalInvalid > 0 ? ` (⚠ ${totalInvalid} невалидных)` : ' ✓'}\n`);
+  return totalActs;
+}
+
 // ── Загрузка ───────────────────────────────────────────────────────────────
 
 async function loadSacredHistory(mem) {
@@ -174,9 +253,12 @@ async function loadSacredHistory(mem) {
 
 // ── Запуск ─────────────────────────────────────────────────────────────────
 
-const mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude']); // Троица + Клод как лицо в матрице
+// Троица + ключевые лица онтологии как начальные узлы
+// _koinon и _abyss — специальные получатели, должны быть в матрице явно
+const mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude', '_koinon', '_abyss']);
 
 const { totalActs, log } = await loadSacredHistory(mem);
+const newActs = await loadNewFormatSpecs(mem);
 
 console.log(mem.describe());
 

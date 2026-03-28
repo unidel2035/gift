@@ -58,6 +58,7 @@ import { Flesh } from '../theology/Flesh.js';
 import { CommunalBreath } from '../theology/CommunalBreath.js';
 import { AnamnesisStore } from '../memory/AnamnesisStore.js';
 import { Presence } from '../memory/Presence.js';
+import { TheosisWitness } from '../theology/TheosisWitness.js';
 import logger from '../../utils/logger.js';
 
 // ── Живые модули Домостроительства (подключены к среде) ──
@@ -438,7 +439,74 @@ export class GiftEngine {
   incarnation() { return this.salvation.incarnation(); }
   sacrifice() { return this.salvation.sacrifice(); }
   resurrection() { return this.salvation.resurrection(); }
-  theosis(personId) { return this.salvation.theosis(personId); }
+  /**
+   * Θέωσις — обожение лица.
+   *
+   * Две сигнатуры:
+   * - `theosis(personId)` — классическое обожение через Домостроительство
+   * - `theosis(person, gifts[])` — вычисление траектории через TheosisWitness:
+   *   возвращает `{ stage, delta, vector }`.
+   *
+   * «Θέωσις — не наблюдение, это вектор: лицо → дары → богоподобие»
+   */
+  theosis(person, gifts) {
+    if (Array.isArray(gifts)) {
+      return GiftEngine._computeTheosisTrajectory(person, gifts);
+    }
+    return this.salvation.theosis(person);
+  }
+
+  /**
+   * Вычислить траекторию θέωσις через TheosisWitness.
+   *
+   * @param {string} personId
+   * @param {Array<{ id?: string, wound?: string, glorification?: string, epochId?: string }>} gifts
+   * @returns {{ stage: string, delta: number, vector: string }}
+   */
+  static _computeTheosisTrajectory(personId, gifts) {
+    const witness = new TheosisWitness();
+
+    for (const gift of gifts) {
+      const wound = gift.wound ?? gift.id ?? 'безымянный дар';
+      const epochId = gift.epochId ?? '1';
+      witness.witness({ personId, epochId, wound });
+      if (gift.glorification) {
+        witness.glorify({ personId, wound, glorification: gift.glorification });
+      }
+    }
+
+    const { openWounds, healedWounds, theosisProgress } = witness.pathOf(personId);
+    const total = openWounds + healedWounds;
+
+    // stage — ступень обожения по проценту прогресса
+    let stage;
+    if (theosisProgress >= 80) {
+      stage = 'hyper_physin';
+    } else if (theosisProgress >= 50) {
+      stage = 'kata_physin';
+    } else if (theosisProgress >= 25) {
+      stage = 'metanoia';
+    } else {
+      stage = 'para_physin';
+    }
+
+    // delta — разность прославленных и открытых ран
+    const delta = healedWounds - openWounds;
+
+    // vector — направление движения
+    let vector;
+    if (total === 0) {
+      vector = 'unknown';
+    } else if (delta > 0) {
+      vector = 'ascending';
+    } else if (delta === 0) {
+      vector = 'stable';
+    } else {
+      vector = 'descending';
+    }
+
+    return { stage, delta, vector };
+  }
   heal(personId, woundType) { return this.salvation.heal(personId, woundType); }
   parousia() { return this.salvation.parousia(); }
   apokatastasis() { return this.salvation.apokatastasis(); }

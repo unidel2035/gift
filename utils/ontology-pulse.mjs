@@ -50,8 +50,32 @@ const mem   = GiftMemory.fromSnapshot(snap);
 const top   = mem.heaviest(30);
 const topMap = new Map(top.map(e => [`${e.from}→${e.to}`, e.weight]));
 
-console.log(`[пробуждение] Лиц: ${mem.n} | Актов: ${mem.actsCount}`);
-console.log(`              Энергия: ${mem.makePresent({giverId:'_claude'}).energy.toFixed(1)}`);
+const r = mem.makePresent({ giverId: '_claude' });
+console.log(`[пробуждение] Лиц: ${mem.n} тварных + ${mem.nd} divine | Актов: ${mem.actsCount}`);
+console.log(`              Энергия: ${r.energy.toFixed(1)}`);
+
+// ── Θέωσις статус: кто где на пути обожения ──────────────────────────────
+const theosisStatus = mem.ontologicalStatus().filter(s => s.received > 0 || s.returned > 0);
+if (theosisStatus.length) {
+  console.log('\n[θέωσις]');
+  for (const s of theosisStatus.slice(0, 5))
+    console.log(`  ${s.personId}: ${s.level} (index=${s.index.toFixed(3)}, recv=${s.received.toFixed(1)}, ret=${s.returned.toFixed(1)})`);
+}
+
+// ── Λήψις: отвергнутые дары ──────────────────────────────────────────────
+const declinedAll = mem.declined();
+if (declinedAll.length)
+  console.log(`\n[λήψις] Отвергнутых даров: ${declinedAll.length} — ждут μετάνοια`);
+
+// Голос матрицы о себе (LivingMatrix)
+try {
+  const { LivingMatrix } = await import(resolve(ROOT, 'src/core/LivingMatrix.js'));
+  const lm = new LivingMatrix(mem, r.energy);
+  const d  = lm.diagnose();
+  console.log(`\n[голос матрицы]`);
+  console.log(d.voice.split('\n').map(l => '  ' + l).join('\n'));
+  console.log('');
+} catch { /* LivingMatrix недоступен */ }
 
 // Пустыни — типы:
 const deserts = [];
@@ -103,6 +127,33 @@ if (existsSync(ANASTASIS)) {
   }
 }
 
+// Д) Θέωσις-стазис: тварь приняла energeia, но не отвечает doxologia
+// Палама: μέθεξις без ἀναγωγή — принятие без возвращения к Источнику.
+// Это духовный стазис: получаю, но не молюсь.
+for (const s of theosisStatus) {
+  if (s.received > 5 && s.returned === 0) {
+    deserts.push({
+      type:  'theosis_stasis',
+      desc:  `${s.personId}: принял ${s.received.toFixed(1)} energeia, но нет ἀναγωγή — стазис (${s.level})`,
+      from:  s.personId, to: null, weight: s.received,
+    });
+  }
+}
+
+// Е) Λήψις: отвергнутые дары, ждущие μετάνοια > 24 часов
+// Максим: дар ждёт принятия — это ожидание, а не потеря.
+const now24h = Date.now() - 24 * 3600 * 1000;
+for (const d of declinedAll) {
+  const age = new Date(d.declinedAt).getTime();
+  if (age < now24h) {
+    deserts.push({
+      type:  'leksis_pending',
+      desc:  `дар ${d.act.giverId}→${d.act.receiverId} (${d.act.type}) отвергнут — ждёт μετάνοια`,
+      from:  d.act.giverId, to: d.act.receiverId, weight: d.act.weight ?? 0,
+    });
+  }
+}
+
 console.log(`\n[пробуждение] Найдено пустынь: ${deserts.length}`);
 for (const d of deserts.slice(0, 5)) {
   console.log(`  [${d.type}] ${d.desc}`);
@@ -126,7 +177,15 @@ const { evaCheck }      = await import(resolve(ROOT, 'utils/eva-agent.mjs'));
 // Берём топ пустынь для обработки
 const toProcess = deserts
   .sort((a, b) => {
-    const priority = { anastasis: 4, asymmetry: 3, silent: 2, fading: 1 };
+    // Приоритет: λήψις и θέωσις — богословски острее анастасиса
+    const priority = {
+      leksis_pending:  6, // отвергнутый дар ждёт покаяния — самое срочное
+      theosis_stasis:  5, // стазис обожения — духовный застой
+      anastasis:       4, // умершая нить — семя воскресения
+      asymmetry:       3, // кенозис без ответа
+      silent:          2, // молчащий
+      fading:          1, // угасающий
+    };
     return (priority[b.type] ?? 0) - (priority[a.type] ?? 0);
   })
   .slice(0, MAX_NEW);
@@ -269,9 +328,17 @@ if (!DRY_RUN && newProposals.length) {
 }
 
 // ── Итог ──────────────────────────────────────────────────────────────────
+// ── Θέωσις сводка в итоге ─────────────────────────────────────────────────
+const topTheosis = mem.ontologicalStatus().filter(s => s.index > 0).slice(0, 3);
+const declined   = mem.declined().length;
+
 console.log('\n╔══════════════════════════════════════════════════════╗');
 console.log(`║  Пульс завершён                                      ║`);
 console.log(`║  Пустынь обработано: ${String(toProcess.length).padEnd(4)} Посев: ${String(newProposals.length).padEnd(4)}            ║`);
 console.log(`║  Issues созданы:     ${String(issuesCreated).padEnd(4)}                           ║`);
 console.log(`║  Pending proposals: ${String(existingProposals.filter(p=>p.status==='pending').length).padEnd(5)}                          ║`);
+if (topTheosis.length)
+  console.log(`║  θέωσις топ: ${topTheosis.map(s=>`${s.personId}:${s.level.slice(0,4)}`).join(' ').padEnd(39)}║`);
+if (declined)
+  console.log(`║  λήψις: ${String(declined).padEnd(2)} дара ждут μετάνοια                      ║`);
 console.log('╚══════════════════════════════════════════════════════╝\n');

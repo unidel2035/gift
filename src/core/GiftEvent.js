@@ -50,6 +50,8 @@ export function createGiftEvent(type, data = {}) {
     _timestamp: new Date().toISOString(),
     // Correlation: link status events to their origin
     _correlationId: data._correlationId || data.id || null,
+    // Богословская аксиома: дар необратим по умолчанию
+    irreversible: data.irreversible ?? true,
     ...data,
   });
   return event;

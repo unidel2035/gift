@@ -332,8 +332,11 @@ class Person {
       throw new Error(`Gift ${giftId} already ${gift.status}`);
     }
 
-    // Freedom consequences: decliner gains energy (self-preservation is legitimate)
-    this._energy = Math.min(100, this._energy + 15);
+    // БОГОСЛОВСКАЯ ПРАВКА: свобода — достоинство, не прибыль.
+    // Богатый юноша «отошёл с печалью» (Мф 19:22) — не с бонусом.
+    // Отклонение не наказывается (это не грех), но и не вознаграждается.
+    // Net zero: энергия не меняется при отклонении.
+    // this._energy += 0;
 
     // Giver gets partial kenosis refund — some kenosis is irreversible
     const giverPerson = this._ctx.persons?.get(gift.giver);

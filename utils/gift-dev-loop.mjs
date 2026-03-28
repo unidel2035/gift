@@ -18,6 +18,10 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// GITHUB_TOKEN из env может быть сломан (CI-токен без прав).
+// Сбрасываем до пустой строки — gh использует собственный keyring.
+const GH_ENV = { ...process.env, GITHUB_TOKEN: '' };
+
 // Claude binary: env var → user new (server) → local nvm → system
 const CLAUDE_BIN = process.env.CLAUDE_BIN
   || (existsSync('/home/new/.local/bin/claude') ? '/home/new/.local/bin/claude' : null)
@@ -27,14 +31,15 @@ const ROOT   = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP   = resolve(ROOT, 'data/sacred-history-W.json');
 const ONCE   = process.argv.includes('--once');
 
-// ── Реестр агентов ─────────────────────────────────────────────────────────
-// Каждый агент — лицо в матрице
+// ── Роли в матрице W ────────────────────────────────────────────────────────
+// Роли, не имена. Каждый — лицо в онтологии дара.
 const AGENTS = {
-  '_claude':   { name: 'Claude',     type: 'llm',      weight: 4 },
-  '_codex':    { name: 'Codex',      type: 'llm',      weight: 3 },
-  '_ci':       { name: 'CI',         type: 'machine',  weight: 2 },
-  '_reviewer': { name: 'Reviewer',   type: 'llm',      weight: 3 },
-  '_external': { name: 'External',   type: 'llm',      weight: 2 },
+  '_executor':   { name: 'Исполнитель', type: 'llm',      weight: 4 },  // реализует дар
+  '_discerner':  { name: 'Различитель', type: 'llm',      weight: 3 },  // проверяет телос
+  '_witness':    { name: 'Свидетель',   type: 'machine',  weight: 2 },  // фиксирует акты
+  '_questioner': { name: 'Вопрошатель', type: 'llm',      weight: 3 },  // рождает вопросы
+  // _claude сохраняется как псевдоним Исполнителя (исторические нити матрицы)
+  '_claude':     { name: 'Исполнитель', type: 'llm',      weight: 4 },
 };
 
 // ── Матрица ────────────────────────────────────────────────────────────────
@@ -61,7 +66,7 @@ function getReadyIssues() {
     // Только issues с plan-approved — план должен быть одобрен Дионисием
     const raw = execSync(
       'gh issue list --label plan-approved --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT }
+      { cwd: ROOT, env: GH_ENV }
     ).toString();
     const approved = JSON.parse(raw);
     if (approved.length) return approved;
@@ -69,16 +74,16 @@ function getReadyIssues() {
     // Fallback: gift-ready без плана → сначала создать план
     const raw2 = execSync(
       'gh issue list --label gift-ready --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT }
+      { cwd: ROOT, env: GH_ENV }
     ).toString();
     const ready = JSON.parse(raw2).filter(i =>
-      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved')
+      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved' || l.name === 'vopros')
     );
     if (ready.length) {
       console.log(`[оркестратор] ${ready.length} issues без плана → генерирую планы сначала`);
       for (const i of ready) {
         spawnSync('node', ['utils/gift-plan.mjs', String(i.number)],
-          { cwd: ROOT, stdio: 'inherit' });
+          { cwd: ROOT, stdio: 'inherit', env: GH_ENV });
       }
       console.log('[оркестратор] Планы созданы. Жду одобрения Дионисия.');
       return []; // не реализуем до одобрения
@@ -91,14 +96,14 @@ function getReadyIssues() {
 
 function assignIssue(number, agent) {
   try {
-    execSync(`gh issue edit ${number} --add-assignee ${agent} 2>/dev/null`, { cwd: ROOT });
+    execSync(`gh issue edit ${number} --add-assignee ${agent} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
   } catch {}
 }
 
 function closeIssue(number, comment) {
   try {
-    execSync(`gh issue comment ${number} --body "${comment}" 2>/dev/null`, { cwd: ROOT });
-    execSync(`gh issue close ${number} 2>/dev/null`, { cwd: ROOT });
+    execSync(`gh issue comment ${number} --body "${comment}" 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
+    execSync(`gh issue close ${number} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
   } catch {}
 }
 
@@ -116,18 +121,6 @@ async function orchestrate() {
   for (const issue of issues) {
     const { number, title, body } = issue;
     console.log(`\n── Issue #${number}: ${title}`);
-
-    // eval: если issue имеет метку eval — запустить gift-eval.mjs (перихоресис агентов)
-    const isEval = issue.labels?.some(l => l.name === 'eval');
-    if (isEval) {
-      console.log(`   Режим eval: запускаю gift-eval.mjs #${number}`);
-      spawnSync('node', ['utils/gift-eval.mjs', String(number), '--plan'],
-        { cwd: ROOT, stdio: 'inherit', timeout: 600_000 });
-      recordAct(mem, '_claude', '_koinon', 'witness',
-        `eval #${number}: агент-перихоресис завершён`, 3, number);
-      saveMem(mem);
-      continue;
-    }
 
     // Выбрать агента (простая эвристика — можно усложнить)
     const agentId = pickAgent(title, body);
@@ -167,12 +160,13 @@ async function orchestrate() {
   console.log(`\n[оркестратор] Готово. Актов: ${mem.actsCount}`);
 }
 
-// ── Выбор агента ──────────────────────────────────────────────────────────
+// ── Выбор роли ────────────────────────────────────────────────────────────
 function pickAgent(title, body = '') {
   const text = (title + ' ' + body).toLowerCase();
-  if (text.includes('тест') || text.includes('test')) return '_ci';
-  if (text.includes('review') || text.includes('проверь')) return '_reviewer';
-  return '_claude'; // по умолчанию
+  if (text.includes('тест') || text.includes('test'))       return '_witness';    // тесты = свидетель
+  if (text.includes('review') || text.includes('проверь'))  return '_discerner';  // проверка = различитель
+  if (text.includes('вопрос') || text.includes('question')) return '_questioner'; // вопросы = вопрошатель
+  return '_executor'; // реализация — роль по умолчанию
 }
 
 // ── Создать PR ────────────────────────────────────────────────────────────
@@ -195,7 +189,8 @@ function createPR(issueNumber, title, summary, agentId) {
     execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
 
     // Создать PR
-    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '')}`;
+    // Заголовок: убрать prefix вопрошания, схлопнуть переносы строк в пробел
+    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '').replace(/\s*\n\s*/g, ' — ').trim()}`.slice(0, 70);
     const prBody = [
       `## Дар`,
       ``,
@@ -206,14 +201,15 @@ function createPR(issueNumber, title, summary, agentId) {
       `**Агент:** ${agentId}`,
       ``,
       `---`,
-      `🤖 Создано [gift-dev-loop.mjs](utils/gift-dev-loop.mjs)`,
+      `Создано gift-dev-loop.mjs`,
     ].join('\n');
 
-    const r = execSync(
-      `gh pr create --title "${prTitle}" --body "${prBody.replace(/"/g, '\\"')}" --head ${branch} --base main`,
-      { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' }
-    );
-    return r.trim();
+    // Передаём title и body как аргументы массива — никаких проблем с кавычками и спецсимволами
+    const r = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', branch, '--base', 'main'], {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (r.status !== 0) throw new Error(r.stderr?.slice(0, 200) || `exit ${r.status}`);
+    return r.stdout.trim();
   } catch (err) {
     console.log(`   ! PR не создан: ${err.message?.slice(0, 100)}`);
     return null;
@@ -222,17 +218,17 @@ function createPR(issueNumber, title, summary, agentId) {
 
 // ── Запуск агента ─────────────────────────────────────────────────────────
 async function runAgent(agentId, issueNumber, title, body) {
-  if (agentId === '_claude') {
+  if (agentId === '_executor' || agentId === '_claude') {
     return runClaudeAgent(issueNumber, title, body);
   }
-  if (agentId === '_ci') {
+  if (agentId === '_witness') {
     return runCIAgent(issueNumber);
   }
-  if (agentId === '_codex') {
-    return runCodexAgent(issueNumber, title, body);
+  if (agentId === '_discerner' || agentId === '_questioner') {
+    // Различитель и Вопрошатель пока делегируют Исполнителю
+    return runClaudeAgent(issueNumber, title, body);
   }
-  // _external и другие: только архитектурные планы, не реализуют код
-  return { success: false, error: `агент ${agentId} ещё не подключён` };
+  return { success: false, error: `роль ${agentId} ещё не подключена` };
 }
 
 async function runClaudeAgent(issueNumber, title, body) {
@@ -309,36 +305,6 @@ async function runCIAgent(issueNumber) {
     });
     if (r.status === 0) return { success: true, summary: 'тесты прошли' };
     return { success: false, error: 'тесты упали' };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
-// ── Кодекс: Claude без богословского контекста ────────────────────────────
-async function runCodexAgent(issueNumber, title, body) {
-  try {
-    const prompt = [
-      `Task: implement GitHub Issue #${issueNumber}`,
-      `Title: ${title}`,
-      body ? `\nDescription:\n${body}` : '',
-      `\nImplement the feature. Commit with: gift(Дионисий): [description] (closes #${issueNumber})`,
-    ].join('');
-
-    const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
-      input: prompt, cwd: ROOT, timeout: 300_000,
-      encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    if (r.error || r.status !== 0) {
-      return { success: false, error: r.error?.message || r.stderr?.slice(0, 200) || `exit ${r.status}` };
-    }
-
-    const test = spawnSync('npm', ['test'], {
-      cwd: ROOT, timeout: 60_000,
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
-    });
-    if (test.status === 0) return { success: true, summary: `issue #${issueNumber} закрыт (_codex)` };
-    return { success: false, error: 'тесты упали после _codex' };
   } catch (e) {
     return { success: false, error: e.message };
   }

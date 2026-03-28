@@ -1,0 +1,409 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/unidel2035/gift/schemas/gift.schema.json",
+  "title": "GiftSpec",
+  "description": "Формальная спецификация .gift файла — онтология дара. Каждый .gift есть исполняемая литургия.",
+  "type": "object",
+  "required": ["kind", "name", "telos"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "description": "Тип спецификации: литургия (литургический акт) или программа (алгоритм дара)",
+      "enum": ["liturgy", "program"]
+    },
+    "name": {
+      "description": "Имя спецификации — идентификатор в матрице",
+      "type": "string",
+      "minLength": 1
+    },
+    "telos": {
+      "description": "Телос (цель) — обязательная богословская цель всей спецификации",
+      "type": "string",
+      "minLength": 1
+    },
+    "imports": {
+      "description": "Ссылки на другие .gift спецификации (использовать X.Y)",
+      "type": "array",
+      "items": { "$ref": "#/definitions/Import" },
+      "default": []
+    },
+    "persons": {
+      "description": "Лица — субъекты дара (не объекты, не функции)",
+      "type": "array",
+      "items": { "$ref": "#/definitions/PersonDef" },
+      "default": []
+    },
+    "gifts": {
+      "description": "Акты дарения — сердце каждой спецификации",
+      "type": "array",
+      "items": { "$ref": "#/definitions/GiftDef" },
+      "default": []
+    },
+    "accepts": {
+      "description": "Принятия даров — преображение через принятие",
+      "type": "array",
+      "items": { "$ref": "#/definitions/AcceptDef" },
+      "default": []
+    },
+    "declines": {
+      "description": "Отклонения даров — свобода отказа",
+      "type": "array",
+      "items": { "$ref": "#/definitions/DeclineDef" },
+      "default": []
+    },
+    "witnesses": {
+      "description": "Свидетельства — апофатические утверждения о реальности",
+      "type": "array",
+      "items": { "$ref": "#/definitions/WitnessDef" },
+      "default": []
+    },
+    "sabbaths": {
+      "description": "Субботы — священный покой лиц",
+      "type": "array",
+      "items": { "$ref": "#/definitions/SabbathDef" },
+      "default": []
+    },
+    "perichoreses": {
+      "description": "Перихоресисы — взаимное проникновение лиц без слияния",
+      "type": "array",
+      "items": { "$ref": "#/definitions/PerichoresisDef" },
+      "default": []
+    },
+    "kenoseis": {
+      "description": "Кенозисы — умаления лиц ради дара",
+      "type": "array",
+      "items": { "$ref": "#/definitions/KenosisDef" },
+      "default": []
+    },
+    "vars": {
+      "description": "Переменные спецификации (let name: type = value)",
+      "type": "array",
+      "items": { "$ref": "#/definitions/VarDef" },
+      "default": []
+    },
+    "covenants": {
+      "description": "Заветы — договоры между лицами",
+      "type": "array",
+      "items": { "$ref": "#/definitions/CovenantDef" },
+      "default": []
+    },
+    "communities": {
+      "description": "Общины — собрания лиц",
+      "type": "array",
+      "items": { "$ref": "#/definitions/CommunityDef" },
+      "default": []
+    },
+    "kairos": {
+      "description": "Кайросы — условные переходы во времени",
+      "type": "array",
+      "items": { "$ref": "#/definitions/KairosDef" },
+      "default": []
+    },
+    "prophecies": {
+      "description": "Пророчества — обещания будущего дара",
+      "type": "array",
+      "items": { "$ref": "#/definitions/ProphecyDef" },
+      "default": []
+    }
+  },
+  "definitions": {
+    "LogosValue": {
+      "description": "Тернарный логос: παρὰ φύσιν (против-природы), κατὰ φύσιν (по-природе), ὑπὲρ φύσιν (выше-природы)",
+      "oneOf": [
+        { "enum": ["para", "kata", "hyper"] },
+        { "enum": ["против-природы", "по-природе", "выше-природы", "невычислимое"] }
+      ]
+    },
+    "EnergyValue": {
+      "description": "Энергия лица: число или 'incalculable' (невычислимое — для Бога)",
+      "oneOf": [
+        { "type": "number", "minimum": 0 },
+        { "enum": ["incalculable", "невычислимое"] }
+      ]
+    },
+    "Import": {
+      "description": "Импорт из другой спецификации: 'Файл.Имя'",
+      "type": "object",
+      "required": ["spec", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "Имя файла спецификации без расширения"
+        },
+        "name": {
+          "type": "string",
+          "description": "Имя импортируемого лица/элемента"
+        }
+      }
+    },
+    "PersonDef": {
+      "description": "Лицо (πρόσωπον) — несводимая уникальность, не экземпляр класса",
+      "type": "object",
+      "required": ["name", "calling"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Уникальное имя лица в матрице"
+        },
+        "calling": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Призвание — онтологическое предназначение лица"
+        },
+        "energy": {
+          "$ref": "#/definitions/EnergyValue"
+        },
+        "logos": {
+          "$ref": "#/definitions/LogosValue"
+        }
+      }
+    },
+    "GiftDef": {
+      "description": "Акт дарения — κένωσις дарителя ради получателя. Необратим.",
+      "type": "object",
+      "required": ["name", "from"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Имя дара — идентификатор акта"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Даритель — лицо, дающее дар"
+        },
+        "to": {
+          "type": "string",
+          "description": "Получатель — лицо, принимающее дар (может быть 'all', '_koinon')"
+        },
+        "through": {
+          "type": "string",
+          "description": "Посредник — лицо через которое передаётся дар (Сын как Логос)"
+        },
+        "content": {
+          "type": "string",
+          "description": "Содержание дара — что именно дарится"
+        },
+        "telos": {
+          "type": "string",
+          "description": "Телос дара — цель этого конкретного акта"
+        },
+        "anamnesis": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Анамнезис — память прошлых даров, делающая настоящее настоящим"
+        }
+      }
+    },
+    "AcceptDef": {
+      "description": "Принятие дара — преображение получателя через принятие",
+      "type": "object",
+      "required": ["giftName"],
+      "additionalProperties": false,
+      "properties": {
+        "giftName": {
+          "type": "string",
+          "description": "Имя принимаемого дара"
+        },
+        "transformation": {
+          "type": "string",
+          "description": "Преображение — что происходит с получателем после принятия"
+        }
+      }
+    },
+    "DeclineDef": {
+      "description": "Отклонение дара — свобода есть условие дара",
+      "type": "object",
+      "required": ["giftName", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "giftName": {
+          "type": "string",
+          "description": "Имя отклоняемого дара"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Причина отклонения"
+        }
+      }
+    },
+    "WitnessDef": {
+      "description": "Свидетельство — апофатическое утверждение, вход в молчание",
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Текст свидетельства"
+        },
+        "incalculable": {
+          "type": "boolean",
+          "description": "Превосходит вычислимое — невычислимое свидетельство",
+          "default": false
+        }
+      }
+    },
+    "SabbathDef": {
+      "description": "Суббота — священный покой. Седьмой день. Не праздность, а полнота.",
+      "type": "object",
+      "required": ["person", "duration", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "type": "string",
+          "description": "Лицо, входящее в покой"
+        },
+        "duration": {
+          "type": "string",
+          "description": "Длительность субботы (7hour, 24hour, eternal...)",
+          "pattern": "^(\\d+(hour|min|day)|eternal)$"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Богословская причина субботы"
+        }
+      }
+    },
+    "PerichoresisDef": {
+      "description": "Перихоресис — взаимное проникновение лиц без слияния (Иоанн Дамаскин)",
+      "type": "object",
+      "required": ["persons"],
+      "additionalProperties": false,
+      "properties": {
+        "persons": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Лица, участвующие в перихоресисе — не менее двух"
+        }
+      }
+    },
+    "KenosisDef": {
+      "description": "Кеносис — умаление (κένωσις) ради дара. Потеря порождает новое бытие.",
+      "type": "object",
+      "required": ["person"],
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "type": "string",
+          "description": "Лицо, совершающее кеносис"
+        }
+      }
+    },
+    "VarDef": {
+      "description": "Переменная спецификации — связывание имени со значением в тернарном пространстве",
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["trit", "number", "string", "boolean"]
+        },
+        "value": {
+          "description": "Значение переменной"
+        }
+      }
+    },
+    "CovenantDef": {
+      "description": "Завет — договор лиц, укоренённый в памяти",
+      "type": "object",
+      "required": ["name", "parties"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Стороны завета — не менее двух лиц"
+        },
+        "content": {
+          "type": "string"
+        },
+        "sign": {
+          "type": "string",
+          "description": "Знак завета — видимый символ невидимого союза"
+        }
+      }
+    },
+    "CommunityDef": {
+      "description": "Община — κοινωνία, общность лиц в даре",
+      "type": "object",
+      "required": ["name", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      }
+    },
+    "KairosDef": {
+      "description": "Кайрос — наполненное время, переходный момент Домостроительства",
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "condition": {
+          "type": "string",
+          "description": "Условие перехода"
+        },
+        "content": {
+          "type": "string"
+        },
+        "telos": {
+          "type": "string"
+        },
+        "anamnesis": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ProphecyDef": {
+      "description": "Пророчество — дар из будущего, брошенный в настоящее",
+      "type": "object",
+      "required": ["name", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Содержание пророчества"
+        },
+        "fulfillment": {
+          "type": "string",
+          "description": "Исполнение — ссылка на акт исполнения"
+        }
+      }
+    }
+  }
+}
