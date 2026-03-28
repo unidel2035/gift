@@ -283,7 +283,7 @@ async function runClaudeAgent(issueNumber, title, body) {
       // Запускаем тесты
       console.log(`   Попытка ${attempt}/${MAX_ATTEMPTS} — запускаю тесты...`);
       const test = spawnSync('npm', ['test'], {
-        cwd: ROOT, timeout: 60_000,
+        cwd: ROOT, timeout: 180_000,
         encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
       });
 
@@ -304,7 +304,7 @@ async function runClaudeAgent(issueNumber, title, body) {
 async function runCIAgent(issueNumber) {
   try {
     const r = spawnSync('npm', ['test'], {
-      cwd: ROOT, timeout: 60_000,
+      cwd: ROOT, timeout: 180_000,
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
     });
     if (r.status === 0) return { success: true, summary: 'тесты прошли' };
