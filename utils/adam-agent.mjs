@@ -72,9 +72,14 @@ export async function adamGenerate(desertDesc, context = []) {
     const data = await res.json();
     const text = (data.message?.content ?? '').trim();
 
-    // Извлекаем вопрошание
-    const m = text.match(/вопрошание:\s*(.+)/i);
-    return m ? `вопрошание: ${m[1].trim()}` : text.split('\n')[0].trim();
+    // Нормализуем: «вопрос:», «вопрошание:», «вопрос — » → единый префикс
+    const m = text.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
+    if (m) return `вопрошание: ${m[1].trim().replace(/\??\s*$/, '?')}`;
+    // Если Адам дал просто вопрос без маркера — оборачиваем
+    const firstLine = text.split('\n')[0].trim();
+    return firstLine.startsWith('вопрошание:')
+      ? firstLine
+      : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
 
   } catch (e) {
     // Адам молчит → формулируем из пустыни механически
