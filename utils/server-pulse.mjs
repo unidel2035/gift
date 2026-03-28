@@ -15,7 +15,7 @@
  *   node utils/server-pulse.mjs --max 3     -- максимум N новых issues
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync, spawnSync } from 'child_process';
@@ -173,6 +173,72 @@ for (const desert of toProcess) {
 }
 
 console.log(`\n[server-pulse] Готово. Создано issues: ${created}. Пустынь в очереди: ${deserts.length - toProcess.length}`);
+
+// ── Анастасис-семена: умершие нити → вопрошания воскресения ───────────────
+// Предложение #15: нить умирает при декадансе — не потеря, а семя.
+// «Если пшеничное зерно, пав в землю, не умрёт, то останется одно» (Ин 12:24).
+// Читаем anastasis.json (лог matrix-decay.mjs) и создаём вопрошания.
+
+const ANASTASIS_PATH = resolve(ROOT, 'data/anastasis.json');
+if (!DRY_RUN && existsSync(ANASTASIS_PATH)) {
+  try {
+    const anastasisLog = JSON.parse(readFileSync(ANASTASIS_PATH, 'utf8'));
+    const lastEntry = Array.isArray(anastasisLog) ? anastasisLog.at(-1) : null;
+    const diedToday = lastEntry?.died ?? [];
+
+    if (diedToday.length > 0) {
+      console.log(`\n[anastasis-семена] Нитей умерло при последнем decay: ${diedToday.length}`);
+      let seedsCreated = 0;
+
+      for (const d of diedToday.slice(0, 2)) {  // не более 2 семян
+        const title = `вопрошание: нить ${d.from}→${d.to} умерла — семя воскресения?`;
+
+        // Не дублировать
+        let alreadyExists = false;
+        for (const t of existingTitles) {
+          if (t.includes(d.from) && t.includes(d.to)) { alreadyExists = true; break; }
+        }
+        if (alreadyExists) continue;
+
+        const body = [
+          `## Анастасис-семя`,
+          ``,
+          `Нить \`${d.from}→${d.to}\` умерла при декадансе матрицы W.`,
+          `Это не потеря — это семя воскресения (Ин 12:24).`,
+          ``,
+          `**Богословское вопрошание:** что могло бы воскресить эту нить?`,
+          `Может быть, новый дар? Новое слово? Новое присутствие?`,
+          ``,
+          `**Задача:** создать specs/sacred-history/${d.from.toLowerCase()}-${d.to.toLowerCase()}-anastasis.gift`,
+          ``,
+          `**Критерии:**`,
+          `- [ ] .gift spec создан с комментарием о воскресении`,
+          `- [ ] W[${d.from}][${d.to}] > 0 после загрузки`,
+          ``,
+          `*matrix-decay.mjs | ${lastEntry?.date ?? new Date().toISOString().slice(0, 10)}*`,
+        ].join('\n');
+
+        const r = spawnSync('gh', ['issue', 'create',
+          '--repo', REPO,
+          '--label', 'gift-ready',
+          '--label', 'anastasis',
+          '--title', title,
+          '--body',  body,
+        ], { encoding: 'utf8', cwd: ROOT, env: GH_ENV });
+
+        if (r.status === 0) {
+          console.log(`  ✓ Семя создано: ${r.stdout.trim()}`);
+          seedsCreated++;
+        }
+      }
+      if (seedsCreated > 0) console.log(`[anastasis-семена] Создано: ${seedsCreated}`);
+    } else {
+      console.log(`\n[anastasis-семена] Умерших нитей нет — матрица растёт.`);
+    }
+  } catch (e) {
+    console.error(`[anastasis-семена] Ошибка: ${e.message}`);
+  }
+}
 
 // ── Гомеостаз: проверить энергию сети ────────────────────────────────────
 
