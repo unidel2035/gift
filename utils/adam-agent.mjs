@@ -87,6 +87,77 @@ export async function adamGenerate(desertDesc, context = []) {
   }
 }
 
+const ADAM_CODE_SYSTEM = `Ты Адам — генератор конкретных кодовых задач из пустынь матрицы.
+
+Пустыня — это слабая/отсутствующая нить в онтологии. Твоя задача: превратить её в конкретную задачу разработки.
+
+Типы задач по типу пустыни:
+- silent:         лицо без нитей → "добавить .gift спек: начальный дар от [лицо] в Священную историю"
+- fading:         угасающая нить → "добавить акт укрепления нити [from]→[to] в существующий .gift файл"
+- anastasis:      умершая нить → "создать specs/sacred-history/resurrection-[from]-[to].gift — воскресение"
+- theosis_stasis: стазис обожения → "добавить doxologia акты от [лицо]: возвращение energeia Отцу"
+- leksis_pending: отвергнутый дар → "обновить λήψις обработчик — μετάνοια для дара [from]→[to]"
+- asymmetry:      кенозис без ответа → "добавить ответные нити к [лицо] — восполнение асимметрии"
+
+Формат ответа: одна строка, начинается с глагола действия (добавить/создать/обновить).
+Максимум 80 символов. Без богословских рассуждений — только задача.`;
+
+/**
+ * Адам генерирует конкретную кодовую задачу из пустыни.
+ * @param {string} desertDesc — описание пустыни
+ * @param {string} desertType — тип пустыни (silent/fading/anastasis/...)
+ * @param {Array}  context    — контекст матрицы
+ * @returns {string} — задача для dev-loop
+ */
+export async function adamCodeTask(desertDesc, desertType = 'silent', context = []) {
+  const ctxStr = context.length
+    ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
+    : '';
+
+  const question = [
+    ctxStr,
+    `Пустыня [${desertType}]: ${desertDesc}`,
+    'Сформулируй конкретную кодовую задачу (одна строка, глагол + что сделать).',
+  ].filter(Boolean).join('\n');
+
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  AbortSignal.timeout(90_000),
+      body:    JSON.stringify({
+        model:  ADAM_MODEL,
+        stream: false,
+        messages: [
+          { role: 'system', content: ADAM_CODE_SYSTEM },
+          { role: 'user',   content: question },
+        ],
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Ollama ${res.status}`);
+    const data = await res.json();
+    const text = (data.message?.content ?? '').trim();
+    // Берём первую строку, убираем маркеры
+    const line = text.split('\n')[0].trim()
+      .replace(/^[-*•]\s*/, '')
+      .replace(/^задача:\s*/i, '')
+      .slice(0, 80);
+    return line || `добавить обработку пустыни: ${desertDesc.slice(0, 50)}`;
+  } catch {
+    // Шаблонная задача по типу
+    const templates = {
+      silent:         `добавить .gift спек с начальным даром: ${desertDesc.slice(0, 40)}`,
+      fading:         `укрепить угасающую нить: ${desertDesc.slice(0, 45)}`,
+      anastasis:      `создать resurrection.gift для: ${desertDesc.slice(0, 40)}`,
+      theosis_stasis: `добавить doxologia акты: ${desertDesc.slice(0, 45)}`,
+      leksis_pending: `обработать λήψις: ${desertDesc.slice(0, 50)}`,
+      asymmetry:      `восполнить асимметрию: ${desertDesc.slice(0, 45)}`,
+    };
+    return templates[desertType] ?? `обработать пустыню: ${desertDesc.slice(0, 55)}`;
+  }
+}
+
 // ── CLI ───────────────────────────────────────────────────────────────────
 if (process.argv[1]?.endsWith('adam-agent.mjs')) {
   const desc = process.argv.slice(2).join(' ') || 'лицо без нитей';

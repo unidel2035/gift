@@ -31,13 +31,31 @@ function nextId(proposals) {
   return proposals.length ? Math.max(...proposals.map(p => p.id)) + 1 : 1;
 }
 
-// ── Ева: текстовый анамнезис (дубликат?) ─────────────────────────────────
-function findDuplicate(proposals, text) {
-  const norm = text.toLowerCase().slice(0, 60);
-  return proposals.find(p =>
-    p.text.toLowerCase().slice(0, 60) === norm ||
-    p.text.toLowerCase().includes(norm.slice(0, 30))
+// ── Ева: семантический анамнезис (Jaccard по значимым словам) ────────────
+function words(s) {
+  return new Set(
+    s.toLowerCase()
+      .replace(/[^\wа-яёa-z]/gi, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3)
   );
+}
+function jaccard(a, b) {
+  const inter = [...a].filter(w => b.has(w)).length;
+  const union = new Set([...a, ...b]).size;
+  return union ? inter / union : 0;
+}
+function findDuplicate(proposals, text) {
+  const newW = words(text);
+  // Проверяем только pending — done уже не блокируют
+  for (const p of proposals.filter(x => x.status === 'pending')) {
+    const sim = Math.max(
+      jaccard(newW, words(p.text)),
+      p.enhanced ? jaccard(newW, words(p.enhanced)) : 0
+    );
+    if (sim > 0.45) return p;
+  }
+  return null;
 }
 
 const cmd  = process.argv[2];

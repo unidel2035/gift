@@ -31,7 +31,7 @@ const SNAP      = resolve(ROOT, 'data/sacred-history-W.json');
 const DRY_RUN   = process.argv.includes('--dry-run');
 const NO_ISSUES = process.argv.includes('--no-issues');
 const maxIdx    = process.argv.indexOf('--max');
-const MAX_NEW   = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 3 : 3;
+const MAX_NEW   = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 10 : 10;
 
 if (!existsSync(SNAP)) {
   console.log('[пульс] Матрица не найдена — онтология ещё не родилась.');
@@ -171,8 +171,8 @@ const existingProposals = ex(PROPOSALS_FILE)
   ? JSON.parse(rf(PROPOSALS_FILE, 'utf8')) : [];
 
 // ── 2-3-4. ВОПРОШАНИЕ → РАЗЛИЧЕНИЕ → ПОСЕВ ───────────────────────────────
-const { adamGenerate }  = await import(resolve(ROOT, 'utils/adam-agent.mjs'));
-const { evaCheck }      = await import(resolve(ROOT, 'utils/eva-agent.mjs'));
+const { adamGenerate, adamCodeTask } = await import(resolve(ROOT, 'utils/adam-agent.mjs'));
+const { evaCheck }                   = await import(resolve(ROOT, 'utils/eva-agent.mjs'));
 
 // Берём топ пустынь для обработки
 const toProcess = deserts
@@ -192,49 +192,80 @@ const toProcess = deserts
 
 const newProposals = [];
 
-for (const desert of toProcess) {
-  console.log(`\n[вопрошание] Адам смотрит на пустыню: ${desert.desc.slice(0, 60)}...`);
+// Типы, которые рождают code-задачи (а не только вопросы)
+const CODE_DESERT_TYPES = new Set(['anastasis', 'theosis_stasis', 'leksis_pending', 'fading']);
 
-  // Адам формулирует
-  const vopros = await adamGenerate(desert.desc, top.slice(0, 5));
-  console.log(`  Адам: "${vopros.slice(0, 80)}"`);
+for (const desert of toProcess) {
+  console.log(`\n[пустыня:${desert.type}] Адам: ${desert.desc.slice(0, 60)}...`);
 
   if (DRY_RUN) {
-    console.log('  [dry-run] Ева и посев пропущены');
+    console.log('  [dry-run] пропущено');
     continue;
   }
 
-  // Ева проверяет
-  console.log(`  Ева проверяет...`);
-  const eva = await evaCheck(vopros, existingProposals);
-  console.log(`  Ева [${eva.verdict.toUpperCase()}]: ${eva.evaResponse.split('\n')[0].slice(0,60)}`);
+  // ── A) Богословское вопрошание (vopros — для рефлексии) ─────────────────
+  const vopros = await adamGenerate(desert.desc, top.slice(0, 5));
+  console.log(`  вопрошание: "${vopros.slice(0, 80)}"`);
 
-  if (eva.verdict === 'отклонено') {
-    console.log('  → Отклонено. Пустыня остаётся.');
-    continue;
+  const evaV = await evaCheck(vopros, existingProposals);
+  console.log(`  Ева [${evaV.verdict.toUpperCase()}]: ${evaV.evaResponse.split('\n')[0].slice(0,55)}`);
+
+  if (evaV.verdict !== 'отклонено') {
+    const maxId = existingProposals.length
+      ? Math.max(...existingProposals.map(p => p.id)) : 0;
+    const pv = {
+      id:          maxId + 1 + newProposals.length,
+      text:        vopros,
+      enhanced:    evaV.enhanced !== vopros ? evaV.enhanced : vopros,
+      telos:       evaV.telos,
+      eva_verdict: evaV.verdict,
+      eva_notes:   evaV.evaResponse,
+      cat:         'self-dev',
+      source:      `pulse:${desert.type}`,
+      kind:        'vopros',    // богословский вопрос
+      status:      'pending',
+      created:     new Date().toISOString(),
+      done_at:     null, issue_number: null,
+    };
+    newProposals.push(pv);
+    existingProposals.push(pv);
+    console.log(`  ✦ vopros #${pv.id}: "${vopros.slice(0, 55)}"`);
+  } else {
+    console.log('  → vopros отклонено (дубликат или пустое)');
   }
 
-  // Посев — добавляем в proposals
-  const maxId = existingProposals.length
-    ? Math.max(...existingProposals.map(p => p.id)) : 0;
+  // ── B) Кодовая задача (code-task — для dev-loop) ─────────────────────────
+  if (CODE_DESERT_TYPES.has(desert.type)) {
+    const codeTask = await adamCodeTask(desert.desc, desert.type, top.slice(0, 5));
+    console.log(`  code-task: "${codeTask.slice(0, 80)}"`);
 
-  const proposal = {
-    id:          maxId + 1 + newProposals.length,
-    text:        vopros,
-    enhanced:    eva.enhanced !== vopros ? eva.enhanced : vopros,
-    telos:       eva.telos,
-    eva_verdict: eva.verdict,
-    eva_notes:   eva.evaResponse,
-    cat:         'self-dev',
-    source:      `pulse:${desert.type}`,  // откуда родилось
-    status:      'pending',
-    created:     new Date().toISOString(),
-    done_at:     null, issue_number: null,
-  };
+    const evaC = await evaCheck(`code-task: ${codeTask}`, existingProposals);
+    console.log(`  Ева [${evaC.verdict.toUpperCase()}]: ${evaC.evaResponse.split('\n')[0].slice(0,55)}`);
 
-  newProposals.push(proposal);
-  existingProposals.push(proposal);
-  console.log(`  ✦ Посев #${proposal.id}: "${vopros.slice(0, 60)}"`);
+    if (evaC.verdict !== 'отклонено') {
+      const maxId2 = existingProposals.length
+        ? Math.max(...existingProposals.map(p => p.id)) : 0;
+      const pc = {
+        id:          maxId2 + 1 + newProposals.length,
+        text:        codeTask,
+        enhanced:    evaC.enhanced.replace(/^code-task:\s*/i, ''),
+        telos:       evaC.telos,
+        eva_verdict: evaC.verdict,
+        eva_notes:   evaC.evaResponse,
+        cat:         'code',
+        source:      `pulse:${desert.type}`,
+        kind:        'code-task',   // реализация для dev-loop
+        status:      'pending',
+        created:     new Date().toISOString(),
+        done_at:     null, issue_number: null,
+      };
+      newProposals.push(pc);
+      existingProposals.push(pc);
+      console.log(`  ✦ code #${pc.id}: "${codeTask.slice(0, 55)}"`);
+    } else {
+      console.log('  → code-task отклонено Евой');
+    }
+  }
 }
 
 // Сохраняем
@@ -254,21 +285,31 @@ if (!DRY_RUN && !NO_ISSUES && newProposals.length) {
   for (const proposal of newProposals) {
     if (proposal.issue_number) continue;
 
-    // Формат из CLAUDE.md: "вопрошание: ..."
+    const isCode = proposal.kind === 'code-task';
+
+    // code-task: обычный заголовок задачи; vopros: "вопрошание: ..."
     const titleBase = (proposal.enhanced ?? proposal.text)
-      .replace(/^вопрошание:\s*/i, '').trim();
-    const title = `вопрошание: ${titleBase}`.slice(0, 70);
+      .replace(/^вопрошание:\s*/i, '')
+      .replace(/^code-task:\s*/i, '')
+      .trim();
+    const title = isCode
+      ? titleBase.slice(0, 70)
+      : `вопрошание: ${titleBase}`.slice(0, 70);
 
     const body = [
       proposal.enhanced ?? proposal.text,
       '',
       `> Источник: пульс онтологии (${proposal.source})`,
-      `> Пустыня: ${proposal.source.replace('pulse:', '')} | Категория: ${proposal.cat}`,
+      `> Пустыня: ${proposal.source.replace('pulse:', '')} | Тип: ${proposal.kind ?? 'vopros'}`,
     ].join('\n');
+
+    // code-task → только gift-ready (dev-loop подберёт)
+    // vopros    → gift-ready + vopros (dev-loop пропустит)
+    const labels = isCode ? ['gift-ready'] : ['gift-ready', 'vopros'];
 
     const result = spawnSync('gh', [
       'issue', 'create',
-      '--label', 'gift-ready',
+      ...labels.flatMap(l => ['--label', l]),
       '--title', title,
       '--body',  body,
     ], { cwd: ROOT, encoding: 'utf8' });
