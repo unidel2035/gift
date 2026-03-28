@@ -219,21 +219,22 @@ export class GiftMemory {
     // ── Нетварные энергии: Троица → тварь ────────────────────────────
     // energeia[di][ci] += weight. Directed, non-symmetric.
     // Палама: тварь участвует в нетварных энергиях через μέθεξις.
-    // Используем persons.indexOf напрямую (не _idx) — чтобы _koinon/_abyss
-    // тоже могли получать energeia без попадания в Хопфилд-W.
+    // persons.indexOf + _idx fallback: _koinon/_abyss используют indexOf
+    // (у них ci уже есть), новые лица — _idx авторегистрирует.
     if (isDivineG && !isDivineR) {
       const di = this._divineIdx(act.giverId);
-      const ci = this.persons.indexOf(act.receiverId);
+      let ci = this.persons.indexOf(act.receiverId);
+      if (ci < 0) ci = this._idx(act.receiverId); // авторегистрация новых тварных лиц
       if (di >= 0 && ci >= 0) this._energeia[di][ci] += w;
       return new Float32Array(this.n);
     }
 
     // ── Doxologia: тварь → Троица ─────────────────────────────────────
     // Ἀναγωγή: молитва, хвала, приношение. Directed.
-    // persons.indexOf напрямую: _koinon (Церковь) может молиться Богу
-    // не будучи Хопфилд-узлом в W.
+    // indexOf + _idx fallback: _koinon — indexOf, новые лица — _idx регистрирует.
     if (!isDivineG && isDivineR) {
-      const ci = this.persons.indexOf(act.giverId);
+      let ci = this.persons.indexOf(act.giverId);
+      if (ci < 0) ci = this._idx(act.giverId); // авторегистрация новых тварных лиц
       const di = this._divineIdx(act.receiverId);
       if (ci >= 0 && di >= 0) this._doxologia[ci][di] += w;
       return new Float32Array(this.n);

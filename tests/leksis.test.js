@@ -56,7 +56,7 @@ test('λήψις: pending дар тоже не попадает в W', () => {
   mem.receive({ giverId: 'Адам', receiverId: 'Ева', type: 'presence', weight: 8,
                 reception: 'pending' });
   assert.strictEqual(mem.thread('Адам', 'Ева'), 0);
-  assert.strictEqual(mem.declined().length, 1);
+  assert.strictEqual(mem.pending().length, 1);  // pending → _pending, не _declined
 });
 
 // ── 2. actsCount считает отвергнутые ─────────────────────────────────────
