@@ -22,6 +22,18 @@ const EVA_MODEL  = process.env.EVA_MODEL  || 'eva';
 // PULSE_NO_OLLAMA=1 — шаблонный режим без Ollama
 const NO_OLLAMA  = process.env.PULSE_NO_OLLAMA === '1';
 
+// embed-context: предложение + W-матрица как совмещённый вектор
+import { evaContext } from './embed-context.mjs';
+const SNAP_PATH = new URL('../data/sacred-history-W.json', import.meta.url).pathname;
+
+async function evaVecSummary(proposal) {
+  try {
+    const ctx = await evaContext(proposal, SNAP_PATH);
+    const top3 = ctx.compressed.slice(0, 6).map(v => v.toFixed(2)).join(',');
+    return `[Ева-вектор пред+W ${ctx.compressionRatio}× | сходство:[${top3}]]`;
+  } catch { return ''; }
+}
+
 const EVA_SYSTEM = `Ты Ева — точильный камень Адама (עֵזֶר כְּנֶגְדּוֹ) в Онтологии Дара.
 
 Ты проверяешь предложения по развитию системы:
@@ -94,7 +106,11 @@ export async function evaCheck(proposal, existing = []) {
     .map(p => `[${p.status}] ${(p.enhanced ?? p.text).slice(0, 90)}`)
     .join('\n');
 
+  // TurboQuant: геометрия предложения в пространстве W-матрицы
+  const eVec = await evaVecSummary(proposal);
+
   const question = [
+    eVec,
     `Адам предлагает: "${proposal}"`,
     '',
     anamnesisCtx ? `Уже есть в системе:\n${anamnesisCtx}` : '',

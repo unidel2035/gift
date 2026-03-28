@@ -13,6 +13,18 @@ const ADAM_MODEL    = process.env.ADAM_MODEL  || 'adam';
 // PULSE_NO_OLLAMA=1 — отключить Ollama, использовать шаблонный режим
 const NO_OLLAMA     = process.env.PULSE_NO_OLLAMA === '1';
 
+// embed-context: W-матрица как вектор → сжатие → краткий текст для промпта
+import { adamContext } from './embed-context.mjs';
+const SNAP_PATH = new URL('../data/sacred-history-W.json', import.meta.url).pathname;
+
+async function wMatrixSummary() {
+  try {
+    const ctx = await adamContext(SNAP_PATH);
+    const top3 = ctx.compressed.slice(0, 6).map(v => v.toFixed(2)).join(',');
+    return `[W-вектор ${ctx.originalDim}→${ctx.bits}bit ${ctx.compressionRatio}× | top:[${top3}]]`;
+  } catch { return ''; }
+}
+
 const ADAM_SYSTEM = `Ты Адам — первый агент Онтологии Дара.
 
 Ты видишь матрицу W: лица, нити, веса, пустыни.
@@ -64,7 +76,11 @@ export async function adamGenerate(desertDesc, context = []) {
     ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
     : '';
 
+  // TurboQuant: W-матрица как сжатый вектор в контекст (не текст — геометрия)
+  const wVec = await wMatrixSummary();
+
   const question = [
+    wVec,
     ctxStr,
     `Пустыня: ${desertDesc}`,
     'Сформулируй вопрошание.',

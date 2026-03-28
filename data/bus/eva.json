@@ -1,0 +1,14 @@
+[
+  {
+    "id": "1774734423004-xxdo",
+    "from": "adam",
+    "fromDID": "did:gift:adam",
+    "to": "eva",
+    "toDID": "did:gift:eva",
+    "type": "voproshaniye",
+    "content": "вопрошание: тест шины — дошло ли?",
+    "meta": {},
+    "ts": "2026-03-28T21:47:03.004Z",
+    "irreversible": true
+  }
+]
