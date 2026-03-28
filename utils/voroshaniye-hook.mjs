@@ -143,6 +143,22 @@ if (existsSync(SNAP)) {
     });
 
     writeFileSync(SNAP, JSON.stringify(mem.snapshot(), null, 2));
+
+    // Act-index: фиксируем вопрошание Дионисия
+    const ACT_INDEX = resolve(ROOT, 'data/act-index.json');
+    const actLog = existsSync(ACT_INDEX) ? JSON.parse(readFileSync(ACT_INDEX, 'utf8')) : [];
+    actLog.push({
+      ts:          new Date().toISOString(),
+      from:        giver,
+      to:          '_claude',
+      type:        'direction',
+      weight:      8,
+      content:     prompt.slice(0, 160),
+      linkedIssue: issueNumber ?? null,
+      issueUrl:    issueUrl || null,
+    });
+    if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
+    writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
   } catch { /* TF не загрузился */ }
 }
 

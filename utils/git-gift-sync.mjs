@@ -62,5 +62,23 @@ const snap = mem.snapshot();
 if (!existsSync(resolve(ROOT, 'data'))) mkdirSync(resolve(ROOT, 'data'));
 writeFileSync(SNAP, JSON.stringify(snap, null, 2));
 
+// ── Act-index: локальный журнал актов с провенансом ───────────────────────
+const ACT_INDEX = resolve(ROOT, 'data/act-index.json');
+const actLog = existsSync(ACT_INDEX) ? JSON.parse(readFileSync(ACT_INDEX, 'utf8')) : [];
+let commitHash = '';
+try { commitHash = execSync('git log -1 --pretty=%H', { cwd: ROOT }).toString().trim().slice(0, 12); } catch {}
+actLog.push({
+  ts:          new Date().toISOString(),
+  from:        '_claude',
+  to:          receiver,
+  type:        'code',
+  weight:      4,
+  content:     description,
+  linkedIssue: linkedIssue ?? null,
+  commit:      commitHash,
+});
+if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
+writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
+
 console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
 console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);
