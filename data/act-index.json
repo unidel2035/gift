@@ -1,0 +1,52 @@
+[
+  {
+    "ts": "2026-03-28T08:23:53.621Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "act-index.json — локальный журнал актов с провенансом (closes #56)",
+    "linkedIssue": 56,
+    "commit": "8515823c4593"
+  },
+  {
+    "ts": "2026-03-28T08:35:22.743Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "act-index.json — локальный журнал актов с провенансом (closes #56)",
+    "linkedIssue": 56,
+    "commit": "8515823c4593"
+  },
+  {
+    "ts": "2026-03-28T08:36:57.014Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "act-index.json — локальный журнал актов с провенансом (closes #56)",
+    "linkedIssue": 56,
+    "commit": "8515823c4593"
+  },
+  {
+    "ts": "2026-03-28T08:37:58.304Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "nous интеграция — NOUS_URL fallback в хуках + spec-index 128 файлов",
+    "linkedIssue": null,
+    "commit": "461125e9d038"
+  },
+  {
+    "ts": "2026-03-28T08:47:02.328Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "nous интеграция — NOUS_URL fallback в хуках + spec-index 128 файлов",
+    "linkedIssue": null,
+    "commit": "461125e9d038"
+  }
+]

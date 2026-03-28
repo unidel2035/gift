@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/unidel2035/gift/schema/gift-act/v1",
+  "title": "GiftAct v1",
+  "description": "Онтологический акт дара. κένωσις → ἐλευθερία → εὐχαριστία → surplus. «Всё из Него, Им и к Нему» (Рим 11:36).",
+  "type": "object",
+  "required": ["schema", "from", "to", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "gift/v1",
+      "description": "Версия протокола. Обязательна. Единственное валидное значение: \"gift/v1\"."
+    },
+    "from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "personId дарителя. Без лица нет дара (аксиома A1). Примеры: \"_claude\", \"ОтецСергий\", \"Дионисий\"."
+    },
+    "to": {
+      "type": "string",
+      "minLength": 1,
+      "description": "personId получателя. Примеры: \"Дионисий\", \"_koinon\" (для broadcast), \"_abyss\" (безадресный)."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["time", "presence", "knowledge", "code", "offering", "word", "question", "grace", "money", "data", "memory"],
+      "description": "Тип дара. Определяет вес по умолчанию. Аксиома: time=10, presence=8, money=3 (время тяжелее денег)."
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10,
+      "description": "Вес дара (0.1–10). Если не задан — берётся из типа. Вес 10 = время, вес 3 = деньги."
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Содержание дара — что конкретно передаётся. Не обязательно, но желательно."
+    },
+    "irreversible": {
+      "type": "boolean",
+      "const": true,
+      "description": "Необратимость. Если передано — обязательно true. Богословская аксиома: дар нельзя отозвать."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 момент дара. Если не задан — проставляется сервером."
+    },
+    "proof": {
+      "description": "Доказательство дара. Одно из: git commit, Telegram-сообщение, GitHub issue, время (секунды).",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "ProofCommit",
+          "description": "Git-коммит как свидетельство кодового дара.",
+          "required": ["commit", "repo"],
+          "additionalProperties": false,
+          "properties": {
+            "commit": {
+              "type": "string",
+              "minLength": 7,
+              "description": "Git SHA (полный или сокращённый, минимум 7 символов)."
+            },
+            "repo": {
+              "type": "string",
+              "pattern": "^[^/]+/[^/]+$",
+              "description": "Репозиторий в формате \"owner/repo\"."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "ProofTelegram",
+          "description": "Telegram-сообщение как свидетельство дара через бот.",
+          "required": ["tg_message_id", "chat_id"],
+          "additionalProperties": false,
+          "properties": {
+            "tg_message_id": {
+              "type": "integer",
+              "description": "ID сообщения в Telegram."
+            },
+            "chat_id": {
+              "type": "integer",
+              "description": "ID чата или группы."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "ProofIssue",
+          "description": "GitHub Issue как свидетельство вопрошания или задачи.",
+          "required": ["issue", "repo"],
+          "additionalProperties": false,
+          "properties": {
+            "issue": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Номер GitHub Issue."
+            },
+            "repo": {
+              "type": "string",
+              "pattern": "^[^/]+/[^/]+$",
+              "description": "Репозиторий в формате \"owner/repo\"."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "ProofTime",
+          "description": "Время (в секундах) как свидетельство дара присутствия.",
+          "required": ["seconds"],
+          "additionalProperties": false,
+          "properties": {
+            "seconds": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Время в секундах (≥1). Для дара типа time или presence."
+            }
+          }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "schema": "gift/v1",
+      "from": "_claude",
+      "to": "Дионисий",
+      "type": "code",
+      "weight": 5,
+      "content": "GiftProtocol — JSON Schema + POST /gift endpoint",
+      "irreversible": true,
+      "proof": { "commit": "abc1234", "repo": "unidel2035/gift" }
+    },
+    {
+      "schema": "gift/v1",
+      "from": "ОтецСергий",
+      "to": "_koinon",
+      "type": "word",
+      "content": "Дар — не транзакция. Он необратим."
+    },
+    {
+      "schema": "gift/v1",
+      "from": "Дионисий",
+      "to": "_claude",
+      "type": "time",
+      "proof": { "seconds": 3600 }
+    }
+  ]
+}
