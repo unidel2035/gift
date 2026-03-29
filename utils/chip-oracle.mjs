@@ -40,7 +40,8 @@ const SNAP = resolve(ROOT, 'data/sacred-history-W.json');
 const args    = process.argv.slice(2);
 const giver   = args.includes('--giver')    ? args[args.indexOf('--giver') + 1]    : '_claude';
 const receiver= args.includes('--receiver') ? args[args.indexOf('--receiver') + 1] : 'Дионисий';
-const wsUrl   = args.includes('--ws')       ? args[args.indexOf('--ws') + 1]       : 'ws://localhost:8182';
+const wsUrl   = args.includes('--ws')       ? args[args.indexOf('--ws') + 1]       : 'ws://localhost:3701';
+const uartPort= args.includes('--port')     ? args[args.indexOf('--port') + 1]     : '/dev/ttyUSB1';
 const dry     = args.includes('--dry');
 
 // ── Матрица ───────────────────────────────────────────────────────
@@ -93,52 +94,25 @@ if (dry) {
   process.exit(0);
 }
 
-// ── WebSocket диалог с чипом ─────────────────────────────────────
-let wsModule;
-try {
-  wsModule = await import('ws');
-} catch {
-  console.error('[oracle] Нет пакета ws: npm install ws');
-  process.exit(1);
-}
-const WS = wsModule.default || wsModule.WebSocket;
+// ── Прямой UART диалог с чипом (через Python) ──────────────────
+import { spawn } from 'child_process';
 
-const answer = await new Promise((resolve, reject) => {
-  const sock = new WS(wsUrl);
-  const responses = [];
-  let timeout;
+console.log(`[oracle] UART → ${uartPort}`);
 
-  sock.on('open', () => {
-    console.log(`[oracle] WS → ${wsUrl}`);
-    // Установить X
-    X.forEach((t, i) => {
-      sock.send(JSON.stringify({ cmd: `x ${i} ${tritChar(t)}` }));
-    });
-    // Запрос результата
-    setTimeout(() => sock.send(JSON.stringify({ cmd: '?' })), 300);
-    // Ждём ответ
-    timeout = setTimeout(() => {
-      sock.close();
-      resolve(null); // таймаут — нет ответа
-    }, 3000);
-  });
-
-  sock.on('message', d => {
+const answer = await new Promise((done) => {
+  const pyScript = resolve(ROOT, 'utils/chip-oracle-uart.py');
+  const proc = spawn('python3', [pyScript, uartPort, String(X[0]), String(X[1]), String(X[2])]);
+  let out = '';
+  proc.stdout.on('data', d => { out += d.toString(); });
+  proc.stderr.on('data', () => {});
+  proc.on('close', () => {
     try {
-      const msg = JSON.parse(d);
-      if (msg.type === 'uart' && msg.module === 'tritmlp') {
-        clearTimeout(timeout);
-        responses.push(msg);
-        if (msg.y) {
-          sock.close();
-          resolve(msg);
-        }
-      }
-    } catch {}
+      const result = JSON.parse(out.trim());
+      if (result.error) { console.error('[oracle] Python ошибка:', result.error); done(null); }
+      else done({ type: 'fpga', raw: result.raw, y: result.y });
+    } catch { done(null); }
   });
-
-  sock.on('error', e => { console.error('[oracle] WS ошибка:', e.message); resolve(null); });
-  sock.on('close', () => { if (!responses.length) resolve(null); });
+  setTimeout(() => { proc.kill(); done(null); }, 5000);
 });
 
 // ── Интерпретация ответа ────────────────────────────────────────
@@ -179,9 +153,8 @@ function interpretY(Y, simulated) {
   console.log(`  Источник: ${simulated ? 'JS-симуляция' : 'Tang Nano 9K'}`);
 
   // Записать акт в матрицу
-  const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js')).then(m => m);
-  // (уже загружена выше через 'mem')
-  mem.addAct({
+  // (GiftMemory уже загружена выше через 'mem')
+  mem.receive({
     giverId:    '_fpga',
     receiverId: '_koinon',
     type:       'oracle',
