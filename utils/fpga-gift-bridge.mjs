@@ -22,7 +22,7 @@
  *   Клиент шлёт: {"cmd":"+"}  — FSM шаг или любая UART команда
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, watchFile, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -355,60 +355,85 @@ async function initFPGA(fpga, edges) {
 // Анамнезис: поллинг fpga-command актов
 // ─────────────────────────────────────────────────────────────────────────────
 
-let lastTapeTs = 0;
+let lastTapeId   = 0;      // последний обработанный id акта в ленте
+let lastSnapMtime = 0;     // mtime снапшота W-матрицы для детектирования изменений
 
+// ── Поллинг анамнезиса: /tape → fpga-command акты ────────────────────────────
 async function pollAnamnesis(fpga) {
   try {
-    const r = await fetch(`${ANAMNESIS}/ tape`, { signal: AbortSignal.timeout(4000) });
+    const r = await fetch(`${ANAMNESIS}/tape`, { signal: AbortSignal.timeout(4000) });
     if (!r.ok) return;
     const tape = await r.json();
     const acts = Array.isArray(tape) ? tape : (tape.acts || []);
 
     for (const act of acts) {
-      // Только новые fpga-command акты
-      const ts = new Date(act.ts || act.createdAt || 0).getTime();
-      if (ts <= lastTapeTs) continue;
-      if (act.type !== 'fpga-command') continue;
+      const id = act.id || 0;
+      if (id <= lastTapeId) continue;
+      lastTapeId = Math.max(lastTapeId, id);
 
-      lastTapeTs = ts;
-      const cmd = act.payload?.cmd || act.cmd || '';
-      if (!cmd) continue;
-
-      console.log(`  [anamnesis] fpga-command: "${cmd}" от ${act.giver || '?'}`);
-
-      // Маршрутизация команды на FPGA
-      if (cmd === '+' || cmd === '-' || cmd === '0') {
-        fpga.send(cmd);
-      } else if (cmd === '?' || cmd === 'T' || cmd === 'r') {
-        fpga.send(cmd);
-      } else if (cmd.startsWith('W ')) {
-        // "W 3 0 10 9" → WMem[3] = from:0 to:10 weight:9
-        const parts = cmd.split(' ').map(Number);
-        if (parts.length >= 5) fpga.sendW(parts[1], parts[2], parts[3], parts[4]);
-      } else if (cmd.startsWith('Q ')) {
-        const idx = parseInt(cmd.split(' ')[1]);
-        fpga.sendQ(idx);
+      // fpga-command — команда чипу
+      if (act.type === 'fpga-command') {
+        const cmd = act.content || act.payload?.cmd || '';
+        if (!cmd) continue;
+        console.log(`  [anamnesis→chip] "${cmd}"`);
+        if (['+', '-', '0', '?', 'T', 'r'].includes(cmd)) {
+          fpga.send(cmd);
+        } else if (cmd.startsWith('W ')) {
+          const parts = cmd.split(' ').map(Number);
+          if (parts.length >= 5) fpga.sendW(parts[1], parts[2], parts[3], parts[4]);
+        } else if (cmd.startsWith('Q ')) {
+          fpga.sendQ(parseInt(cmd.split(' ')[1]));
+        }
       }
     }
-  } catch {
-    // сеть недоступна — не критично
-  }
+  } catch { /* сеть недоступна — не критично */ }
 }
 
-async function publishResult(fpga, text) {
+// ── Публикация ответа чипа → анамнезис ───────────────────────────────────────
+async function publishToAnamnesis(text, type = 'fpga-result') {
   try {
     await fetch(`${ANAMNESIS}/gift`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(3000),
       body: JSON.stringify({
-        type:    'fpga-result',
-        giver:   '_fpga',
-        receiver:'_koinon',
-        payload: { text, mode: demo ? 'demo' : 'uart' },
+        type,
+        content: `_fpga→_koinon: ${text}`,  // giver/receiver в content (сервер игнорирует from/to)
+        weight: 1,
       }),
     });
   } catch { /* сеть недоступна */ }
+}
+
+// ── Детектор изменений W-матрицы → reload WMem ───────────────────────────────
+const SNAP_PATHS = [
+  join(ROOT, 'data', 'snapshots', 'W-2026-W13.json'),
+  join(ROOT, 'data', 'W-prev.json'),
+  join(ROOT, 'data', 'sacred-history-W.json'),
+];
+
+function watchWMatrix(fpga) {
+  const snapPath = SNAP_PATHS.find(p => existsSync(p));
+  if (!snapPath) return;
+
+  lastSnapMtime = statSync(snapPath).mtimeMs;
+
+  watchFile(snapPath, { interval: 10000 }, (curr) => {
+    if (curr.mtimeMs <= lastSnapMtime) return;
+    lastSnapMtime = curr.mtimeMs;
+    console.log('  [W-матрица] изменение обнаружено → перезагрузка WMem...');
+    try {
+      const edges = loadTopEdges(16);
+      for (const e of edges) {
+        fpga.sendW(e.idx, e.from, e.to, e.weight);
+      }
+      console.log(`  [W-матрица] WMem обновлён: ${edges.length} нитей`);
+      publishToAnamnesis(`WMem reload: ${edges[0]?.fromName}→${edges[0]?.toName} w=${edges[0]?.weight}`, 'fpga-wmem-reload');
+    } catch (e) {
+      console.error('  [W-матрица] ошибка reload:', e.message);
+    }
+  });
+  console.log(`  W-матрица: слежу за ${snapPath.split('/').pop()}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,19 +543,17 @@ async function main() {
     const text = resp.replace(/[\r\n]+$/, '');
     console.log(`  [fpga←] ${text}`);
 
-    // Публикуем в анамнезис
-    publishResult(fpga, text);
+    // Парсим FSM переходы для публикации значимых актов
+    const isFSM  = text.startsWith('F:');
+    const isSts  = text.startsWith('S:');
+    if (isFSM || isSts) {
+      publishToAnamnesis(text, isFSM ? 'fsm-transition' : 'fpga-status');
+    }
 
-    // Рассылаем через WebSocket
+    // WebSocket broadcast
     if (wsClients.size > 0) {
       const state = fpga.getState();
-      wsBroadcast({
-        type: 'fpga',
-        raw:  text,
-        fsm:  state.fsm,
-        cpu:  state.cpu,
-        ts:   Date.now(),
-      });
+      wsBroadcast({ type: 'fpga', raw: text, fsm: state.fsm, cpu: state.cpu, ts: Date.now() });
     }
   });
 
@@ -547,6 +570,9 @@ async function main() {
   if (edges.length > 0) {
     await initFPGA(fpga, edges);
   }
+
+  // Слежение за изменениями W-матрицы
+  watchWMatrix(fpga);
 
   // Периодические операции
   let tick = 0;
