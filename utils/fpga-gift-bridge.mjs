@@ -8,7 +8,7 @@
  *
  * Запуск:
  *   node utils/fpga-gift-bridge.mjs           # демо-режим (без чипа)
- *   node utils/fpga-gift-bridge.mjs --port /dev/ttyUSB0  # реальный чип
+ *   node utils/fpga-gift-bridge.mjs --port /dev/ttyUSB1  # реальный чип
  *   node utils/fpga-gift-bridge.mjs --ws      # + WebSocket сервер :3701
  *
  * Протокол UART (tritgift.v):
@@ -18,8 +18,14 @@
  *   'T'                 → топ нить WMem
  *
  * WebSocket :3701 — для портала:
- *   Сервер шлёт: {"type":"status","fsm":"L","cpu":"A:+00 B:000 C:000","top":"0A->10 +D","ts":...}
+ *   Сервер шлёт: {"type":"status","fsm":"Z","cpu":"A:+00 B:000 C:000",...}
  *   Клиент шлёт: {"cmd":"+"}  — FSM шаг или любая UART команда
+ *
+ * Анамнезис-протокол (content-based, т.к. сервер снимает meta):
+ *   fsm-command:  content = '+' | '-' | '0'
+ *   fpga-command: content = '5 + 3' | '! 7' | '-4 * 3'
+ *   fsm-state:    content = 'Z→P cmd=<actId>'  (бот парсит)
+ *   fpga-result:  content = '8 cmd=<actId>'     (бот парсит)
  */
 
 import { readFileSync, existsSync, watchFile, statSync } from 'node:fs';
@@ -27,6 +33,7 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT   = join(__dir, '..');
@@ -45,7 +52,6 @@ const demo    = !uartPort;
 
 /**
  * Перевести вес из W-матрицы в тритный int [-13..+13].
- * Все W-веса положительные → диапазон [0..+13].
  */
 function encodeWeight(w, maxW) {
   if (maxW <= 0) return 0;
@@ -53,23 +59,60 @@ function encodeWeight(w, maxW) {
 }
 
 /**
+ * Конвертировать int [-13..+13] в 3-тритную строку '+++', '+--' и т.д.
+ * Веса позиций: 9, 3, 1 (как в tritgift.v).
+ */
+function toTritStr(v) {
+  v = Math.max(-13, Math.min(13, v));
+  const places = [9, 3, 1];
+  const trits  = [0, 0, 0];
+  let rem = v;
+  for (let i = 0; i < 3; i++) {
+    let t = Math.round(rem / places[i]);
+    t = Math.max(-1, Math.min(1, t));
+    trits[i] = t;
+    rem -= t * places[i];
+  }
+  return trits.map(t => t > 0 ? '+' : t < 0 ? '-' : '0').join('');
+}
+
+/**
+ * Декодировать 3-тритную строку обратно в int.
+ * '+--' → 9-3-1 = 5
+ */
+function decodeTrit3(s) {
+  const places = [9, 3, 1];
+  let result = 0;
+  for (let i = 0; i < 3; i++) {
+    const c = s[i] || '0';
+    result += (c === '+' ? 1 : c === '-' ? -1 : 0) * places[i];
+  }
+  return result;
+}
+
+/**
+ * Перевести состояние чипа (K/P/L) в нотацию бота (K/Z/P) и обратно.
+ * Чип: K=KEN(-1), P=PRS(0), L=PLR(+1)
+ * Бот: K=KEN(-1), Z=PRS(0), P=PLR(+1)
+ */
+const CHIP_TO_BOT = { K: 'K', P: 'Z', L: 'P' };
+
+/**
  * Загрузить W-матрицу и вернуть топ-16 нитей.
- * Формат: [{idx, from, to, weight, fromName, toName}]
  */
 function loadTopEdges(n = 16) {
-  // Использовать самый полный снапшот из имеющихся
   const candidates = [
     join(ROOT, 'data', 'snapshots', 'W-2026-W13.json'),
     join(ROOT, 'data', 'W-prev.json'),
     join(ROOT, 'data', 'sacred-history-W.json'),
   ];
   const snapPath = candidates.find(p => existsSync(p));
+  if (!snapPath) throw new Error('Снапшот W-матрицы не найден');
   const snap = JSON.parse(readFileSync(snapPath, 'utf8'));
-  const W       = snap.W;       // 2D массив [n][n]
-  const persons = snap.persons; // ['_claude', '_koinon', ...]
+  const W       = snap.W;
+  const persons = snap.persons;
   const size    = W.length;
 
-  // Собрать все значимые нити (w > 0.5)
   const edges = [];
   for (let i = 0; i < size; i++) {
     for (let j = 0; j < size; j++) {
@@ -100,50 +143,47 @@ function loadTopEdges(n = 16) {
 
 class FPGADemo {
   constructor() {
-    // FSM: -1=KEN, 0=PRS, +1=PLR (как в tritgift.v, 2-bit signed)
-    this.fsm  = 0;
-    this.fsmH = [0, 0, 0]; // история 3
-
-    // CPU: 3-тритные регистры (значение -13..+13)
+    this.fsm  = 0;   // -1=KEN, 0=PRS, +1=PLR
+    this.fsmH = [0, 0, 0];
     this.regA   = 0;
     this.regB   = 0;
     this.regAcc = 0;
-
-    // WMem: 16 нитей
     this.wmem = Array.from({length:16}, () => ({from:0, to:0, w:0}));
-
     this._onResponse = null;
+    this._waiters = [];  // {resolve, reject, timer}
   }
 
   onResponse(cb) { this._onResponse = cb; }
 
-  _emit(msg) { if (this._onResponse) this._onResponse(msg); }
+  _emit(msg) {
+    // Сначала отдать ожидающим nextResponse()
+    if (this._waiters.length > 0) {
+      const w = this._waiters.shift();
+      clearTimeout(w.timer);
+      w.resolve(msg.replace(/[\r\n]+$/, ''));
+    }
+    // Затем постоянный обработчик
+    if (this._onResponse) this._onResponse(msg);
+  }
 
-  // Тритная арифметика: сложение 3-тритных int с насыщением
+  /** Ожидать следующий ответ чипа (промис). */
+  nextResponse(timeout = 3000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = this._waiters.findIndex(w => w.resolve === resolve);
+        if (idx >= 0) this._waiters.splice(idx, 1);
+        reject(new Error('FPGA response timeout'));
+      }, timeout);
+      this._waiters.push({ resolve, reject, timer });
+    });
+  }
+
   _clamp(v) { return Math.max(-13, Math.min(13, v)); }
-  _tritAdd(a, b) { return this._clamp(a + b); }
-  _tritSub(a, b) { return this._clamp(a - b); }
-  _tritMul3(a, b) {
-    // Потритное умножение: каждый трит * соответствующий
-    // Для простоты: знаковое произведение насыщенное
-    return this._clamp(Math.sign(a) * Math.sign(b) * Math.min(Math.abs(a), Math.abs(b)));
-  }
-  _tritNot(a) { return this._clamp(-a); }
-  _tritAnd(a, b) { return Math.min(a, b); }  // min
-  _tritOr(a,  b) { return Math.max(a, b); }  // max
-
-  // Символы
   _fsmChar() { return this.fsm === -1 ? 'K' : this.fsm === 0 ? 'P' : 'L'; }
-  _tritStr(v) {
-    const t0 = v < 0 ? '-' : v > 0 ? '+' : '0';
-    return t0 + t0 + t0; // упрощённо (3 одинаковых знака — демо)
-    // TODO: полная тритная декомпозиция
-  }
-  _cpuStr() {
-    return `A:${this._tritStr(this.regA)} B:${this._tritStr(this.regB)} C:${this._tritStr(this.regAcc)}`;
+  _cpuStr()  {
+    return `A:${toTritStr(this.regA)} B:${toTritStr(this.regB)} C:${toTritStr(this.regAcc)}`;
   }
 
-  /** Отправить команду (байт или строка) */
   send(cmd) {
     const c = typeof cmd === 'number' ? String.fromCharCode(cmd) : cmd[0];
     switch (c) {
@@ -158,13 +198,13 @@ class FPGADemo {
       case 'A': this.regA = this._clamp(this.regA - 1);    this._emit(this._cpuStr()+'\r\n'); break;
       case 'b': this.regB = this._clamp(this.regB + 1);    this._emit(this._cpuStr()+'\r\n'); break;
       case 'B': this.regB = this._clamp(this.regB - 1);    this._emit(this._cpuStr()+'\r\n'); break;
-      case 's': this.regAcc = this._tritAdd(this.regA, this.regB); this._emit(this._cpuStr()+'\r\n'); break;
-      case 'd': this.regAcc = this._tritSub(this.regA, this.regB); this._emit(this._cpuStr()+'\r\n'); break;
-      case '*': this.regAcc = this._tritMul3(this.regA, this.regB);this._emit(this._cpuStr()+'\r\n'); break;
-      case '&': this.regAcc = this._tritAnd(this.regA, this.regB); this._emit(this._cpuStr()+'\r\n'); break;
-      case '|': this.regAcc = this._tritOr(this.regA, this.regB);  this._emit(this._cpuStr()+'\r\n'); break;
-      case '!': this.regAcc = this._tritNot(this.regA);             this._emit(this._cpuStr()+'\r\n'); break;
-      case '=': this.regA = this.regAcc;                             this._emit(this._cpuStr()+'\r\n'); break;
+      case 's': this.regAcc = this._clamp(this.regA + this.regB); this._emit(this._cpuStr()+'\r\n'); break;
+      case 'd': this.regAcc = this._clamp(this.regA - this.regB); this._emit(this._cpuStr()+'\r\n'); break;
+      case '*': this.regAcc = this._clamp(Math.sign(this.regA)*Math.sign(this.regB)*Math.min(Math.abs(this.regA),Math.abs(this.regB))); this._emit(this._cpuStr()+'\r\n'); break;
+      case '&': this.regAcc = Math.min(this.regA, this.regB); this._emit(this._cpuStr()+'\r\n'); break;
+      case '|': this.regAcc = Math.max(this.regA, this.regB); this._emit(this._cpuStr()+'\r\n'); break;
+      case '!': this.regAcc = this._clamp(-this.regA);         this._emit(this._cpuStr()+'\r\n'); break;
+      case '=': this.regA = this.regAcc;                        this._emit(this._cpuStr()+'\r\n'); break;
       case 'r': this.regA=0;this.regB=0;this.regAcc=0;this.fsm=0;this.fsmH=[0,0,0];
                 this._emit(`S:P A:000 B:000 C:000\r\n`); break;
       case '?': this._emit(`S:${this._fsmChar()} ${this._cpuStr()}\r\n`); break;
@@ -175,21 +215,15 @@ class FPGADemo {
         this._emit(`T:${hex2(top.e.from)}->${hex2(top.e.to)} ${sign}${hex}\r\n`);
         break;
       }
-      case 'W': {
-        // 'W' + idx + from + to + val (многобайтовая команда в демо — через sendW)
-        break;
-      }
     }
   }
 
-  /** Записать нить WMem (обход многобайтового протокола) */
   sendW(idx, from, to, weight) {
     if (idx < 0 || idx > 15) return;
     this.wmem[idx] = { from, to, w: weight };
     this._emit('OK\r\n');
   }
 
-  /** Запросить нить WMem */
   sendQ(idx) {
     const e = this.wmem[idx] || {from:0, to:0, w:0};
     const sign = e.w >= 0 ? '+' : '-';
@@ -200,9 +234,10 @@ class FPGADemo {
   getState() {
     const top = this.wmem.reduce((a,b,i)=>b.w>a.e.w?{e:b,i}:a, {e:this.wmem[0],i:0});
     return {
-      fsm:  this._fsmChar(),
+      fsm: this._fsmChar(),
+      fsmBot: CHIP_TO_BOT[this._fsmChar()] || 'Z',
       fsmN: this.fsm,
-      cpu:  { a: this.regA, b: this.regB, acc: this.regAcc },
+      cpu: { a: this.regA, b: this.regB, acc: this.regAcc },
       topEdge: top.e,
       wmem: this.wmem,
     };
@@ -222,17 +257,37 @@ class FPGAReal {
     this.port = port;
     this._buf = '';
     this._onResponse = null;
+    this._waiters = [];
     this._proc = null;
     this._ready = false;
-    this._queue = [];  // очередь команд до готовности
+    this._queue = [];
 
     this._start();
   }
 
   onResponse(cb) { this._onResponse = cb; }
 
+  _emit(msg) {
+    if (this._waiters.length > 0) {
+      const w = this._waiters.shift();
+      clearTimeout(w.timer);
+      w.resolve(msg.replace(/[\r\n]+$/, ''));
+    }
+    if (this._onResponse) this._onResponse(msg);
+  }
+
+  nextResponse(timeout = 3000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = this._waiters.findIndex(w => w.resolve === resolve);
+        if (idx >= 0) this._waiters.splice(idx, 1);
+        reject(new Error('FPGA response timeout'));
+      }, timeout);
+      this._waiters.push({ resolve, reject, timer });
+    });
+  }
+
   _start() {
-    // Используем Python subprocess с pyserial
     const pyScript = `
 import serial, sys, threading, time
 ser = serial.Serial('${this.port}', 115200, timeout=0.1)
@@ -268,15 +323,13 @@ for line in sys.stdin:
         this._ready = true;
         this._buf = this._buf.replace('READY\n', '');
         console.log('  [fpga] UART ready →', this.port);
-        // Отправить очередь
         for (const cmd of this._queue) this._write(cmd);
         this._queue = [];
       }
-      // Разбить по \n и эмитировать строки
       const lines = this._buf.split('\n');
       this._buf = lines.pop();
       for (const ln of lines) {
-        if (ln.trim() && this._onResponse) this._onResponse(ln + '\r\n');
+        if (ln.trim()) this._emit(ln + '\r\n');
       }
     });
 
@@ -284,6 +337,12 @@ for line in sys.stdin:
     this._proc.on('exit', (code) => {
       console.warn(`[fpga] Python процесс завершился: code=${code}`);
       this._ready = false;
+      // Отклонить все ожидающие промисы
+      for (const w of this._waiters) {
+        clearTimeout(w.timer);
+        w.reject(new Error('FPGA process exited'));
+      }
+      this._waiters = [];
     });
   }
 
@@ -301,11 +360,9 @@ for line in sys.stdin:
   }
 
   sendW(idx, from, to, weight) {
-    // 'W' + idx + from + to + val
-    // val: signed 5-bit → передаём как signed byte
     const val = weight < 0 ? (256 + weight) & 0xFF : weight;
     const hex = [
-      0x57,        // 'W'
+      0x57,
       idx  & 0x0F,
       from & 0x1F,
       to   & 0x1F,
@@ -322,44 +379,174 @@ for line in sys.stdin:
   }
 
   getState() {
-    return { fsm: '?', cpu: { a: 0, b: 0, acc: 0 }, topEdge: null, wmem: [] };
+    return { fsm: '?', fsmBot: 'Z', cpu: { a: 0, b: 0, acc: 0 }, topEdge: null, wmem: [] };
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Основная логика: инициализация W-матрицы в FPGA
+// Инициализация FPGA с W-матрицей
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function initFPGA(fpga, edges) {
   console.log(`\n  [fpga] Загрузка W-матрицы: ${edges.length} нитей`);
 
-  // Сброс
   fpga.send('r');
   await sleep(100);
 
-  // Загрузить 16 нитей в WMem
   for (const e of edges) {
     fpga.sendW(e.idx, e.from, e.to, e.weight);
-    await sleep(demo ? 5 : 50); // демо быстрее
+    await sleep(demo ? 5 : 50);
     console.log(`    W[${e.idx.toString().padStart(2)}] ${e.fromName.padEnd(14)} → ${e.toName.padEnd(14)} w=${e.weight} (raw=${e.rawWeight.toFixed(1)})`);
   }
 
-  // Запросить статус
   await sleep(100);
   fpga.send('?');
-
   console.log('  [fpga] Инициализация завершена\n');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Анамнезис: поллинг fpga-command актов
+// Локальное состояние FSM (трекинг для анамнезиса и W-матрицы)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let lastTapeId   = 0;      // последний обработанный id акта в ленте
-let lastSnapMtime = 0;     // mtime снапшота W-матрицы для детектирования изменений
+let localFsmChip = 'P';    // текущее состояние чипа: K/P/L
+let localFsmHist = [];     // история переходов
 
-// ── Поллинг анамнезиса: /tape → fpga-command акты ────────────────────────────
+function updateLocalFsm(chipState) {
+  if (chipState && 'KPL'.includes(chipState)) {
+    localFsmHist = [localFsmChip, ...localFsmHist.slice(0, 4)];
+    localFsmChip = chipState;
+  }
+}
+
+/** Записать FSM-переход в W-матрицу через claude-gift.mjs */
+function recordFsmInWMatrix(trit) {
+  const label = trit === '+' ? 'дар (PLR)' : trit === '-' ? 'кенозис (KEN)' : 'присутствие (PRS)';
+  const proc = spawn('node', [join(__dir, 'claude-gift.mjs'), `FSM-переход: ${label}`, 'Дионисий'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  proc.unref();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Обработчики команд от анамнезиса
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * fsm-command: content = '+' | '-' | '0'
+ * Посылает трит на чип, ждёт ответ F:X i:Y, публикует fsm-state в анамнезис.
+ */
+async function handleFsmCommand(fpga, act) {
+  const trit = (act.content || '').trim()[0];
+  if (!['+', '-', '0'].includes(trit)) {
+    console.warn(`  [fsm] неверный трит: "${act.content}"`);
+    return;
+  }
+
+  const fromBot = CHIP_TO_BOT[localFsmChip] || 'Z';
+  console.log(`  [fsm] трит="${trit}" от ${fromBot}, act.id=${act.id}`);
+
+  fpga.send(trit);
+
+  try {
+    // Ждём F:X i:Y от чипа (или S:X ... после r)
+    const resp = await fpga.nextResponse(demo ? 500 : 4000);
+    // resp: "F:L i:+" или "S:P ..."
+    const m = resp.match(/F:([KPL]) i:([+\-0])/);
+    if (m) {
+      updateLocalFsm(m[1]);
+      const toBot = CHIP_TO_BOT[m[1]] || 'Z';
+      const content = `${fromBot}→${toBot} cmd=${act.id}`;
+      console.log(`  [fsm→anamnesis] ${content}`);
+      await publishToAnamnesis(content, 'fsm-state');
+      // Запись в W-матрицу
+      recordFsmInWMatrix(trit);
+    } else {
+      console.warn(`  [fsm] неожиданный ответ: "${resp}"`);
+    }
+  } catch (e) {
+    console.warn(`  [fsm] timeout: ${e.message}`);
+  }
+}
+
+/**
+ * fpga-command: content = '5 + 3' | '! 7' | '-4 * 3'
+ * Загружает регистры CPU через UART, вычисляет, публикует fpga-result.
+ */
+async function handleFpgaArithmetic(fpga, act) {
+  const expr = (act.content || '').trim();
+  let a, b, op;
+
+  const unaryM  = expr.match(/^!\s*(-?\d+)$/);
+  const binaryM = expr.match(/^(-?\d+)\s*([+\-*&|])\s*(-?\d+)$/);
+
+  if (unaryM) {
+    a = Math.max(-13, Math.min(13, parseInt(unaryM[1])));
+    op = '!'; b = null;
+  } else if (binaryM) {
+    a = Math.max(-13, Math.min(13, parseInt(binaryM[1])));
+    op = binaryM[2];
+    b = Math.max(-13, Math.min(13, parseInt(binaryM[3])));
+  } else {
+    console.warn(`  [fpga] не распознано выражение: "${expr}"`);
+    return;
+  }
+
+  console.log(`  [fpga] вычисление: a=${a} op=${op} b=${b ?? 'n/a'}, act.id=${act.id}`);
+
+  const delay = demo ? 10 : 40;
+
+  // Сброс CPU
+  fpga.send('r');
+  await sleep(demo ? 30 : 150);
+
+  // Загрузить регистр A
+  const cmdA = a >= 0 ? 'a' : 'A';
+  for (let i = 0; i < Math.abs(a); i++) { fpga.send(cmdA); await sleep(delay); }
+
+  // Загрузить регистр B
+  if (b !== null) {
+    const cmdB = b >= 0 ? 'b' : 'B';
+    for (let i = 0; i < Math.abs(b); i++) { fpga.send(cmdB); await sleep(delay); }
+  }
+
+  // Операция
+  const opCmd = {'+':'s', '-':'d', '*':'*', '&':'&', '|':'|', '!':'!'}[op];
+  fpga.send(opCmd);
+
+  // Ждём пока все промежуточные ответы (от a/b инкрементов) пройдут
+  const totalCmds = 1 + Math.abs(a) + (b !== null ? Math.abs(b) : 0) + 1;
+  await sleep(delay * totalCmds + (demo ? 50 : 200));
+
+  // Запросить итоговый статус
+  fpga.send('?');
+  try {
+    const resp = await fpga.nextResponse(demo ? 500 : 5000);
+    // resp: "S:P A:+-- B:+00 C:+--"
+    const cm = resp.match(/C:([+\-0]{3})/);
+    if (cm) {
+      const result = decodeTrit3(cm[1]);
+      const content = `${result} cmd=${act.id}`;
+      console.log(`  [fpga→anamnesis] result=${result} (${cm[1]}), content="${content}"`);
+      await publishToAnamnesis(content, 'fpga-result');
+    } else {
+      console.warn(`  [fpga] не распознан ответ: "${resp}"`);
+    }
+  } catch (e) {
+    console.warn(`  [fpga] arithmetic timeout: ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Анамнезис: поллинг actов
+// ─────────────────────────────────────────────────────────────────────────────
+
+let lastTapeId   = 0;
+let lastSnapMtime = 0;
+let processingAct = false;  // мьютекс: один акт за раз
+
 async function pollAnamnesis(fpga) {
+  if (processingAct) return;
   try {
     const r = await fetch(`${ANAMNESIS}/tape`, { signal: AbortSignal.timeout(4000) });
     if (!r.ok) return;
@@ -371,36 +558,37 @@ async function pollAnamnesis(fpga) {
       if (id <= lastTapeId) continue;
       lastTapeId = Math.max(lastTapeId, id);
 
-      // fpga-command — команда чипу
-      if (act.type === 'fpga-command') {
-        const cmd = act.content || act.payload?.cmd || '';
-        if (!cmd) continue;
-        console.log(`  [anamnesis→chip] "${cmd}"`);
-        if (['+', '-', '0', '?', 'T', 'r'].includes(cmd)) {
+      if (act.type === 'fsm-command') {
+        processingAct = true;
+        try { await handleFsmCommand(fpga, act); } finally { processingAct = false; }
+
+      } else if (act.type === 'fpga-command') {
+        processingAct = true;
+        try { await handleFpgaArithmetic(fpga, act); } finally { processingAct = false; }
+
+      } else if (['fpga-result', 'fsm-state', 'fsm-transition', 'fpga-status',
+                  'fpga-wmem-reload', 'fpga-init'].includes(act.type)) {
+        // Наши собственные публикации — не обрабатываем повторно
+      } else if (act.type) {
+        // Произвольная команда (например, из портала)
+        const cmd = act.content || '';
+        if (cmd && ['+', '-', '0', '?', 'T', 'r'].includes(cmd)) {
+          console.log(`  [anamnesis→chip] "${cmd}"`);
           fpga.send(cmd);
-        } else if (cmd.startsWith('W ')) {
-          const parts = cmd.split(' ').map(Number);
-          if (parts.length >= 5) fpga.sendW(parts[1], parts[2], parts[3], parts[4]);
-        } else if (cmd.startsWith('Q ')) {
-          fpga.sendQ(parseInt(cmd.split(' ')[1]));
         }
       }
     }
-  } catch { /* сеть недоступна — не критично */ }
+  } catch { /* сеть недоступна */ }
 }
 
-// ── Публикация ответа чипа → анамнезис ───────────────────────────────────────
-async function publishToAnamnesis(text, type = 'fpga-result') {
+// ── Публикация в анамнезис ────────────────────────────────────────────────────
+async function publishToAnamnesis(content, type = 'fpga-status') {
   try {
     await fetch(`${ANAMNESIS}/gift`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(3000),
-      body: JSON.stringify({
-        type,
-        content: `_fpga→_koinon: ${text}`,  // giver/receiver в content (сервер игнорирует from/to)
-        weight: 1,
-      }),
+      body: JSON.stringify({ type, content, weight: 1 }),
     });
   } catch { /* сеть недоступна */ }
 }
@@ -421,14 +609,12 @@ function watchWMatrix(fpga) {
   watchFile(snapPath, { interval: 10000 }, (curr) => {
     if (curr.mtimeMs <= lastSnapMtime) return;
     lastSnapMtime = curr.mtimeMs;
-    console.log('  [W-матрица] изменение обнаружено → перезагрузка WMem...');
+    console.log('  [W-матрица] изменение → перезагрузка WMem...');
     try {
       const edges = loadTopEdges(16);
-      for (const e of edges) {
-        fpga.sendW(e.idx, e.from, e.to, e.weight);
-      }
+      for (const e of edges) fpga.sendW(e.idx, e.from, e.to, e.weight);
       console.log(`  [W-матрица] WMem обновлён: ${edges.length} нитей`);
-      publishToAnamnesis(`WMem reload: ${edges[0]?.fromName}→${edges[0]?.toName} w=${edges[0]?.weight}`, 'fpga-wmem-reload');
+      publishToAnamnesis(`WMem reload: ${edges[0]?.fromName}→${edges[0]?.toName}`, 'fpga-wmem-reload');
     } catch (e) {
       console.error('  [W-матрица] ошибка reload:', e.message);
     }
@@ -437,17 +623,12 @@ function watchWMatrix(fpga) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WebSocket сервер (опциональный, для портала)
+// WebSocket сервер (для портала)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const wsClients = new Set();
 
-import { createHash } from 'node:crypto';
-
 function startWebSocketServer(fpga) {
-  // Используем встроенный HTTP + ручной WebSocket handshake
-  // (без npm ws — только node:http + crypto)
-
   const server = createServer((req, res) => {
     res.writeHead(200, {'Content-Type':'text/plain'});
     res.end('fpga-gift-bridge WebSocket :3701');
@@ -472,7 +653,6 @@ function startWebSocketServer(fpga) {
     socket.on('error', () => wsClients.delete(socket));
 
     socket.on('data', (buf) => {
-      // Декодировать WebSocket фрейм
       try {
         const masked = (buf[1] & 0x80) !== 0;
         const len    = buf[1] & 0x7F;
@@ -501,7 +681,7 @@ function wsBroadcast(obj) {
   const json = JSON.stringify(obj);
   const payload = Buffer.from(json);
   const frame = Buffer.alloc(2 + payload.length);
-  frame[0] = 0x81; // текстовый фрейм, FIN
+  frame[0] = 0x81;
   frame[1] = payload.length;
   payload.copy(frame, 2);
   for (const sock of wsClients) {
@@ -524,7 +704,6 @@ async function main() {
   console.log(`  Режим: ${demo ? 'ДЕМО (без чипа)' : `UART ${uartPort}`}`);
   console.log(`  Анамнезис: ${ANAMNESIS}`);
 
-  // Загрузить W-матрицу
   let edges;
   try {
     edges = loadTopEdges(16);
@@ -535,29 +714,28 @@ async function main() {
     edges = [];
   }
 
-  // Создать FPGA объект
   const fpga = demo ? new FPGADemo() : new FPGAReal(uartPort);
 
-  // Обработчик ответов от FPGA
+  // Парсинг ответов чипа для обновления localFsmChip
   fpga.onResponse((resp) => {
     const text = resp.replace(/[\r\n]+$/, '');
     console.log(`  [fpga←] ${text}`);
 
-    // Парсим FSM переходы для публикации значимых актов
-    const isFSM  = text.startsWith('F:');
-    const isSts  = text.startsWith('S:');
-    if (isFSM || isSts) {
-      publishToAnamnesis(text, isFSM ? 'fsm-transition' : 'fpga-status');
-    }
+    // Трекинг FSM состояния
+    const fsmM = text.match(/[FS]:([KPL])/);
+    if (fsmM) updateLocalFsm(fsmM[1]);
 
     // WebSocket broadcast
     if (wsClients.size > 0) {
       const state = fpga.getState();
-      wsBroadcast({ type: 'fpga', raw: text, fsm: state.fsm, cpu: state.cpu, ts: Date.now() });
+      wsBroadcast({
+        type: 'fpga', raw: text,
+        fsm: CHIP_TO_BOT[state.fsm] || state.fsm,
+        cpu: state.cpu, ts: Date.now(),
+      });
     }
   });
 
-  // WebSocket сервер (опционально)
   if (useWS) {
     try {
       startWebSocketServer(fpga);
@@ -566,48 +744,50 @@ async function main() {
     }
   }
 
-  // Инициализация FPGA с W-матрицей
   if (edges.length > 0) {
     await initFPGA(fpga, edges);
+    await publishToAnamnesis(`init: ${edges.length} нитей, топ ${edges[0].fromName}→${edges[0].toName}`, 'fpga-init');
   }
 
-  // Слежение за изменениями W-матрицы
   watchWMatrix(fpga);
 
-  // Периодические операции
+  // Инициализировать lastTapeId из текущей ленты (не обрабатывать старые акты)
+  try {
+    const r = await fetch(`${ANAMNESIS}/tape`, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const tape = await r.json();
+      const acts = Array.isArray(tape) ? tape : (tape.acts || []);
+      if (acts.length > 0) {
+        lastTapeId = Math.max(...acts.map(a => a.id || 0));
+        console.log(`  Анамнезис: инициализация с id=${lastTapeId} (${acts.length} актов в ленте)`);
+      }
+    }
+  } catch { /* сеть */ }
+
   let tick = 0;
   setInterval(async () => {
     tick++;
-
-    // Поллинг анамнезиса каждые 5с
     if (tick % 5 === 0) await pollAnamnesis(fpga);
-
-    // Статус каждые 30с
-    if (tick % 30 === 0) {
-      fpga.send('?');
-    }
-
-    // WebSocket heartbeat каждые 10с
+    if (tick % 30 === 0) fpga.send('?');
     if (tick % 10 === 0 && wsClients.size > 0) {
       const state = fpga.getState();
-      wsBroadcast({ type: 'heartbeat', fsm: state.fsm, ts: Date.now() });
+      wsBroadcast({ type: 'heartbeat', fsm: CHIP_TO_BOT[state.fsm] || state.fsm, ts: Date.now() });
     }
-
   }, 1000);
 
-  console.log('  Поллинг анамнезиса каждые 5с');
+  console.log('  Поллинг анамнезиса каждые 5с (fsm-command, fpga-command)');
   console.log('  Статус FPGA каждые 30с');
   if (useWS) console.log(`  WebSocket :${PORT_WS} готов\n`);
   else console.log('  (--ws для WebSocket сервера)\n');
 
-  // Команды из stdin (интерактивный режим)
+  // Интерактивный режим (stdin)
   if (process.stdin.isTTY) {
     console.log('  Интерактивный режим: вводите UART команды (+, -, 0, ?, T, r...)');
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on('data', (key) => {
       const k = key.toString();
-      if (k === '\u0003') process.exit(); // Ctrl+C
+      if (k === '\u0003') process.exit();
       if (k.length === 1) {
         console.log(`  [→fpga] ${k}`);
         fpga.send(k);
