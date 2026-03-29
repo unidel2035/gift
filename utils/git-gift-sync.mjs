@@ -58,6 +58,20 @@ mem.receive({
   irreversible: true,
 });
 
+// λήψις: при closes #N — получатель свидетельствует принятие дара кода
+// Дионисий (или иной получатель) завершает перихоресис ответным reception-актом
+if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
+  mem.receive({
+    giverId:      receiver,
+    receiverId:   '_claude',
+    weight:       8,
+    type:         'reception',
+    content:      `λήψις кода closes #${linkedIssue}`,
+    linkedIssue,
+    irreversible: true,
+  });
+}
+
 const snap = mem.snapshot();
 if (!existsSync(resolve(ROOT, 'data'))) mkdirSync(resolve(ROOT, 'data'));
 writeFileSync(SNAP, JSON.stringify(snap, null, 2));
@@ -77,10 +91,25 @@ actLog.push({
   linkedIssue: linkedIssue ?? null,
   commit:      commitHash,
 });
+if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
+  actLog.push({
+    ts:          new Date().toISOString(),
+    from:        receiver,
+    to:          '_claude',
+    type:        'reception',
+    weight:      8,
+    content:     `λήψις кода closes #${linkedIssue}`,
+    linkedIssue: linkedIssue,
+    commit:      commitHash,
+  });
+}
 if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
 writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
 
 console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
+if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
+  console.log(`  ✦ λήψις(${receiver} → _claude): closes #${linkedIssue} (reception)`);
+}
 console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);
 
 // ── Экспорт в симулятор: matrix-data.json для ontology.html ──────────────

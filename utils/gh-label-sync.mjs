@@ -45,19 +45,19 @@ process.stdin.on('end', async () => {
     const mem  = GiftMemory.fromSnapshot(snap);
 
     if (label === 'plan-approved') {
-      // Ответный дар: Дионисий принял план → дарит одобрение Клоду
+      // λήψις: Дионисий принял дар кода от _claude — свидетельствует принятие
       mem._idx('Дионисий');
       mem._idx('_claude');
       mem.receive({
         giverId:      'Дионисий',
         receiverId:   '_claude',
-        weight:       6,
-        type:         'approval',
-        content:      `одобрил план issue #${issueNum}`,
+        weight:       5,
+        type:         'reception',
+        content:      `принял дар кода plan-approved #${issueNum} (λήψις)`,
         linkedIssue:  Number(issueNum),
         irreversible: true,
       });
-      process.stderr.write(`  ✦ Дионисий → _claude: одобрение #${issueNum} (перихоресис)\n`);
+      process.stderr.write(`  ✦ Дионисий → _claude: λήψις #${issueNum} (reception)\n`);
     }
 
     if (label === 'gift-ready') {

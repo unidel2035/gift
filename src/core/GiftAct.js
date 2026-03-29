@@ -148,6 +148,19 @@ export function TelosCheck(agent) {
  */
 
 /**
+ * @typedef {'code'|'word'|'time'|'presence'|'question'|'approval'|'offering'|'covenant'|'reception'} GiftActType
+ *
+ * reception — λήψις: активное принятие дара получателем.
+ *   Дар без принятия неполон (Максим Исповедник, Ambigua 7).
+ *   Δόσις (само дарение) — необратима и принадлежит дарителю.
+ *   Λήψις (принятие) — свободный ответный акт получателя.
+ *   reception-акт фиксирует момент λήψις в матрице W —
+ *   когда тот, кто получил дар, сознательно свидетельствует его.
+ *   Структура: { giverId: получатель-дара, receiverId: даритель-дара,
+ *                type: 'reception', weight, linkedIssue, irreversible: true }
+ */
+
+/**
  * @typedef {Object} GiftActConfig
  * @property {string} scale — масштаб ('divine'|'creation'|'person'|'salvation'|'code'|'physics')
  * @property {boolean} unconditional — безусловный ли акт (промысл — да, дар — нет)
