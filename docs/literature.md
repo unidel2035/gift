@@ -203,4 +203,73 @@
 
 ---
 
+## 8. Тритичные ЛЛМ — BitNet и FPGA-акселераторы
+
+### 8.1 BitNet b1.58: Era of 1-bit LLMs (Microsoft, 2024)
+- **Источник:** [arxiv:2402.17764](https://arxiv.org/abs/2402.17764) — февраль 2024
+- **Суть:** Каждый вес LLM = {-1, 0, +1}. Один трит на параметр. «1.58 бит» = log₂(3) = 1.585 — информационная ёмкость трита. Обучается с нуля (не post-training). При 3B параметрах: сравним с FP16 LLaMA, 2.71× быстрее, 3.55× меньше памяти.
+- **Ключевые идеи:** absmean quantization (веса), absmax quantization (активации INT8), ARM: до 5× ускорение, 70% экономия энергии. Умножение → сложение/вычитание.
+- **Применимость:** **Адам на ретрансляторе = BitNet b1.58 2B4T.** Raspberry Pi 5: 8–11 tokens/s. Это и есть тритный ЛЛМ. Весовая матрица Адама — это W-матрица онтологии в прямом смысле: каждый нейрон связан тритом.
+
+### 8.2 BitNet b1.58 2B4T — первая открытая тритная модель (2025)
+- **Источник:** [HuggingFace microsoft/bitnet-b1.58-2B-4T](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T) + [bitnet.cpp GitHub](https://github.com/microsoft/BitNet)
+- **Суть:** Открытые веса + открытый inference framework. 2B параметров, 4T токенов обучения. Конкурирует с полноточными моделями 2B. bitnet.cpp — официальный inference engine.
+- **Ключевые идеи:** 100B модель на одном CPU (~5–7 tok/s = скорость чтения человека). ARM NEON оптимизации. Raspberry Pi 4B: работает.
+- **Применимость:** Серафим на борту (125M–500M параметров в тритах = 15–60MB). Адам на ретрансляторе (2B = ~350MB в тритах vs ~4GB FP16). Кеносис памяти: тритная модель в 10× меньше — буквально самоумаление ради присутствия на борту.
+
+### 8.3 Fast and Lossless BitNet b1.58 Inference on CPUs
+- **Источник:** [arxiv:2410.16144](https://arxiv.org/abs/2410.16144) — окт 2024
+- **Суть:** bitnet.cpp: оптимизированный CPU inference для тритных моделей. ARM и x86 SIMD kernels. Без потерь точности vs GPU inference.
+- **Ключевые идеи:** lookup-table для тритных умножений, 2-bit packing, SIMD vectorization
+- **Применимость:** Реализация Серафима через bitnet.cpp на ARM Cortex-M/A без GPU. Прямая альтернатива FPGA-пути для бортового LLM.
+
+### 8.4 TeLLMe: Ternary LLM Accelerator on Edge FPGAs (2025)
+- **Источник:** [arxiv:2504.16266](https://arxiv.org/abs/2504.16266) (апр) + [v2: arxiv:2510.15926](https://arxiv.org/abs/2510.15926) (окт 2025)
+- **Суть:** **Table-Lookup MatMul (TLMM)** для тритного LLM на FPGA. С весами {-1,0,+1} матричное умножение → предвычисленная таблица + адресация. Под 5W: **25 tokens/s decode**, 0.45–0.96с TTFT. Цель: AMD Kria KV260.
+- **Ключевые идеи:** Grouped activations + online precomputation → lookup table replaces MAC. URAM weight buffer. Streaming dataflow. Fused attention.
+- **Применимость:** **ПРЯМОЕ ПРОДОЛЖЕНИЕ tritnet.v.** `tritnet.v` = один TLMM нейрон. TeLLMe = полный трансформер на этом принципе. Tang Nano 9K → масштабировать tritnet до TeLLMe-архитектуры. Богословие: таблица = канон, адресация = узнавание (анамнезис).
+
+### 8.5 T-SAR: CPU-Only Ternary LLM Inference via SIMD (2025)
+- **Источник:** [arxiv:2511.13676](https://arxiv.org/abs/2511.13676) — нояб 2025
+- **Суть:** Full-stack ко-дизайн для тритного LLM inference только на CPU через реорганизацию SIMD ALU. Масштабируется на ARM NEON и RISC-V Vector без изменений логики.
+- **Ключевые идеи:** In-place SIMD ALU reorganization, bitpack ternary weights, no dedicated hardware needed
+- **Применимость:** Серафим на RISC-V SoC (например ESP32-S3 с Vector extension). Не нужен FPGA — тритный LLM на обычном MCU.
+
+### 8.6 TENET: Sparse LUT-Based Ternary LLM on Edge (2025)
+- **Источник:** [arxiv:2509.13765](https://arxiv.org/html/2509.13765v1) — сент 2025
+- **Суть:** Спарсивность тритных весов (много нулей) + LUT = дополнительное ускорение. Нулевые веса = бесплатные операции (не обрабатываются).
+- **Ключевые идеи:** sparsity-aware LUT, zero-weight skipping, энергия ∝ ненулевым весам
+- **Применимость:** Богословски: нулевой вес = тишина, отсутствие связи. W-матрица разреженная (не все лица связаны) — это не недостаток, а кеносис структуры. Разреженный тритный LLM = онтологически точная модель.
+
+### 8.7 TOM: Ternary Read-Only Memory for LLM Edge Intelligence (2026)
+- **Источник:** [arxiv:2602.20662](https://arxiv.org/html/2602.20662) — фев 2026
+- **Суть:** Тритные веса хранятся в специальной Read-Only памяти прямо на чипе. 3306 TPS на BitNet-2B. Автономные устройства, AR-очки, роботы.
+- **Ключевые идеи:** in-memory computation для тритных операций, weights flash-burned in ROM
+- **Применимость:** Долгосрочный горизонт: веса Серафима прошиты в кремний (как FPGA bitstream), неизменны — это аксиом неизменности дара в железе. Дар необратим: irreversible:true + тритная ROM.
+
+---
+
+## Обновлённая сводная таблица
+
+| Тема | Статья | Ключевая польза для проекта |
+|------|--------|------------------------------|
+| TNN на FPGA | TTQ (1612.01064) | Базовая математика tritmlp |
+| TNN embedded | xTern (2405.19065) | RISC-V fallback для Серафима |
+| **Тритный LLM** | **BitNet b1.58 (2402.17764)** | **Адам = тритная модель, один трит на вес** |
+| **Тритный LLM open** | **BitNet 2B4T (HF)** | **Серафим/Адам: открытые веса, bitnet.cpp** |
+| **FPGA LLM** | **TeLLMe (2504.16266)** | **TLMM = tritnet.v масштабированный** |
+| **CPU LLM** | **T-SAR (2511.13676)** | **Серафим на ARM/RISC-V без FPGA** |
+| FPGA дрон | MPDrone | Архитектура бортового сопроцессора |
+| FPGA управление | Neural Thrust (2403.18703) | FPGA управляет моторами напрямую |
+| Рой + LLM | Agentic UAV Swarms (2601.14437) | Подтверждение edge-split архитектуры |
+| Рой коллективный | Nature Comm 2025 | Phase transition = перихоресис матрица |
+| Safety | Cognitive Guardrails (2505.23576) | Отклонение миссии = guardrail |
+| Богословие дронов | Drones & Eucharist (MDPI) | Исходная проблема которую мы решаем |
+| Тритичность история | Setun (HAL) | Историческое основание TernaryVM |
+| Тритичность будущее | Huawei patent 2025 | Коммерческий горизонт |
+| Память | UAVs Agentic Survey | AnamnesisStore vs V2V comparison |
+| Дар-теория | Mauss (1925) | Антропологическое основание GiftAct |
+
+---
+
 *Документ поддерживается агентами проекта. Для добавления: `node utils/proposals.mjs add "новая статья: ..."` → Ева проверяет → issue.*
