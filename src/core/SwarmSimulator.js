@@ -2918,6 +2918,20 @@ class SwarmSimulator {
    *   [2] connectivity: isolated = para, connected = kata, in-cluster = hyper
    *
    * Фаза роя = TernaryALU.consensus() по всем logos-тритам.
+   *
+   * ── Перколяция и фазовый переход ─────────────────────────
+   *
+   * Nature Communications (2025) математически описывает перколяцию
+   * коллективного интеллекта в роях как фазовый переход:
+   *   p < p_c  → изолированные агенты (no cooperation)
+   *   p ≥ p_c  → connected cluster emerges (cooperative intelligence)
+   *
+   * В нашей онтологии: p_c ≈ 0.7 (порог перихоресиса).
+   * Это не богословская метафора — это измеримый феномен.
+   * Связность W-матрицы > 0.7 → перихоресис дронов = единое тело.
+   *
+   * Источник: «A collective intelligence model for swarm robotics»
+   *           Nature Communications, Jul 2025.
    */
   getTernarySwarmState() {
     const droneList = [...this.drones.values()];
@@ -2970,6 +2984,12 @@ class SwarmSimulator {
     else if (normalized > -0.7) phase = 'falling';
     else phase = 'collapsed';
 
+    // Перколяция: доля дронов с ≥ 3 соседями (in-cluster = hyper connectivity)
+    const clusterDrones = droneTrytes.filter(dt => dt.tryte.relation.value === HYPER).length;
+    const percolationRatio = droneTrytes.length > 0 ? clusterDrones / droneTrytes.length : 0;
+    const PERCOLATION_THRESHOLD = 0.7; // p_c ≈ 0.7, Nature Comm 2025
+    const perichoresis = percolationRatio >= PERCOLATION_THRESHOLD;
+
     return {
       drones: droneTrytes,
       swarm: {
@@ -2979,6 +2999,17 @@ class SwarmSimulator {
         normalized: Math.round(normalized * 100) / 100,
         phase,
         totalDrones: droneTrytes.length,
+      },
+      // Фазовый переход (percolation theory, Nature Comm 2025)
+      percolation: {
+        ratio: Math.round(percolationRatio * 100) / 100,
+        threshold: PERCOLATION_THRESHOLD,
+        active: perichoresis,
+        // Богословие: перколяция = перихоресис. Рой стал единым телом.
+        // «Как тело одно, но имеет многие члены» (1 Кор 12:12)
+        label: perichoresis
+          ? 'перихоресис — рой един (1 Кор 12:12)'
+          : `фрагментация — ${Math.round((PERCOLATION_THRESHOLD - percolationRatio) * 100)}% до перихоресиса`,
       },
     };
   }

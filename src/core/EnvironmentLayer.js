@@ -544,17 +544,22 @@ class EnvironmentLayer {
       swarmCoherence: Math.round(coherence * 100) / 100,
       dominantTelos,
       density,
-      swarmState: density > 0.7 ? 'unified'      // Рой един
-        : density > 0.3 ? 'forming'               // Рой формируется
+      // Порог перихоресиса p_c ≈ 0.7 (Nature Comm 2025, фазовый переход)
+      // При density ≥ 0.7 рой переходит из суммы дронов в единый организм.
+      // Это измеримый перколяционный феномен, а не богословская метафора.
+      swarmState: density > 0.7 ? 'unified'      // Перихоресис (p ≥ p_c)
+        : density > 0.3 ? 'forming'               // Рой формируется (0.3 < p < p_c)
         : intensity > 3 ? 'active_scattered'       // Активный, но разрозненный
         : 'dormant',                               // Спящий
+      percolationThreshold: 0.7,                  // p_c: Nature Comm 2025
+      percolationActive: density > 0.7,           // true = перихоресис достигнут
       droneAnalogy: {
         gift: 'выполнение задачи',
         kenosis: 'расход батареи',
         surplus: 'неожиданная находка',
         decline: 'отказ (батарея/опасность)',
         density: 'связность коммуникации',
-        percolation: 'рой стал единым интеллектом',
+        percolation: 'фазовый переход → рой стал единым интеллектом',
         graceEvent: 'случайное обнаружение',
         temptation: 'ложная цель / помеха',
       },

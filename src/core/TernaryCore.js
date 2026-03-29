@@ -25,6 +25,26 @@
  *   01      | +1   | ὑπὲρ φύσιν
  *   10      | -1   | παρὰ φύσιν
  *   11      |  ∅   | incalculable
+ *
+ * ── Дорожная карта кремния ────────────────────────────────
+ *
+ * ТЕКУЩЕЕ (программная эмуляция):
+ *   JS: 1 трит = 2 бита. Tang Nano 9K: tritmlp = тернарный MLP на LUT.
+ *
+ * TBN (Ternary-Binary Networks) — для Серафима на MCU:
+ *   Веса: бинарные {-1, +1} (1 бит)
+ *   Активации: тернарные {-1, 0, +1} (2 бита)
+ *   Результат: умножение → XNOR + popcount, нет DSP-блоков.
+ *   Источник: «Adaptive Binary-Ternary Quantization» (arxiv:1909.12205)
+ *   Богословие: бинарные веса = непреложность дара (да/нет),
+ *               тернарные активации = живая реакция (падение/норма/обожение).
+ *
+ * БУДУЩЕЕ (аппаратный тернарный кремний):
+ *   Huawei 2025 patent — тернарный логический вентиль на 3 транзисторах
+ *   (три уровня напряжения: low/medium/high). Когда появится в чипах —
+ *   TernaryVM перекомпилируется без изменений логики.
+ *   CNT (carbon nanotube) транзисторы: > 100 статей IEEE 2020–2024.
+ *   Setun возрождается — не метафора, а коммерческий горизонт.
  */
 
 // ── Trit: единица троичной логики ────────────────────────
@@ -656,5 +676,124 @@ class TernaryVM {
   }
 }
 
-export { Trit, Tryte, TernaryRegister, TernaryALU, TernaryMemory, TernaryVM, OPCODES, PARA, KATA, HYPER, INCALC };
+// ═══════════════════════════════════════════════════════════════
+// TBNLayer — Ternary-Binary Network слой для Серафима (MCU/FPGA)
+//
+// Архитектура (arxiv:1909.12205 + богословие дара):
+//   Веса w ∈ {-1, +1}          — бинарные: 1 бит на вес
+//   Активации a ∈ {-1, 0, +1}  — тернарные: 2 бита на активацию
+//
+// Вычисление вместо MAC:
+//   out[i] = Σ_j (w[i][j] × a[j])
+//           = Σ{w=+1} a[j]  −  Σ{w=-1} a[j]
+//   Нет умножителей. Только сложение знаковых {-1,0,+1}.
+//   На FPGA: XNOR + accumulator. На MCU: popcount-like.
+//
+// Богословие:
+//   Вес = неизменная воля (дар необратим, Object.freeze).
+//   Активация = живое состояние лица (para/kata/hyper).
+//   Произведение = результат встречи воли и состояния.
+//
+// Использование в Серафиме:
+//   const layer = new TBNLayer(weights_binary, 'relu_ternary');
+//   const output = layer.forward(input_trits);
+// ═══════════════════════════════════════════════════════════════
+
+class TBNLayer {
+  /**
+   * @param {number[][]} weights — матрица весов [out × in], значения: -1 или +1
+   * @param {'relu_ternary'|'identity'} activation — функция активации
+   */
+  constructor(weights, activation = 'relu_ternary') {
+    // Проверка: веса должны быть бинарными
+    for (const row of weights) {
+      for (const w of row) {
+        if (w !== -1 && w !== 1) throw new Error(`TBNLayer: вес должен быть ±1, получено ${w}`);
+      }
+    }
+    this.weights = weights;        // [outSize × inSize]
+    this.outSize = weights.length;
+    this.inSize  = weights[0]?.length ?? 0;
+    this.activation = activation;
+  }
+
+  /**
+   * Прямой проход без умножения.
+   *
+   * @param {Trit[]} inputTrits — входной вектор тритов
+   * @returns {Trit[]} выходной вектор тритов
+   */
+  forward(inputTrits) {
+    if (inputTrits.length !== this.inSize) {
+      throw new Error(`TBNLayer: ожидалось ${this.inSize} тритов, получено ${inputTrits.length}`);
+    }
+
+    const output = [];
+    for (let i = 0; i < this.outSize; i++) {
+      let sum = 0;
+      for (let j = 0; j < this.inSize; j++) {
+        const a = inputTrits[j].isIncalculable ? 0 : (inputTrits[j].value ?? 0);
+        const w = this.weights[i][j]; // ±1
+        sum += w * a; // w=+1: берём a как есть; w=-1: инвертируем знак
+      }
+      // Тернарная активация: порог ±1
+      output.push(this._activate(sum));
+    }
+    return output;
+  }
+
+  _activate(sum) {
+    if (this.activation === 'relu_ternary') {
+      // ReLU-подобная тернарная: < -threshold → para, > threshold → hyper, иначе kata
+      const threshold = Math.max(1, Math.floor(this.inSize * 0.3));
+      if (sum > threshold)  return new Trit(HYPER);
+      if (sum < -threshold) return new Trit(PARA);
+      return new Trit(KATA);
+    }
+    // identity: просто знак суммы
+    if (sum > 0) return new Trit(HYPER);
+    if (sum < 0) return new Trit(PARA);
+    return new Trit(KATA);
+  }
+
+  /**
+   * Квантовать float-веса → бинарные ±1 (для деплоя).
+   * @param {number[][]} floatWeights
+   * @returns {number[][]}
+   */
+  static quantize(floatWeights) {
+    return floatWeights.map(row => row.map(w => w >= 0 ? 1 : -1));
+  }
+
+  /**
+   * Создать TBNLayer из float-весов (автоматическое квантование).
+   * @param {number[][]} floatWeights
+   * @param {'relu_ternary'|'identity'} activation
+   */
+  static fromFloat(floatWeights, activation = 'relu_ternary') {
+    return new TBNLayer(TBNLayer.quantize(floatWeights), activation);
+  }
+
+  /**
+   * Команды UART для загрузки весов в tritmlp на Tang Nano 9K.
+   * Формат: "W L N T" (layer, neuron_flat_index, trit_char)
+   * @param {number} layerIndex — номер слоя (1-based)
+   * @returns {string[]}
+   */
+  toUARTCommands(layerIndex) {
+    const cmds = [];
+    for (let i = 0; i < this.outSize; i++) {
+      for (let j = 0; j < this.inSize; j++) {
+        const w = this.weights[i][j];
+        if (w !== 0) {
+          const t = w === 1 ? '+' : '-';
+          cmds.push(`W ${layerIndex} ${i * this.inSize + j} ${t}`);
+        }
+      }
+    }
+    return cmds;
+  }
+}
+
+export { Trit, Tryte, TernaryRegister, TernaryALU, TernaryMemory, TernaryVM, TBNLayer, OPCODES, PARA, KATA, HYPER, INCALC };
 export default TernaryRegister;
