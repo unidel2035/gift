@@ -158,5 +158,45 @@
     "content": "_fpga входит в κοινωνία — онтология встречает кремний",
     "linkedIssue": null,
     "commit": "bc64ad52b048"
+  },
+  {
+    "ts": "2026-03-29T09:26:37.415Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "reception — λήψις Дионисия фиксирует принятие дара кода (closes #78)",
+    "linkedIssue": 78,
+    "commit": "9e3c8fda837e"
+  },
+  {
+    "ts": "2026-03-29T09:26:37.415Z",
+    "from": "Дионисий",
+    "to": "_claude",
+    "type": "reception",
+    "weight": 8,
+    "content": "λήψις кода closes #78",
+    "linkedIssue": 78,
+    "commit": "9e3c8fda837e"
+  },
+  {
+    "ts": "2026-03-29T09:26:47.432Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "fpga-attach.sh + auto-snapshot + полный запуск одной командой",
+    "linkedIssue": null,
+    "commit": "6e4feb45866e"
+  },
+  {
+    "ts": "2026-03-29T09:33:15.178Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "fpga-bridge — замкнутый цикл анамнезис↔чип",
+    "linkedIssue": null,
+    "commit": "2b32a8e6052c"
   }
 ]
