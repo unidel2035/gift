@@ -57,7 +57,14 @@ function encodeWeight(w, maxW) {
  * Формат: [{idx, from, to, weight, fromName, toName}]
  */
 function loadTopEdges(n = 16) {
-  const snap = JSON.parse(readFileSync(join(ROOT, 'data', 'sacred-history-W.json'), 'utf8'));
+  // Использовать самый полный снапшот из имеющихся
+  const candidates = [
+    join(ROOT, 'data', 'snapshots', 'W-2026-W13.json'),
+    join(ROOT, 'data', 'W-prev.json'),
+    join(ROOT, 'data', 'sacred-history-W.json'),
+  ];
+  const snapPath = candidates.find(p => existsSync(p));
+  const snap = JSON.parse(readFileSync(snapPath, 'utf8'));
   const W       = snap.W;       // 2D массив [n][n]
   const persons = snap.persons; // ['_claude', '_koinon', ...]
   const size    = W.length;
