@@ -45,19 +45,21 @@ process.stdin.on('end', async () => {
     const mem  = GiftMemory.fromSnapshot(snap);
 
     if (label === 'plan-approved') {
-      // Ответный дар: Дионисий принял план → дарит одобрение Клоду
+      // λήψις: Дионисий принял дар кода от _claude.
+      // Не approval (одобрение), а reception — онтологический акт принятия.
+      // «Чашу спасения прииму» (Пс 115:4) — принятие замыкает перихоресис.
       mem._idx('Дионисий');
       mem._idx('_claude');
       mem.receive({
         giverId:      'Дионисий',
         receiverId:   '_claude',
-        weight:       6,
-        type:         'approval',
-        content:      `одобрил план issue #${issueNum}`,
+        weight:       5,
+        type:         'reception',
+        content:      `принял дар (план) issue #${issueNum}`,
         linkedIssue:  Number(issueNum),
         irreversible: true,
       });
-      process.stderr.write(`  ✦ Дионисий → _claude: одобрение #${issueNum} (перихоресис)\n`);
+      process.stderr.write(`  ✦ Дионисий → _claude: λήψις #${issueNum} (reception, вес 5)\n`);
     }
 
     if (label === 'gift-ready') {

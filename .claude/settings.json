@@ -65,6 +65,11 @@
             "type": "command",
             "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue edit' && node \"$(git rev-parse --show-toplevel)/utils/gh-label-sync.mjs\" 2>/dev/null || true",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "jq -r \".tool_input.command // \\\"\\\"\" | grep -q \"gh pr merge\" && node \"$(git rev-parse --show-toplevel)/utils/gh-merge-sync.mjs\" 2>/dev/null || true",
+            "timeout": 20
           }
         ]
       },

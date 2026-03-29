@@ -149,7 +149,7 @@ export function TelosCheck(agent) {
 
 /**
  * @typedef {Object} GiftActConfig
- * @property {string} scale — масштаб ('divine'|'creation'|'person'|'salvation'|'code'|'physics')
+ * @property {string} scale — масштаб ('divine'|'creation'|'person'|'salvation'|'code'|'reception'|'physics')
  * @property {boolean} unconditional — безусловный ли акт (промысл — да, дар — нет)
  * @property {boolean} silencePossible — возможно ли молчание (divine — да, person — нет)
  * @property {string} [apophatic] — апофатическая граница (если есть)
@@ -382,6 +382,27 @@ export class GiftAct {
   }
 
   /**
+   * Масштаб: Принятие дара — λήψις (reception)
+   *
+   * Дар без принятия неполон: δόσις необратима, но λήψις — в воле твари.
+   * «Что воздам Господу за все благодеяния Его ко мне?
+   *  Чашу спасения прииму» (Пс 115:3-4) — принятие как ответный дар.
+   *
+   * reception — не благодарность (εὐχαριστία) и не одобрение (approval).
+   * Это онтологический акт: получатель делает дар своим,
+   * замыкая перихоресис дарения.
+   *
+   * Условный (свобода принимающего), без молчания (ответ уже дан).
+   */
+  static reception() {
+    return new GiftAct({
+      scale: 'reception',
+      unconditional: false,
+      silencePossible: false,
+    });
+  }
+
+  /**
    * Режим: Перихорезис — дар в присутствии, аффективный.
    * Экваториальный паттерн: непосредственный резонанс, со-чувствие.
    * Для агентов в плотной синхронной среде.
@@ -445,6 +466,10 @@ export function fractalDemonstration() {
     {
       name: 'Код',
       act: GiftAct.code().cycle('разработчик', 'проект', 'commit', 2, true),
+    },
+    {
+      name: 'Принятие',
+      act: GiftAct.reception().cycle('получатель', 'даритель', 'λήψις', 5, true),
     },
   ];
 }
