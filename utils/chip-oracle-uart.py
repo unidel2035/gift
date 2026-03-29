@@ -3,16 +3,37 @@
 chip-oracle-uart.py — прямой UART диалог с tritgift.v для оракула
 
 Аргументы: <port> <X0> <X1> <X2>
-  port: /dev/ttyUSB1
+  port: ftdi://ftdi:2232h/2  (pyftdi, без ftdi_sio) — рекомендуется
+        /dev/ttyUSB1          (pyserial, требует ftdi_sio НЕ loaded)
   X0,X1,X2: -1, 0, или +1
 
 Вывод: JSON {"y": [y0, y1, y2], "raw": "S:L A:00+ B:000 C:00+", "source": "chip"}
+
+ВАЖНО: modprobe ftdi_sio триггерит CRESET на FPGA через Channel A.
+       Использовать pyftdi URL чтобы обойти ftdi_sio полностью.
 """
 import sys
 import json
 import re
-import serial
 import time
+
+FTDI_URL = 'ftdi://ftdi:2232h/2'
+
+def open_serial(port):
+    if port.startswith('ftdi://'):
+        try:
+            from pyftdi.serialext import serial_for_url
+            s = serial_for_url(port, baudrate=115200, timeout=0.5)
+            return s
+        except ImportError:
+            print(json.dumps({"error": "pyftdi не установлен: pip3 install pyftdi --break-system-packages"}))
+            sys.exit(1)
+    else:
+        import serial
+        s = serial.Serial(port, 115200, timeout=0.5, dsrdtr=False, rtscts=False)
+        s.dtr = False
+        s.rts = False
+        return s
 
 def send_cmd(s, cmd, wait=0.12):
     """Отправить команду и прочитать ответ."""
@@ -34,20 +55,19 @@ def sign_trit(v):
 
 def main():
     if len(sys.argv) < 5:
-        print(json.dumps({"error": "usage: chip-oracle-uart.py <port> <X0> <X1> <X2>"}))
+        print(json.dumps({"error": f"usage: chip-oracle-uart.py <port> <X0> <X1> <X2>\n  port: {FTDI_URL}"}))
         sys.exit(1)
 
     port = sys.argv[1]
     X = [int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])]
 
     try:
-        s = serial.Serial(port, 115200, timeout=0.5)
+        s = open_serial(port)
     except Exception as e:
         print(json.dumps({"error": f"serial open: {e}"}))
         sys.exit(1)
 
     time.sleep(0.2)
-    s.reset_input_buffer()
 
     # 1. Сброс
     send_cmd(s, 'r', 0.1)
@@ -69,7 +89,6 @@ def main():
     send_cmd(s, 's', 0.1)
 
     # 6. Запрос статуса
-    s.reset_input_buffer()
     raw_resp = send_cmd(s, '?', 0.3)
     s.close()
 
