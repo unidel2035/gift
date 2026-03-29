@@ -90,6 +90,35 @@ function extractFromGiftSource(src, filename) {
     });
   }
 
+
+  // 2b. Block format: «дар Name { от: X кому: Y тип: T вес: N }»
+  const blockGiftRe = /(?:^|[\s{])дар\s+([А-ЯЁа-яёA-Za-z_]\S*)\s*\{([^}]+)\}/g;
+  for (const mb of clean.matchAll(blockGiftRe)) {
+    const [, giftName, block] = mb;
+    if (!block.includes('от:') && !block.includes('from:')) continue;
+    const fromM   = block.match(/(?:от|from):\s*(\S+)/);
+    const toM     = block.match(/(?:кому|to):\s*(\S+)/);
+    const typeM   = block.match(/(?:тип|type):\s*(\S+)/);
+    const weightM = block.match(/(?:вес|weight):\s*([0-9.]+)/);
+    if (!fromM) continue;
+    const bFrom   = fromM[1];
+    const bTo     = toM ? toM[1] : '_koinon';
+    const bType   = typeM ? typeM[1] : 'gift';
+    const bWeight = weightM ? parseFloat(weightM[1]) : (WEIGHTS[bType] ?? WEIGHTS.gift);
+    acts.push({
+      giverId:     bFrom,
+      receiverId:  bTo,
+      via:         null,
+      type:        bType,
+      weight:      bWeight,
+      content:     giftName.slice(0, 120),
+      source:      filename,
+      irreversible: true,
+    });
+    persons.add(bFrom);
+    persons.add(bTo);
+  }
+
   // 3. Кеносис: «кеносис Имя»
   for (const m of clean.matchAll(/(?:^|[\s{])кеносис\s+([А-ЯЁа-яёA-Za-z_]\S*)/g)) {
     acts.push({
@@ -288,14 +317,10 @@ console.log('  Энергия:    ', r.energy.toFixed(2));
 
 // Сохранить снапшот W
 const snap = mem.snapshot();
-const snapPath = '/home/unidel/gift/data/sacred-history-W.json';
-await writeFile(
-  '/home/unidel/gift/data/sacred-history-W.json',
-  JSON.stringify(snap, null, 2)
-).catch(async () => {
-  // создать папку если нет
+const snapPath = join(ROOT, 'data/sacred-history-W.json');
+await writeFile(snapPath, JSON.stringify(snap, null, 2)).catch(async () => {
   const { mkdirSync } = await import('fs');
-  mkdirSync('/home/unidel/gift/data', { recursive: true });
+  mkdirSync(join(ROOT, 'data'), { recursive: true });
   await writeFile(snapPath, JSON.stringify(snap, null, 2));
 });
 
