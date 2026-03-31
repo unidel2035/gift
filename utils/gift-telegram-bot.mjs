@@ -1,61 +1,86 @@
 #!/usr/bin/env node
 /**
- * gift-telegram-bot.mjs — Telegram-интерфейс Gift Protocol
+ * gift-telegram-bot.mjs — @dar_gift_bot
  *
- * Простой бот: любой человек фиксирует дары своей общины.
- * Без регистрации, без баланса, без рейтинга.
+ * Жест: не «запиши свой дар» — а «замети что дал другой».
+ * Благодарность естественна. Хвастовство — нет.
  *
- * Запуск:
- *   GIFT_BOT_TOKEN=xxx node utils/gift-telegram-bot.mjs
+ * Каждый чат — своя матрица. Своя община.
  *
  * Команды:
- *   /дар Имя тип [описание]   — записать дар
- *   /зеркало                  — состояние общины
- *   /обо Имя                  — анамнезис лица
- *   /помощь                   — справка
+ *   /благодарю Имя тип [описание]  — замети дар другого
+ *   /зеркало                        — кто невидим в общине
+ *   /обо Имя                        — история лица
+ *   /помощь                         — справка
  */
 
-import { readFileSync, writeFileSync } from 'fs';
-import { createServer } from 'http';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { GiftMemory } from '../src/core/GiftMemory.js';
 import { CommunityDiagnostic } from '../src/core/GiftOptimizer.js';
 
-const TOKEN     = process.env.GIFT_BOT_TOKEN;
-const SNAP_PATH = './data/sacred-history-W.json';
-const API       = `https://api.telegram.org/bot${TOKEN}`;
+const TOKEN    = process.env.GIFT_BOT_TOKEN;
+const API      = `https://api.telegram.org/bot${TOKEN}`;
+const DATA_DIR = './data/communities';
 
-if (!TOKEN) {
-  console.error('GIFT_BOT_TOKEN не задан');
-  process.exit(1);
+if (!TOKEN) { console.error('GIFT_BOT_TOKEN не задан'); process.exit(1); }
+if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+
+// ── Матрица на чат ────────────────────────────────────────────────────────
+
+function snapPath(chatId) {
+  return `${DATA_DIR}/${chatId}.json`;
 }
 
-// ── Матрица ───────────────────────────────────────────────────────────────
-
-function loadMem() {
-  const snap = JSON.parse(readFileSync(SNAP_PATH, 'utf8'));
-  return GiftMemory.fromSnapshot(snap);
+function loadMem(chatId) {
+  const p = snapPath(chatId);
+  if (existsSync(p)) {
+    return GiftMemory.fromSnapshot(JSON.parse(readFileSync(p, 'utf8')));
+  }
+  return new GiftMemory(['_koinon']);
 }
 
-function saveMem(mem) {
-  writeFileSync(SNAP_PATH, JSON.stringify(mem.snapshot(), null, 2));
+function saveMem(chatId, mem) {
+  writeFileSync(snapPath(chatId), JSON.stringify(mem.snapshot(), null, 2));
 }
 
-// ── Типы актов ────────────────────────────────────────────────────────────
+// ── Типы даров ────────────────────────────────────────────────────────────
 
 const TYPES = {
-  время:      { key: 'time',     weight: 10, emoji: '⏱' },
-  завет:      { key: 'covenant', weight: 10, emoji: '🤝' },
-  присутствие:{ key: 'presence', weight: 7,  emoji: '🕯' },
-  приношение: { key: 'offering', weight: 6,  emoji: '🎁' },
-  вопрос:     { key: 'question', weight: 5,  emoji: '❓' },
-  код:        { key: 'code',     weight: 4,  emoji: '💻' },
-  слово:      { key: 'word',     weight: 3,  emoji: '💬' },
-  // Latin aliases
-  time:       { key: 'time',     weight: 10, emoji: '⏱' },
-  presence:   { key: 'presence', weight: 7,  emoji: '🕯' },
-  code:       { key: 'code',     weight: 4,  emoji: '💻' },
-  word:       { key: 'word',     weight: 3,  emoji: '💬' },
+  время:       { key: 'time',     weight: 10, emoji: '⏱', label: 'время' },
+  завет:       { key: 'covenant', weight: 10, emoji: '🤝', label: 'завет' },
+  присутствие: { key: 'presence', weight: 7,  emoji: '🕯', label: 'присутствие' },
+  приношение:  { key: 'offering', weight: 6,  emoji: '🎁', label: 'приношение' },
+  вопрос:      { key: 'question', weight: 5,  emoji: '💬', label: 'вопрос' },
+  код:         { key: 'code',     weight: 4,  emoji: '💻', label: 'код' },
+  слово:       { key: 'word',     weight: 3,  emoji: '✍️', label: 'слово' },
+  time:        { key: 'time',     weight: 10, emoji: '⏱', label: 'время' },
+  presence:    { key: 'presence', weight: 7,  emoji: '🕯', label: 'присутствие' },
+  code:        { key: 'code',     weight: 4,  emoji: '💻', label: 'код' },
 };
+
+// ── Тёплые фразы ─────────────────────────────────────────────────────────
+
+const WITNESS_PHRASES = [
+  'замечен. Это останется.',
+  'теперь в памяти общины.',
+  'не исчезнет. Дар необратим.',
+  'записан. Невидимое стало видимым.',
+  'свидетель есть.',
+];
+
+const TYPE_MEANING = {
+  time:     'отдал время — самое невозвратное',
+  covenant: 'связал себя заветом',
+  presence: 'был рядом — дар себя',
+  offering: 'принёс из своего',
+  question: 'открыл мысль в другом',
+  code:     'воплотил слово в дело',
+  word:     'сказал — и это стало',
+};
+
+function witness(name) {
+  return WITNESS_PHRASES[Math.floor(Math.random() * WITNESS_PHRASES.length)];
+}
 
 // ── Telegram API ──────────────────────────────────────────────────────────
 
@@ -68,139 +93,143 @@ async function tgCall(method, params = {}) {
   return res.json();
 }
 
-async function send(chatId, text, extra = {}) {
-  return tgCall('sendMessage', {
-    chat_id:    chatId,
-    text,
-    parse_mode: 'HTML',
-    ...extra,
-  });
+async function send(chatId, text) {
+  return tgCall('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
 }
 
-// ── Обработчики команд ────────────────────────────────────────────────────
+// ── Команды ───────────────────────────────────────────────────────────────
 
-// /дар Имя тип [описание]
-// Пример: /дар Пётр время помог переехать
-async function cmdDar(chatId, fromName, args) {
-  // args: ['Пётр', 'время', 'помог', 'переехать']
-  const [receiverId, typeArg, ...rest] = args;
-  if (!receiverId || !typeArg) {
+// /благодарю Имя тип [описание]
+// Жест: ты замечаешь что ДРУГОЙ тебе дал.
+// В матрице: Имя → ты [type, weight]
+async function cmdBlagodaryu(chatId, fromName, args) {
+  const [giverName, typeArg, ...rest] = args;
+
+  if (!giverName || !typeArg) {
     return send(chatId,
-      '❗ Формат: <code>/дар Имя тип [описание]</code>\n' +
-      'Типы: <b>время</b> · присутствие · завет · приношение · вопрос · код · слово\n' +
-      'Пример: <code>/дар Мария время помогла с переездом</code>'
+      '✍️ Формат: <code>/благодарю Имя тип [что сделал]</code>\n\n' +
+      'Типы:\n' +
+      '⏱ <b>время</b>  🕯 <b>присутствие</b>  🤝 <b>завет</b>\n' +
+      '🎁 <b>приношение</b>  💬 <b>вопрос</b>  💻 <b>код</b>  ✍️ <b>слово</b>\n\n' +
+      'Пример: <code>/благодарю Мария время помогла с переездом</code>'
     );
   }
 
-  const typeInfo = TYPES[typeArg.toLowerCase()];
-  if (!typeInfo) {
+  const t = TYPES[typeArg.toLowerCase()];
+  if (!t) {
     return send(chatId,
-      `❗ Неизвестный тип: <b>${typeArg}</b>\n` +
-      'Допустимые: время · присутствие · завет · приношение · вопрос · код · слово'
+      `Неизвестный тип: <b>${typeArg}</b>\n` +
+      'Используй: время · присутствие · завет · приношение · вопрос · код · слово'
     );
   }
 
-  const content = rest.join(' ') || typeInfo.key;
-  const giverId = fromName;
+  const content  = rest.join(' ') || t.label;
+  const receiver = fromName; // ты благодаришь → ты получатель
+  const giver    = giverName;
 
-  const mem = loadMem();
-  mem.receive({
-    giverId,
-    receiverId,
-    weight:      typeInfo.weight,
-    type:        typeInfo.key,
-    content,
-    irreversible: true,
-  });
-  saveMem(mem);
+  const mem = loadMem(chatId);
+  mem.receive({ giverId: giver, receiverId: receiver, weight: t.weight, type: t.key, content, irreversible: true });
+  saveMem(chatId, mem);
 
-  const diag     = new CommunityDiagnostic(mem.snapshot());
-  const theosis  = diag.theosisIndex(receiverId);
-  const level    = theosis < 0.1 ? 'κατάνυξις'
-                 : theosis < 0.4 ? 'πρᾶξις'
-                 : theosis < 0.7 ? 'θεωρία'
-                 :                 'θέωσις';
+  const diag    = new CommunityDiagnostic(mem.snapshot());
+  const total   = mem.totalGiven(giver);
+  const meaning = TYPE_MEANING[t.key] ?? t.label;
 
-  const bar = '█'.repeat(Math.round(theosis * 10)) + '░'.repeat(10 - Math.round(theosis * 10));
+  // Подбираем тёплую фразу
+  const lines = [
+    `${t.emoji} <b>${giver}</b> — ${witness(giver)}`,
+    ``,
+    `${giver} ${meaning}.`,
+  ];
 
-  return send(chatId,
-    `${typeInfo.emoji} <b>${giverId} → ${receiverId}</b>\n` +
-    `Тип: ${typeArg} · вес: ${typeInfo.weight}\n` +
-    (content !== typeInfo.key ? `Описание: ${content}\n` : '') +
-    `\n` +
-    `Обожение ${receiverId}: ${bar} ${(theosis * 100).toFixed(0)}% [${level}]\n` +
-    `Всего актов: ${mem.actsCount}`
-  );
-}
-
-// /зеркало
-async function cmdZerkalo(chatId) {
-  const mem  = loadMem();
-  const diag = new CommunityDiagnostic(mem.snapshot());
-
-  const lines = ['🪞 <b>Зеркало общины</b>'];
-  lines.push(`Лиц: ${mem.n} · Актов: ${mem.actsCount}\n`);
-
-  // Обожение
-  lines.push('<b>Обожение (θέωσις):</b>');
-  const allT = mem.persons
-    .filter(p => !['_abyss', '_koinon'].includes(p))
-    .map(p => ({ p, i: diag.theosisIndex(p) }))
-    .sort((a, b) => b.i - a.i);
-
-  for (const { p, i } of allT) {
-    if (i === 0) continue; // пустынных не показываем чтобы не перегружать
-    const bar = '█'.repeat(Math.round(i * 8)) + '░'.repeat(8 - Math.round(i * 8));
-    lines.push(`  ${p}: ${bar} ${(i * 100).toFixed(0)}%`);
+  if (content && content !== t.label) {
+    lines.push(`«${content}»`);
   }
 
-  // Пустыни
-  const isolated = diag.mostIsolated(4).filter(x => x.received === 0);
-  if (isolated.length) {
-    lines.push('\n<b>Пустыни (нет общения):</b>');
-    lines.push(isolated.map(x => `  · ${x.person}`).join('\n'));
+  if (total > 0) {
+    lines.push(`\nВсего отдал общине: ${total.toFixed(0)}`);
   }
 
-  // Кенозис
-  const top = diag.highestSurplus(3).filter(x => x.surplus > 10);
-  if (top.length) {
-    lines.push('\n<b>Высший кенозис (дают больше):</b>');
-    for (const { person, surplus } of top) {
-      lines.push(`  · ${person}: +${surplus.toFixed(0)}`);
-    }
+  // Если человек давал уже много — особое слово
+  if (total >= 30) {
+    lines.push(`\n<i>Это человек который держит общину.</i>`);
   }
 
   return send(chatId, lines.join('\n'));
 }
 
-// /обо Имя
-async function cmdObo(chatId, personId) {
-  if (!personId) {
-    return send(chatId, '❗ Формат: <code>/обо Имя</code>');
+// /зеркало — кто невидим, кто держит общину
+async function cmdZerkalo(chatId) {
+  const mem  = loadMem(chatId);
+  const diag = new CommunityDiagnostic(mem.snapshot());
+  const snap = mem.snapshot();
+
+  if (mem.actsCount === 0) {
+    return send(chatId,
+      '🪞 Зеркало пусто.\n\n' +
+      'Начни: <code>/благодарю Имя время описание</code>\n' +
+      'И невидимое станет видимым.'
+    );
   }
 
-  const mem    = loadMem();
+  const lines = [`🪞 <b>Зеркало общины</b> · ${mem.actsCount} актов\n`];
+
+  // Кто держит (высокий кенозис)
+  const holders = diag.highestSurplus(3).filter(x => x.surplus > 5);
+  if (holders.length) {
+    lines.push('<b>Держат общину:</b>');
+    for (const { person, given, received } of holders) {
+      lines.push(`  · ${person} — отдал ${given.toFixed(0)}, принял ${received.toFixed(0)}`);
+    }
+  }
+
+  // Кто невидим (изолированы)
+  const invisible = diag.mostIsolated(4).filter(x => x.received === 0 && !['_koinon','_abyss'].includes(x.person));
+  if (invisible.length) {
+    lines.push(`\n<b>Невидимые (ещё не замечены):</b>`);
+    for (const { person } of invisible) {
+      lines.push(`  · ${person}`);
+    }
+    lines.push(`<i>Быть может, они тоже дают — но никто не сказал «благодарю».</i>`);
+  }
+
+  // Общий портрет
+  const allPersons = snap.persons.filter(p => !['_koinon','_abyss'].includes(p));
+  if (allPersons.length > 0) {
+    lines.push(`\nЛиц в общине: ${allPersons.length}`);
+  }
+
+  return send(chatId, lines.join('\n'));
+}
+
+// /обо Имя — история лица
+async function cmdObo(chatId, name) {
+  if (!name) return send(chatId, 'Формат: <code>/обо Имя</code>');
+
+  const mem    = loadMem(chatId);
   const diag   = new CommunityDiagnostic(mem.snapshot());
-  const theosis = diag.theosisIndex(personId);
-  const given   = mem.totalGiven(personId);
-  const recv    = mem.totalReceived(personId);
-  const present = mem.makePresent({ giverId: personId });
-  const level   = theosis < 0.1 ? 'κατάνυξις'
-                : theosis < 0.4 ? 'πρᾶξις'
-                : theosis < 0.7 ? 'θεωρία'
-                :                 'θέωσις';
+  const given  = mem.totalGiven(name);
+  const recv   = mem.totalReceived(name);
+  const surplus = given - recv;
 
-  const bar = '█'.repeat(Math.round(theosis * 12)) + '░'.repeat(12 - Math.round(theosis * 12));
+  if (given === 0 && recv === 0) {
+    return send(chatId, `<b>${name}</b> пока не замечен в общине.\n\nЕсли он что-то дал — скажи: <code>/благодарю ${name} время ...</code>`);
+  }
 
-  const lines = [
-    `🕯 <b>Анамнезис: ${personId}</b>`,
-    ``,
-    `Обожение: ${bar} ${(theosis * 100).toFixed(0)}% [${level}]`,
-    `Дал: ${given.toFixed(1)} · Принял: ${recv.toFixed(1)} · Сюрплюс: ${(given - recv).toFixed(1)}`,
-  ];
+  const present = mem.makePresent({ giverId: name });
+  const lines   = [`🕯 <b>${name}</b>\n`];
+
+  if (given > 0) lines.push(`Дал общине: ${given.toFixed(0)}`);
+  if (recv > 0)  lines.push(`Принял: ${recv.toFixed(0)}`);
+
+  if (surplus > 20) {
+    lines.push(`\n<i>Даёт больше чем принимает. Кенозис.</i>`);
+  } else if (surplus < -20) {
+    lines.push(`\n<i>Принимает больше чем даёт. Добрая почва.</i>`);
+  }
 
   if (present.decoded.receivers.length) {
-    lines.push(`\nОткликаются: ${present.decoded.receivers.join(', ')}`);
+    lines.push(`\nОткликаются: ${present.decoded.receivers.filter(p => p !== '_koinon').join(', ')}`);
   }
 
   return send(chatId, lines.join('\n'));
@@ -209,52 +238,47 @@ async function cmdObo(chatId, personId) {
 // /помощь
 async function cmdHelp(chatId) {
   return send(chatId,
-    '🎁 <b>Gift Protocol</b>\n\n' +
-    'Записывай дары своей общины. Без регистрации, без баллов.\n' +
+    '🎁 <b>Дар</b> — бот живой памяти общины\n\n' +
+    'Замечай что дают другие. Невидимое становится видимым.\n' +
     'Дар необратим. Память — живая.\n\n' +
-    '<b>Команды:</b>\n' +
-    '/дар Имя тип [описание] — записать дар\n' +
-    '/зеркало — состояние общины\n' +
-    '/обо Имя — анамнезис лица\n\n' +
+    '<b>Как использовать:</b>\n' +
+    '/благодарю Имя тип [что сделал]\n' +
+    '/зеркало — кто держит общину, кто невидим\n' +
+    '/обо Имя — история человека\n\n' +
     '<b>Типы дара:</b>\n' +
-    '⏱ <b>время</b> (вес 10)\n' +
-    '🤝 <b>завет</b> (вес 10)\n' +
-    '🕯 <b>присутствие</b> (вес 7)\n' +
-    '🎁 <b>приношение</b> (вес 6)\n' +
-    '❓ <b>вопрос</b> (вес 5)\n' +
-    '💻 <b>код</b> (вес 4)\n' +
-    '💬 <b>слово</b> (вес 3)\n\n' +
-    'Пример: <code>/дар Мария время помогла с переездом</code>'
+    '⏱ время (10)  · 🤝 завет (10)\n' +
+    '🕯 присутствие (7)  · 🎁 приношение (6)\n' +
+    '💬 вопрос (5)  · 💻 код (4)  · ✍️ слово (3)\n\n' +
+    '<i>Число — богословский вес. Время тяжелее денег.</i>\n\n' +
+    'Пример: <code>/благодарю Мария время помогла с детьми</code>'
   );
 }
 
-// ── Роутинг сообщений ─────────────────────────────────────────────────────
+// ── Роутинг ───────────────────────────────────────────────────────────────
 
 async function handleUpdate(update) {
   const msg = update.message;
   if (!msg?.text) return;
 
   const chatId   = msg.chat.id;
-  const fromName = msg.from?.username ?? msg.from?.first_name ?? 'Безымянный';
+  const from     = msg.from;
+  const fromName = from?.username ?? from?.first_name ?? 'Безымянный';
   const text     = msg.text.trim();
-
-  // Разбор команды
   const [cmd, ...args] = text.split(/\s+/);
-  const command = cmd.toLowerCase().replace('@' + (process.env.BOT_USERNAME ?? ''), '');
+  const command  = cmd.toLowerCase().split('@')[0];
 
   try {
-    if (command === '/дар' || command === '/dar') {
-      await cmdDar(chatId, fromName, args);
-    } else if (command === '/зеркало' || command === '/mirror') {
+    if (['/благодарю', '/blagodaryu', '/dar', '/дар'].includes(command)) {
+      await cmdBlagodaryu(chatId, fromName, args);
+    } else if (['/зеркало', '/zerkalo', '/mirror'].includes(command)) {
       await cmdZerkalo(chatId);
-    } else if (command === '/обо' || command === '/obo') {
+    } else if (['/обо', '/obo'].includes(command)) {
       await cmdObo(chatId, args[0]);
-    } else if (command === '/помощь' || command === '/help' || command === '/start') {
+    } else if (['/помощь', '/help', '/start'].includes(command)) {
       await cmdHelp(chatId);
     }
   } catch (e) {
-    console.error('Ошибка обработки:', e.message);
-    await send(chatId, '⚠️ Ошибка: ' + e.message);
+    console.error('error:', e.message);
   }
 }
 
@@ -262,23 +286,19 @@ async function handleUpdate(update) {
 
 async function poll() {
   let offset = 0;
-  console.log('Gift Protocol Bot запущен. Long polling...');
+  console.log('🎁 @dar_gift_bot запущен');
 
   while (true) {
     try {
-      const res = await tgCall('getUpdates', { offset, timeout: 30, allowed_updates: ['message'] });
-      if (!res.ok) {
-        console.error('Telegram error:', res.description);
-        await new Promise(r => setTimeout(r, 5000));
-        continue;
-      }
-      for (const update of res.result ?? []) {
-        offset = update.update_id + 1;
-        handleUpdate(update).catch(e => console.error('handleUpdate:', e.message));
+      const r = await tgCall('getUpdates', { offset, timeout: 30, allowed_updates: ['message'] });
+      if (!r.ok) { await new Promise(x => setTimeout(x, 5000)); continue; }
+      for (const u of r.result ?? []) {
+        offset = u.update_id + 1;
+        handleUpdate(u).catch(e => console.error('handle:', e.message));
       }
     } catch (e) {
-      console.error('poll error:', e.message);
-      await new Promise(r => setTimeout(r, 5000));
+      console.error('poll:', e.message);
+      await new Promise(x => setTimeout(x, 5000));
     }
   }
 }
