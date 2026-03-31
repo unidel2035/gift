@@ -17,6 +17,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { GiftMemory } from '../src/core/GiftMemory.js';
 import { CommunityDiagnostic } from '../src/core/GiftOptimizer.js';
+import { GiftDAO } from '../src/dao/GiftDAO.js';
+
+const dao = new GiftDAO();
 
 const TOKEN    = process.env.GIFT_BOT_TOKEN;
 const API      = `https://api.telegram.org/bot${TOKEN}`;
@@ -235,22 +238,82 @@ async function cmdObo(chatId, name) {
   return send(chatId, lines.join('\n'));
 }
 
+// /join — вступить в Gift DAO
+async function cmdJoin(chatId, userId, fromName) {
+  const existing = dao.profile(userId);
+  if (existing) {
+    const t = dao.tokensAvailable(userId);
+    return send(chatId,
+      `✅ Ты уже в DAO, <b>${existing.name}</b>\n\n` +
+      `Токенов доступно: <b>${t.available.toLocaleString()}</b>\n` +
+      `Дал общине: ${existing.given.toFixed(0)} · Принял: ${existing.received.toFixed(0)}\n` +
+      `Бонус за щедрость: +${t.bonus.toLocaleString()} токенов\n\n` +
+      `<i>Помогаешь другим → получаешь больше AI.</i>`
+    );
+  }
+
+  dao.join(userId, fromName, 1);
+
+  return send(chatId,
+    `🎁 <b>${fromName}</b>, ты в Gift DAO!\n\n` +
+    `Получаешь: <b>${(50_000).toLocaleString()} токенов/месяц</b> к Claude\n\n` +
+    `Как получить больше:\n` +
+    `· Помогай другим → /благодарю фиксирует твой вклад\n` +
+    `· Каждый +10 surplus = +10 000 токенов бонуса\n\n` +
+    `Не деньги — щедрость даёт доступ.\n\n` +
+    `Эндпоинт: <code>http://173.249.2.184:4444/v1/messages</code>\n` +
+    `Заголовок: <code>x-telegram-user-id: ${userId}</code>`
+  );
+}
+
+// /dao — мой статус и таблица щедрых
+async function cmdDao(chatId, userId) {
+  const profile = dao.profile(userId);
+
+  if (!profile) {
+    return send(chatId,
+      '🏛 <b>Gift DAO</b>\n\n' +
+      'Общая инфраструктура Claude для тех кто помогает друг другу.\n' +
+      'Не «скидываемся» — зарабатываем доступ щедростью.\n\n' +
+      'Вступить: /join\n\n' +
+      `Участников сейчас: ${dao.memberCount}`
+    );
+  }
+
+  const t = dao.tokensAvailable(userId);
+  const board = dao.leaderboard(5);
+
+  const lines = [
+    `🏛 <b>Gift DAO — твой статус</b>\n`,
+    `Токены: <b>${t.available.toLocaleString()}</b> / ${t.total.toLocaleString()}`,
+    `  базовые: ${t.base.toLocaleString()}`,
+    `  бонус за щедрость: +${t.bonus.toLocaleString()}`,
+    `  использовано: ${t.used.toLocaleString()}\n`,
+    `Дал общине: ${profile.given.toFixed(0)} · Принял: ${profile.received.toFixed(0)}`,
+    `Сюрплюс (кенозис): ${profile.surplus.toFixed(0)}\n`,
+    `<b>Самые щедрые:</b>`,
+    ...board.map((m, i) => `  ${i+1}. ${m.name} · сюрплюс ${m.surplus.toFixed(0)} · ${m.tokens.toLocaleString()} ток.`),
+  ];
+
+  return send(chatId, lines.join('\n'));
+}
+
 // /помощь
 async function cmdHelp(chatId) {
   return send(chatId,
-    '🎁 <b>Дар</b> — бот живой памяти общины\n\n' +
-    'Замечай что дают другие. Невидимое становится видимым.\n' +
-    'Дар необратим. Память — живая.\n\n' +
-    '<b>Как использовать:</b>\n' +
-    '/благодарю Имя тип [что сделал]\n' +
-    '/зеркало — кто держит общину, кто невидим\n' +
-    '/обо Имя — история человека\n\n' +
+    '🎁 <b>Дар</b> — живая память общины + Claude DAO\n\n' +
+    '<b>Память общины:</b>\n' +
+    '/blagodaryu Имя тип [что сделал] — замети дар другого\n' +
+    '/zerkalo — кто держит общину, кто невидим\n' +
+    '/obo Имя — история человека\n\n' +
+    '<b>Gift DAO (Claude для общины):</b>\n' +
+    '/join — вступить, получить доступ к Claude\n' +
+    '/dao — мой статус и таблица щедрых\n\n' +
     '<b>Типы дара:</b>\n' +
     '⏱ время (10)  · 🤝 завет (10)\n' +
     '🕯 присутствие (7)  · 🎁 приношение (6)\n' +
     '💬 вопрос (5)  · 💻 код (4)  · ✍️ слово (3)\n\n' +
-    '<i>Число — богословский вес. Время тяжелее денег.</i>\n\n' +
-    'Пример: <code>/благодарю Мария время помогла с детьми</code>'
+    '<i>Помогаешь другим → больше токенов Claude.</i>'
   );
 }
 
@@ -268,13 +331,17 @@ async function handleUpdate(update) {
   const command  = cmd.toLowerCase().split('@')[0];
 
   try {
-    if (['/благодарю', '/blagodaryu', '/dar', '/дар'].includes(command)) {
+    if (['/join'].includes(command)) {
+      await cmdJoin(chatId, String(from?.id ?? chatId), fromName);
+    } else if (['/dao'].includes(command)) {
+      await cmdDao(chatId, String(from?.id ?? chatId));
+    } else if (['/благодарю', '/blagodaryu', '/dar', '/дар'].includes(command)) {
       await cmdBlagodaryu(chatId, fromName, args);
     } else if (['/зеркало', '/zerkalo', '/mirror'].includes(command)) {
       await cmdZerkalo(chatId);
     } else if (['/обо', '/obo'].includes(command)) {
       await cmdObo(chatId, args[0]);
-    } else if (['/помощь', '/help', '/start'].includes(command)) {
+    } else if (['/помощь', '/help', '/start', '/start@dar_gift_bot'].includes(command)) {
       await cmdHelp(chatId);
     }
   } catch (e) {
