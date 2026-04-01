@@ -27,6 +27,7 @@
     "pulse": "node utils/ontology-pulse.mjs",
     "pulse:dry": "node utils/ontology-pulse.mjs --dry-run",
     "portal": "node utils/gift-portal-server.mjs",
+    "giftos": "node utils/giftos-ws-server.mjs",
     "fpga": "node utils/fpga-gift-bridge.mjs",
     "fpga:ws": "node utils/fpga-gift-bridge.mjs --ws",
     "fpga:chip": "bash utils/fpga-attach.sh run",
