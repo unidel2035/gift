@@ -6,7 +6,6 @@
 <title>GiftOS — рой без командира</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body {
     background: #0a0a0f;
     color: #e0e0e0;
@@ -17,634 +16,624 @@
     align-items: center;
     padding: 20px;
   }
-
-  h1 {
-    font-size: 1.4rem;
-    color: #a0c4ff;
-    margin-bottom: 4px;
-    letter-spacing: 0.05em;
-  }
-
-  .subtitle {
-    font-size: 0.75rem;
-    color: #555;
-    margin-bottom: 20px;
-  }
-
-  .layout {
-    display: flex;
-    gap: 24px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  /* ── Canvas ── */
-  #canvas {
-    border: 1px solid #222;
-    border-radius: 8px;
-    background: #080810;
-    display: block;
-  }
-
-  /* ── Панель ── */
-  .panel {
-    width: 300px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .card {
-    background: #0f0f1a;
-    border: 1px solid #1e1e2e;
-    border-radius: 8px;
-    padding: 14px;
-  }
-
-  .card h3 {
-    font-size: 0.7rem;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 10px;
-  }
-
-  /* Прогресс покрытия */
-  .coverage-bar-bg {
-    background: #1a1a2e;
-    border-radius: 4px;
-    height: 8px;
-    overflow: hidden;
-    margin: 6px 0;
-  }
-  .coverage-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #2d6a4f, #52b788);
-    border-radius: 4px;
-    transition: width 0.2s ease;
-  }
-  .coverage-label {
-    font-size: 1.6rem;
-    font-weight: bold;
-    color: #52b788;
-  }
-
-  /* Таблица дронов */
-  .drone-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-    border-bottom: 1px solid #1a1a2a;
-    font-size: 0.75rem;
-  }
-  .drone-row:last-child { border-bottom: none; }
-
-  .drone-icon { font-size: 1rem; width: 20px; text-align: center; }
-  .drone-name { color: #aaa; width: 64px; }
-  .drone-role { width: 70px; font-size: 0.65rem; }
-  .drone-surplus { width: 40px; text-align: right; }
-  .drone-bat { width: 32px; text-align: right; font-size: 0.65rem; color: #666; }
-
-  .surplus-pos { color: #52b788; }
-  .surplus-neg { color: #e06c75; }
-  .surplus-zero { color: #555; }
-
-  /* W-матрица */
-  .w-link {
-    font-size: 0.72rem;
-    color: #7ec8e3;
-    padding: 2px 0;
-    display: flex;
-    justify-content: space-between;
-  }
+  h1 { font-size: 1.4rem; color: #a0c4ff; margin-bottom: 4px; letter-spacing: 0.05em; }
+  .subtitle { font-size: 0.75rem; color: #555; margin-bottom: 16px; }
+  .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  #canvas { border: 1px solid #1a1a2e; border-radius: 8px; background: #050508; display: block; cursor: crosshair; }
+  .panel { width: 290px; display: flex; flex-direction: column; gap: 10px; }
+  .card { background: #0d0d1a; border: 1px solid #1a1a2e; border-radius: 8px; padding: 12px; }
+  .card h3 { font-size: 0.65rem; color: #444; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .coverage-bar-bg { background: #111; border-radius: 4px; height: 7px; overflow: hidden; margin: 5px 0; }
+  .coverage-bar-fill { height: 100%; background: linear-gradient(90deg,#1a4731,#52b788); border-radius: 4px; transition: width 0.15s; }
+  .coverage-label { font-size: 1.5rem; font-weight: bold; color: #52b788; }
+  .drone-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid #111; font-size: 0.72rem; }
+  .drone-row:last-child { border: none; }
+  .drone-icon { width: 16px; text-align: center; }
+  .drone-name { color: #aaa; width: 52px; }
+  .drone-role { width: 62px; font-size: 0.62rem; }
+  .drone-surplus { width: 36px; text-align: right; }
+  .drone-bat { width: 30px; text-align: right; font-size: 0.62rem; color: #555; }
+  .drone-dead { opacity: 0.3; text-decoration: line-through; }
+  .surplus-pos { color: #52b788; } .surplus-neg { color: #e06c75; } .surplus-zero { color: #444; }
+  .w-link { font-size: 0.68rem; color: #7ec8e3; padding: 2px 0; display: flex; justify-content: space-between; }
   .w-link span { color: #52b788; }
-
-  /* Контролы */
-  .controls {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  button {
-    background: #1a1a2e;
-    border: 1px solid #333;
-    color: #ccc;
-    padding: 6px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.8rem;
-    transition: all 0.15s;
-  }
-  button:hover { background: #252540; border-color: #555; color: #fff; }
-  button.active { background: #2d3561; border-color: #5566aa; color: #a0c4ff; }
-
-  .tick-label {
-    font-size: 0.75rem;
-    color: #444;
-  }
-
-  input[type=range] {
-    accent-color: #5566aa;
-    width: 80px;
-  }
-
-  label { font-size: 0.75rem; color: #555; }
-
-  /* Лог */
-  #log {
-    height: 80px;
-    overflow-y: auto;
-    font-size: 0.68rem;
-    color: #555;
-    line-height: 1.6;
-  }
-  #log .entry { color: #7ec8e3; }
-  #log .entry.complete { color: #52b788; font-weight: bold; }
-
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    font-size: 0.68rem;
-  }
-  .legend-item { display: flex; align-items: center; gap: 4px; color: #666; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { background: #111; border: 1px solid #2a2a3e; color: #bbb; padding: 5px 12px; border-radius: 5px;
+    cursor: pointer; font-family: inherit; font-size: 0.75rem; transition: all 0.1s; }
+  button:hover { background: #1e1e30; border-color: #444; color: #fff; }
+  button.active { background: #1e2540; border-color: #4466aa; color: #a0c4ff; }
+  button.danger { border-color: #e06c75; color: #e06c75; }
+  button.danger:hover { background: #2a1010; }
+  button.success { border-color: #52b788; color: #52b788; }
+  label { font-size: 0.7rem; color: #444; }
+  input[type=range] { accent-color: #4466aa; width: 80px; }
+  #log { height: 72px; overflow-y: auto; font-size: 0.65rem; color: #444; line-height: 1.7; }
+  .log-ok { color: #52b788; } .log-warn { color: #e9c46a; } .log-dead { color: #e06c75; }
+  .log-merge { color: #c77dff; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.65rem; }
+  .legend-item { display: flex; align-items: center; gap: 4px; color: #555; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .scenario-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 0.68rem; color: #555; padding: 1px 0; }
+  .stat-val { color: #7ec8e3; }
 </style>
 </head>
 <body>
-
 <h1>GiftOS — рой без командира</h1>
-<p class="subtitle">Координация через W-матрицу surplus · Соборность в действии</p>
+<p class="subtitle">Координация через W-матрицу surplus · Соборность · Кенозис · Анамнезис</p>
 
 <div class="layout">
-  <canvas id="canvas" width="480" height="480"></canvas>
-
+  <canvas id="canvas" width="500" height="500"></canvas>
   <div class="panel">
 
-    <!-- Покрытие -->
     <div class="card">
       <h3>Покрытие зоны</h3>
       <div class="coverage-label" id="coverage-pct">0%</div>
-      <div class="coverage-bar-bg">
-        <div class="coverage-bar-fill" id="coverage-bar" style="width:0%"></div>
-      </div>
-      <div style="font-size:0.7rem;color:#444;margin-top:4px">
-        тик: <span id="tick-num">0</span> &nbsp;|&nbsp;
-        живых: <span id="alive-num">0</span> &nbsp;|&nbsp;
-        sabbath: <span id="rest-num">0</span>
-      </div>
+      <div class="coverage-bar-bg"><div class="coverage-bar-fill" id="coverage-bar" style="width:0%"></div></div>
+      <div class="stat-row"><span>Тик</span><span class="stat-val" id="tick-num">0</span></div>
+      <div class="stat-row"><span>Живых</span><span class="stat-val" id="alive-num">0</span></div>
+      <div class="stat-row"><span>Воскрешений</span><span class="stat-val" id="resurrect-num">0</span></div>
+      <div class="stat-row"><span>Роёв</span><span class="stat-val" id="swarm-count">1</span></div>
     </div>
 
-    <!-- Дроны -->
     <div class="card">
       <h3>Лица роя</h3>
       <div id="drone-table"></div>
     </div>
 
-    <!-- W-матрица -->
     <div class="card">
       <h3>W-матрица (топ нитей)</h3>
       <div id="w-matrix"></div>
     </div>
 
-    <!-- Легенда -->
     <div class="card">
-      <h3>Легенда</h3>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#f4a261"></div>executor</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#e9c46a"></div>scout</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#4cc9f0"></div>relay</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#c77dff"></div>guardian</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#333"></div>resting</div>
+      <h3>Сценарии</h3>
+      <div class="scenario-btns">
+        <button id="btn-kill" class="danger">💀 Убить лидера</button>
+        <button id="btn-obstacle">🚧 Препятствие</button>
+        <button id="btn-spawn-swarm" class="success">✦ Второй рой</button>
+        <button id="btn-drain">🔋 Разряд</button>
       </div>
     </div>
 
-    <!-- Контролы -->
     <div class="card">
       <h3>Управление</h3>
       <div class="controls">
-        <button id="btn-start" class="active">▶ Старт</button>
+        <button id="btn-start" class="active">⏸ Пауза</button>
         <button id="btn-reset">↺ Сброс</button>
-        <div>
-          <label>Скорость</label><br>
-          <input type="range" id="speed" min="20" max="500" value="120" step="10">
-        </div>
-        <div>
-          <label>Дронов: <span id="drone-count-label">6</span></label><br>
-          <input type="range" id="drone-count" min="3" max="12" value="6" step="1">
-        </div>
+        <div><label>Скорость</label><br><input type="range" id="speed" min="20" max="400" value="100" step="10"></div>
+        <div><label>Дронов: <span id="drone-count-label">6</span></label><br>
+          <input type="range" id="drone-count" min="3" max="12" value="6" step="1"></div>
       </div>
     </div>
 
-    <!-- Лог -->
     <div class="card">
-      <h3>Анамнезис роя</h3>
-      <div id="log"></div>
+      <h3>Легенда</h3>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#f4a261"></div>executor ★</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e9c46a"></div>scout ▲</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4cc9f0"></div>relay ◉</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#c77dff"></div>guardian ◆</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#222"></div>resting ·</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e06c75"></div>dead ✕</div>
+      </div>
+      <div style="font-size:0.62rem;color:#333;margin-top:6px">Клик на карте → препятствие</div>
     </div>
 
+    <div class="card">
+      <h3>Анамнезис</h3>
+      <div id="log"></div>
+    </div>
   </div>
 </div>
 
 <script type="module">
-// ════════════════════════════════════════════════════════════
-//  Встроенный движок (SwarmCoordinator + DroneAgent)
-//  без импорта модулей — всё inline для браузера
-// ════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  GiftOS Simulator v2 — с кенозисом, смертью, воскресением
+// ══════════════════════════════════════════════════════════
 
-const DroneRole = {
-  SCOUT: 'scout', RELAY: 'relay',
-  EXECUTOR: 'executor', GUARDIAN: 'guardian', RESTING: 'resting',
-};
+const DroneRole = { SCOUT:'scout', RELAY:'relay', EXECUTOR:'executor', GUARDIAN:'guardian', RESTING:'resting', DEAD:'dead' };
+const ROLE_COLOR = { executor:'#f4a261', scout:'#e9c46a', relay:'#4cc9f0', guardian:'#c77dff', resting:'#333', dead:'#e06c75' };
+const ROLE_ICON  = { executor:'★', scout:'▲', relay:'◉', guardian:'◆', resting:'·', dead:'✕' };
 
-const ROLE_COLOR = {
-  executor: '#f4a261', scout: '#e9c46a',
-  relay: '#4cc9f0', guardian: '#c77dff', resting: '#2a2a3a',
-};
-
-const ROLE_ICON = {
-  executor: '★', scout: '▲', relay: '◉', guardian: '◆', resting: '·',
-};
+// ── DroneAgent ─────────────────────────────────────────────
 
 class DroneAgent {
-  constructor({ id, x = 0, y = 0, battery = 100 }) {
-    this.id = id; this.x = x; this.y = y;
-    this.battery = battery; this.role = DroneRole.SCOUT;
-    this.speed = 0.6;
-    this.peerSurplus = new Map();
-    this.coverage = new Set();
-    this.given = 0; this.received = 0;
-    this.target = null;
-    this.trail = []; // последние позиции для хвоста
+  constructor({ id, x=0, y=0, battery=100, swarmId=0 }) {
+    this.id=id; this.x=x; this.y=y; this.battery=battery;
+    this.role=DroneRole.SCOUT; this.speed=0.55; this.swarmId=swarmId;
+    this.peerSurplus=new Map(); this.coverage=new Set();
+    this.given=0; this.received=0; this.target=null;
+    this.trail=[]; this.dead=false; this.resurrected=false;
+    this.kenosis=0; // счётчик кенотических актов
+    this.glowPhase=Math.random()*Math.PI*2;
   }
-  get surplus() { return this.given - this.received; }
+  get surplus(){ return this.given - this.received; }
+  distTo(x,y){ return Math.hypot(this.x-x, this.y-y); }
 
-  distTo(x, y) { return Math.hypot(this.x - x, this.y - y); }
-
-  stepToward(x, y) {
-    const d = this.distTo(x, y);
+  stepToward(x, y, obstacles) {
+    let dx = x-this.x, dy = y-this.y;
+    const d = Math.hypot(dx,dy);
     if (d < 0.4) return false;
     const s = Math.min(this.speed, d);
-    this.x += (x - this.x) / d * s;
-    this.y += (y - this.y) / d * s;
-    this.battery -= 0.05;
-    this.trail.push({ x: this.x, y: this.y });
-    if (this.trail.length > 20) this.trail.shift();
+    // Отталкивание от препятствий
+    for (const obs of obstacles) {
+      const od = this.distTo(obs.x, obs.y);
+      if (od < obs.r + 1.5) {
+        const force = (obs.r + 1.5 - od) / (obs.r + 1.5);
+        dx += (this.x - obs.x) / od * force * 3;
+        dy += (this.y - obs.y) / od * force * 3;
+      }
+    }
+    const nd = Math.hypot(dx,dy);
+    if (nd > 0) { this.x += dx/nd*s; this.y += dy/nd*s; }
+    this.battery -= 0.04;
+    if (this.battery <= 0) { this.battery=0; this.dead=true; this.role=DroneRole.DEAD; }
+    this.trail.push({x:this.x, y:this.y});
+    if (this.trail.length > 25) this.trail.shift();
     return true;
   }
 
   scan() {
-    const cx = Math.round(this.x), cy = Math.round(this.y);
-    const key = `${cx},${cy}`;
-    if (!this.coverage.has(key)) {
-      this.coverage.add(key);
-      this.given++;
-      return { x: cx, y: cy };
-    }
+    if (this.dead) return null;
+    const cx=Math.round(this.x), cy=Math.round(this.y);
+    const key=`${cx},${cy}`;
+    if (!this.coverage.has(key)) { this.coverage.add(key); this.given++; return {x:cx,y:cy}; }
     return null;
   }
 
   updatePeer(id, surplus) { this.peerSurplus.set(id, surplus); }
 
-  electRole(tz) {
-    if (this.battery < 15) { this.role = DroneRole.RESTING; return; }
-    const all = [...this.peerSurplus.entries(), [this.id, this.surplus]]
-      .sort((a, b) => b[1] - a[1]);
-    const myRank = all.findIndex(([id]) => id === this.id);
+  // Кенозис: добровольно уступить роль тому кто ниже
+  checkKenosis(peers) {
+    if (this.role === DroneRole.EXECUTOR && this.battery < 30) {
+      this.kenosis++;
+      this.given += 2; // кенотический дар — отдать позицию
+      return true;
+    }
+    return false;
+  }
+
+  electRole(tz, obstacles) {
+    if (this.dead || this.battery <= 0) { this.role=DroneRole.DEAD; return; }
+    if (this.battery < 15) { this.role=DroneRole.RESTING; return; }
+    const all=[...this.peerSurplus.entries(),[this.id,this.surplus]]
+      .sort((a,b)=>b[1]-a[1]);
+    const myRank = all.findIndex(([id])=>id===this.id);
     const n = all.length;
-    const myCovInTarget = [...this.coverage].filter(k => {
-      const [cx, cy] = k.split(',').map(Number);
-      return cx >= tz.x1 && cx <= tz.x2 && cy >= tz.y1 && cy <= tz.y2;
+    const myCovInTarget = [...this.coverage].filter(k=>{
+      const [cx,cy]=k.split(',').map(Number);
+      return cx>=tz.x1&&cx<=tz.x2&&cy>=tz.y1&&cy<=tz.y2;
     }).length;
-    if (myRank === 0) this.role = DroneRole.EXECUTOR;
-    else if (myRank === 1 && n > 3) this.role = DroneRole.RELAY;
-    else if (myCovInTarget < 4) this.role = DroneRole.SCOUT;
-    else if (myRank === n - 1) this.role = DroneRole.RESTING;
-    else this.role = DroneRole.GUARDIAN;
+    if (myRank===0)               this.role=DroneRole.EXECUTOR;
+    else if (myRank===1&&n>3)     this.role=DroneRole.RELAY;
+    else if (myCovInTarget<4)     this.role=DroneRole.SCOUT;
+    else if (myRank===n-1)        this.role=DroneRole.RESTING;
+    else                          this.role=DroneRole.GUARDIAN;
   }
 }
 
+// ── SwarmCoordinator v2 ────────────────────────────────────
+
 class SwarmCoordinator {
-  constructor({ droneCount = 6, gridW = 20, gridH = 20, targetZone } = {}) {
-    this.gridW = gridW; this.gridH = gridH;
-    this.targetZone = targetZone ?? { x1: 7, y1: 7, x2: 13, y2: 13 };
-    this.tick = 0;
-    this.globalCoverage = new Set();
-    this.totalCells = (this.targetZone.x2 - this.targetZone.x1 + 1) *
-                      (this.targetZone.y2 - this.targetZone.y1 + 1);
-    this.drones = Array.from({ length: droneCount }, (_, i) =>
-      new DroneAgent({ id: `Д${i + 1}`, x: 1 + Math.random() * 3, y: 1 + Math.random() * 3,
-        battery: 80 + Math.random() * 20 }));
-    this.wMatrix = new Map(); // id→id → weight
-    this.log = [];
+  constructor({ droneCount=6, gridW=22, gridH=22, targetZone, swarmId=0, offsetX=0, offsetY=0 }={}) {
+    this.gridW=gridW; this.gridH=gridH; this.swarmId=swarmId;
+    this.targetZone=targetZone??{x1:8,y1:8,x2:14,y2:14};
+    this.tick=0; this.globalCoverage=new Set();
+    this.totalCells=(this.targetZone.x2-this.targetZone.x1+1)*(this.targetZone.y2-this.targetZone.y1+1);
+    this.obstacles=[]; // [{x,y,r}]
+    this.wMatrix=new Map();
+    this.resurrections=0;
+    this.log=[];
+    this.drones=Array.from({length:droneCount},(_,i)=>
+      new DroneAgent({id:`${swarmId===0?'Д':'Е'}${i+1}`,
+        x:offsetX+1+Math.random()*3, y:offsetY+1+Math.random()*3,
+        battery:75+Math.random()*25, swarmId}));
+    this._done=false;
+  }
+
+  addObstacle(gx,gy) {
+    this.obstacles.push({x:gx,y:gy,r:1.8});
+    this._log('warn',`Препятствие на (${gx},${gy})`);
+  }
+
+  killLeader() {
+    const leader = this.drones
+      .filter(d=>!d.dead&&d.role===DroneRole.EXECUTOR)[0]
+      ?? this.drones.filter(d=>!d.dead)[0];
+    if (!leader) return;
+    leader.dead=true; leader.battery=0; leader.role=DroneRole.DEAD;
+    this._log('dead',`${leader.id} [EXECUTOR] — кенозис смерти. Рой перераспределяется.`);
+    // Воскресение: перераспределить его surplus другим
+    const alive = this.drones.filter(d=>!d.dead);
+    if (alive.length) {
+      const bonus = Math.floor(leader.given / alive.length);
+      for (const d of alive) { d.received = Math.max(0, d.received - bonus); }
+      this.resurrections++;
+      this._log('ok', `Рой воскрес. ${alive.length} лиц приняли анамнезис павшего.`);
+    }
+  }
+
+  drainBattery() {
+    for (const d of this.drones.filter(d=>!d.dead)) d.battery = Math.max(5, d.battery-30);
+    this._log('warn', 'Разряд: все дроны -30% батареи');
+  }
+
+  // Объединить W-матрицу другого роя (соборность двух общин)
+  mergeSwarm(other) {
+    for (const d of other.drones) {
+      d.swarmId = this.swarmId;
+      this.drones.push(d);
+    }
+    for (const [k,v] of other.wMatrix) {
+      this.wMatrix.set(k, (this.wMatrix.get(k)??0)+v);
+    }
+    for (const c of other.globalCoverage) this.globalCoverage.add(c);
+    this._log('merge',`Рой ${other.swarmId} объединён. W-матрицы слиты. Лиц: ${this.drones.length}`);
   }
 
   step() {
     this.tick++;
-    // heartbeat
-    for (const d of this.drones)
-      for (const p of this.drones)
-        if (p.id !== d.id) d.updatePeer(p.id, p.surplus);
-    // роль
-    for (const d of this.drones) d.electRole(this.targetZone);
-    // цели
-    this._assignTargets();
-    // движение + скан
-    for (const d of this.drones) {
-      if (d.role === DroneRole.RESTING) continue;
-      if (d.target) d.stepToward(d.target.x, d.target.y);
+    const alive = this.drones.filter(d=>!d.dead);
+
+    // Heartbeat
+    for (const d of alive)
+      for (const p of alive) if (p.id!==d.id) d.updatePeer(p.id,p.surplus);
+
+    // Роли
+    for (const d of alive) d.electRole(this.targetZone, this.obstacles);
+
+    // Кенозис
+    for (const d of alive) d.checkKenosis(alive);
+
+    // Цели
+    this._assignTargets(alive);
+
+    // Движение + скан
+    for (const d of alive) {
+      if (d.role===DroneRole.RESTING) continue;
+      if (d.target) d.stepToward(d.target.x, d.target.y, this.obstacles);
       const s = d.scan();
       if (s) {
-        const key = `${s.x},${s.y}`;
-        if (!this.globalCoverage.has(key)) {
-          this.globalCoverage.add(key);
-          // дар рою: обновить W-матрицу
-          const wKey = `${d.id}→_koinon`;
-          this.wMatrix.set(wKey, (this.wMatrix.get(wKey) ?? 0) + 1);
+        const key=`${s.x},${s.y}`;
+        this.globalCoverage.add(key);
+        const wKey=`${d.id}→_кοινόν`;
+        this.wMatrix.set(wKey,(this.wMatrix.get(wKey)??0)+1);
+      }
+    }
+
+    // W-матрица heartbeat
+    if (this.tick%5===0) {
+      for (const d of alive) {
+        for (const p of alive) if (p.id!==d.id&&this.tick%20===0) {
+          const k=`${p.id}→${d.id}`;
+          this.wMatrix.set(k,(this.wMatrix.get(k)??0)+1);
         }
       }
     }
-    const cov = this.coverage();
-    if (cov >= 100 && !this._done) {
-      this._done = true;
-      this.log.push({ tick: this.tick, msg: `✓ Зона покрыта 100% за ${this.tick} тиков`, complete: true });
+
+    const cov=this.coverage();
+    if (cov>=100&&!this._done) {
+      this._done=true;
+      this._log('ok',`✓ Зона покрыта 100% за ${this.tick} тиков`);
     }
     return this.snapshot();
   }
 
-  coverage() {
-    const tz = this.targetZone;
-    let c = 0;
-    for (let x = tz.x1; x <= tz.x2; x++)
-      for (let y = tz.y1; y <= tz.y2; y++)
-        if (this.globalCoverage.has(`${x},${y}`)) c++;
-    return parseFloat((c / this.totalCells * 100).toFixed(1));
-  }
+  _assignTargets(alive) {
+    const tz=this.targetZone;
+    const uncovered=[];
+    for (let x=tz.x1;x<=tz.x2;x++)
+      for (let y=tz.y1;y<=tz.y2;y++)
+        if (!this.globalCoverage.has(`${x},${y}`)) uncovered.push({x,y});
 
-  _assignTargets() {
-    const tz = this.targetZone;
-    const uncovered = [];
-    for (let x = tz.x1; x <= tz.x2; x++)
-      for (let y = tz.y1; y <= tz.y2; y++)
-        if (!this.globalCoverage.has(`${x},${y}`)) uncovered.push({ x, y });
-    const claimed = new Set();
-    for (const d of this.drones) {
-      if (d.role === DroneRole.RESTING) { d.target = { x: 1, y: 1 }; continue; }
-      if (d.role === DroneRole.RELAY) {
-        d.target = { x: (tz.x1 + tz.x2) / 2, y: tz.y1 - 2 }; continue;
-      }
-      if (!uncovered.length) { d.target = { x: 2, y: 2 }; continue; }
-      const avail = uncovered.filter(c => !claimed.has(`${c.x},${c.y}`));
-      const pool  = avail.length ? avail : uncovered;
-      const best  = pool.reduce((a, b) => d.distTo(a.x, a.y) < d.distTo(b.x, b.y) ? a : b);
-      d.target = best;
-      claimed.add(`${best.x},${best.y}`);
+    // Фильтруем клетки внутри препятствий
+    const free=uncovered.filter(c=>
+      !this.obstacles.some(o=>Math.hypot(c.x-o.x,c.y-o.y)<o.r+0.5));
+
+    const claimed=new Set();
+    for (const d of alive) {
+      if (d.role===DroneRole.RESTING) { d.target={x:1,y:1}; continue; }
+      if (d.role===DroneRole.RELAY) {
+        d.target={x:(tz.x1+tz.x2)/2,y:tz.y1-2}; continue; }
+      if (!free.length) { d.target={x:2,y:2}; continue; }
+      const avail=free.filter(c=>!claimed.has(`${c.x},${c.y}`));
+      const pool=avail.length?avail:free;
+      const best=pool.reduce((a,b)=>d.distTo(a.x,a.y)<d.distTo(b.x,b.y)?a:b);
+      d.target=best; claimed.add(`${best.x},${best.y}`);
     }
   }
 
-  topLinks(n = 5) {
-    return [...this.wMatrix.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+  coverage() {
+    const tz=this.targetZone; let c=0;
+    for (let x=tz.x1;x<=tz.x2;x++)
+      for (let y=tz.y1;y<=tz.y2;y++)
+        if (this.globalCoverage.has(`${x},${y}`)) c++;
+    return parseFloat((c/this.totalCells*100).toFixed(1));
+  }
+
+  topLinks(n=6) {
+    return [...this.wMatrix.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n)
+      .map(([key,w])=>({key,w}));
+  }
+
+  _log(type,msg) {
+    this.log.push({tick:this.tick,type,msg});
+    if (this.log.length>50) this.log.shift();
   }
 
   snapshot() {
-    return {
-      tick: this.tick, drones: this.drones,
-      coverage: this.coverage(), totalCells: this.totalCells,
-      covered: this.globalCoverage.size,
-    };
+    return { tick:this.tick, drones:this.drones,
+      coverage:this.coverage(), totalCells:this.totalCells,
+      covered:this.globalCoverage.size,
+      alive:this.drones.filter(d=>!d.dead).length,
+      resting:this.drones.filter(d=>d.role===DroneRole.RESTING).length,
+      resurrections:this.resurrections };
   }
 }
 
-// ════════════════════════════════════════════════════════════
-//  Рендер на Canvas
-// ════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  Рендер
+// ══════════════════════════════════════════════════════════
 
-const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const W=canvas.width, H=canvas.height;
 
-let swarm, animId, lastTick = 0;
-let running = false;
-let speedMs = 120;
-let droneCount = 6;
+let swarm, animId, lastTick=0, running=true, speedMs=100, droneCount=6;
 
-function gridToCanvas(gx, gy) {
-  const pad = 24;
-  const cw  = (W - pad * 2) / swarm.gridW;
-  const ch  = (H - pad * 2) / swarm.gridH;
-  return [pad + gx * cw, pad + gy * ch];
+function gridToCanvas(gx,gy){
+  const pad=22, cw=(W-pad*2)/swarm.gridW, ch=(H-pad*2)/swarm.gridH;
+  return [pad+gx*cw, pad+gy*ch, cw, ch];
 }
 
-function draw(snap) {
-  ctx.clearRect(0, 0, W, H);
-  const pad = 24;
-  const cw  = (W - pad * 2) / swarm.gridW;
-  const ch  = (H - pad * 2) / swarm.gridH;
-  const tz  = swarm.targetZone;
+function drawFrame(snap) {
+  ctx.clearRect(0,0,W,H);
+  const pad=22, cw=(W-pad*2)/swarm.gridW, ch=(H-pad*2)/swarm.gridH;
+  const tz=swarm.targetZone;
 
-  // Фон сетки
-  ctx.strokeStyle = '#111118';
-  ctx.lineWidth   = 0.5;
-  for (let x = 0; x <= swarm.gridW; x++) {
-    const px = pad + x * cw;
-    ctx.beginPath(); ctx.moveTo(px, pad); ctx.lineTo(px, H - pad); ctx.stroke();
+  // Звёздный фон
+  ctx.fillStyle='#050508';
+  ctx.fillRect(0,0,W,H);
+
+  // Сетка
+  ctx.strokeStyle='#0d0d18'; ctx.lineWidth=0.5;
+  for (let x=0;x<=swarm.gridW;x++) {
+    const px=pad+x*cw;
+    ctx.beginPath(); ctx.moveTo(px,pad); ctx.lineTo(px,H-pad); ctx.stroke();
   }
-  for (let y = 0; y <= swarm.gridH; y++) {
-    const py = pad + y * ch;
-    ctx.beginPath(); ctx.moveTo(pad, py); ctx.lineTo(W - pad, py); ctx.stroke();
+  for (let y=0;y<=swarm.gridH;y++) {
+    const py=pad+y*ch;
+    ctx.beginPath(); ctx.moveTo(pad,py); ctx.lineTo(W-pad,py); ctx.stroke();
   }
 
-  // Целевая зона (фон)
-  ctx.fillStyle = 'rgba(82, 183, 136, 0.06)';
-  ctx.strokeStyle = 'rgba(82, 183, 136, 0.25)';
-  ctx.lineWidth = 1;
-  const [tzx, tzy] = gridToCanvas(tz.x1, tz.y1);
-  const tzw = (tz.x2 - tz.x1 + 1) * cw;
-  const tzh = (tz.y2 - tz.y1 + 1) * ch;
-  ctx.fillRect(tzx, tzy, tzw, tzh);
-  ctx.strokeRect(tzx, tzy, tzw, tzh);
+  // Целевая зона
+  const [tzx,tzy,,]=[pad+tz.x1*cw, pad+tz.y1*ch];
+  const tzw=(tz.x2-tz.x1+1)*cw, tzh=(tz.y2-tz.y1+1)*ch;
+  ctx.fillStyle='rgba(82,183,136,0.04)';
+  ctx.fillRect(tzx,tzy,tzw,tzh);
+  ctx.strokeStyle='rgba(82,183,136,0.15)'; ctx.lineWidth=1;
+  ctx.strokeRect(tzx,tzy,tzw,tzh);
 
   // Покрытые клетки
   for (const key of swarm.globalCoverage) {
-    const [gx, gy] = key.split(',').map(Number);
-    const [px, py] = gridToCanvas(gx, gy);
-    const inTarget = gx >= tz.x1 && gx <= tz.x2 && gy >= tz.y1 && gy <= tz.y2;
-    ctx.fillStyle = inTarget ? 'rgba(82, 183, 136, 0.35)' : 'rgba(80, 80, 120, 0.2)';
-    ctx.fillRect(px - cw * 0.45, py - ch * 0.45, cw * 0.9, ch * 0.9);
+    const [gx,gy]=key.split(',').map(Number);
+    const px=pad+gx*cw, py=pad+gy*ch;
+    const inTarget=gx>=tz.x1&&gx<=tz.x2&&gy>=tz.y1&&gy<=tz.y2;
+    ctx.fillStyle=inTarget?'rgba(82,183,136,0.28)':'rgba(60,60,100,0.15)';
+    ctx.fillRect(px-cw*0.45, py-ch*0.45, cw*0.9, ch*0.9);
   }
 
-  // Хвосты дронов
-  for (const d of snap.drones) {
-    if (d.trail.length < 2) continue;
-    ctx.strokeStyle = ROLE_COLOR[d.role] + '40';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < d.trail.length; i++) {
-      const [px, py] = gridToCanvas(d.trail[i].x, d.trail[i].y);
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  // Препятствия
+  for (const obs of swarm.obstacles) {
+    const px=pad+obs.x*cw, py=pad+obs.y*ch;
+    const r=obs.r*Math.min(cw,ch);
+    ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+    ctx.fillStyle='rgba(224,108,117,0.18)';
+    ctx.strokeStyle='rgba(224,108,117,0.6)'; ctx.lineWidth=1.5;
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(224,108,117,0.7)'; ctx.font=`${r*0.9}px sans-serif`;
+    ctx.textAlign='center'; ctx.fillText('⛔',px,py+r*0.35);
+  }
+
+  // W-матрица: нити между дронами
+  const alive=snap.drones.filter(d=>!d.dead);
+  for (let i=0;i<alive.length;i++) {
+    for (let j=i+1;j<alive.length;j++) {
+      const da=alive[i], db=alive[j];
+      const wk1=`${da.id}→${db.id}`, wk2=`${db.id}→${da.id}`;
+      const w=(swarm.wMatrix.get(wk1)??0)+(swarm.wMatrix.get(wk2)??0);
+      if (w>2) {
+        const [ax,ay]=gridToCanvas(da.x,da.y), [bx,by]=gridToCanvas(db.x,db.y);
+        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by);
+        ctx.strokeStyle=`rgba(82,183,136,${Math.min(0.4,w*0.02)})`;
+        ctx.lineWidth=Math.min(w*0.08,1.8); ctx.stroke();
+      }
     }
-    ctx.stroke();
+  }
+
+  // Хвосты
+  for (const d of snap.drones) {
+    if (d.trail.length<2) continue;
+    ctx.beginPath();
+    for (let i=0;i<d.trail.length;i++) {
+      const [px,py]=gridToCanvas(d.trail[i].x,d.trail[i].y);
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.strokeStyle=d.dead?'rgba(224,108,117,0.12)':(ROLE_COLOR[d.role]+'25');
+    ctx.lineWidth=1; ctx.stroke();
   }
 
   // Дроны
+  const t=Date.now()/1000;
   for (const d of snap.drones) {
-    const [px, py] = gridToCanvas(d.x, d.y);
-    const r = d.role === DroneRole.RESTING ? 5 : 8;
-    const color = ROLE_COLOR[d.role];
+    const [px,py]=gridToCanvas(d.x,d.y);
+    const r=d.dead?5:d.role===DroneRole.RESTING?5:9;
+    const color=ROLE_COLOR[d.role]??'#333';
 
-    // Glow
-    if (d.role !== DroneRole.RESTING) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur  = 12;
+    if (!d.dead) {
+      // Glow
+      ctx.shadowColor=color; ctx.shadowBlur=d.role===DroneRole.EXECUTOR?18:10;
     }
 
-    // Кружок
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    // Тело дрона
+    ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+    ctx.fillStyle=d.dead?'#1a0a0a':color;
+    ctx.fill(); ctx.shadowBlur=0;
 
-    // Surplus bar (маленькая дуга)
-    if (d.surplus !== 0) {
-      ctx.beginPath();
-      ctx.arc(px, py, r + 4, -Math.PI / 2,
-        -Math.PI / 2 + (Math.min(Math.abs(d.surplus), 20) / 20) * Math.PI * 2);
-      ctx.strokeStyle = d.surplus > 0 ? '#52b788' : '#e06c75';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    // Surplus дуга
+    if (!d.dead && d.surplus!==0) {
+      const capped=Math.min(Math.abs(d.surplus),20)/20;
+      const sa=-Math.PI/2, ea=sa+capped*Math.PI*2;
+      ctx.beginPath(); ctx.arc(px,py,r+4,sa,ea);
+      ctx.strokeStyle=d.surplus>0?'#52b788':'#e06c75';
+      ctx.lineWidth=2; ctx.stroke();
     }
 
-    // Имя
-    ctx.fillStyle = '#aaa';
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(d.id, px, py + r + 12);
+    // Кенозис пульсация
+    if (d.kenosis>0 && !d.dead) {
+      const pulse=Math.sin(t*4+d.glowPhase)*0.5+0.5;
+      ctx.beginPath(); ctx.arc(px,py,r+8,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(199,125,255,${pulse*0.4})`;
+      ctx.lineWidth=1.5; ctx.stroke();
+    }
 
-    // Роль-иконка
-    ctx.fillStyle = color;
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText(ROLE_ICON[d.role], px, py + 3);
+    // Батарея-полоска
+    if (!d.dead) {
+      const bw=18, bx=px-bw/2, by=py+r+3;
+      ctx.fillStyle='#111'; ctx.fillRect(bx,by,bw,3);
+      ctx.fillStyle=d.battery>50?'#52b788':d.battery>25?'#e9c46a':'#e06c75';
+      ctx.fillRect(bx,by,bw*(d.battery/100),3);
+    }
+
+    // Имя + иконка роли
+    ctx.fillStyle=d.dead?'#444':color;
+    ctx.font=`${d.dead?'7':'8'}px monospace`; ctx.textAlign='center';
+    ctx.fillText(d.id, px, py-r-5);
+    if (!d.dead) {
+      ctx.fillStyle=color; ctx.font='bold 8px monospace';
+      ctx.fillText(ROLE_ICON[d.role], px, py+3);
+    } else {
+      ctx.fillStyle='#e06c75'; ctx.font='10px monospace';
+      ctx.fillText('✕', px, py+4);
+    }
   }
 
-  // Тик
-  ctx.fillStyle = '#333';
-  ctx.font = '11px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(`тик ${snap.tick}`, 6, 16);
+  // HUD
+  ctx.fillStyle='#222'; ctx.font='10px monospace'; ctx.textAlign='left';
+  ctx.fillText(`тик ${snap.tick}`, 5, 15);
+  ctx.fillStyle='#333'; ctx.textAlign='right';
+  ctx.fillText(`↺ кликни → препятствие`, W-5, 15);
 }
 
 function updatePanel(snap) {
-  // Покрытие
-  document.getElementById('coverage-pct').textContent = snap.coverage + '%';
-  document.getElementById('coverage-bar').style.width  = snap.coverage + '%';
-  document.getElementById('tick-num').textContent  = snap.tick;
-  document.getElementById('alive-num').textContent = snap.drones.filter(d => d.battery > 0).length;
-  document.getElementById('rest-num').textContent  = snap.drones.filter(d => d.role === 'resting').length;
+  document.getElementById('coverage-pct').textContent=snap.coverage+'%';
+  document.getElementById('coverage-bar').style.width=snap.coverage+'%';
+  document.getElementById('tick-num').textContent=snap.tick;
+  document.getElementById('alive-num').textContent=snap.alive+'/'+snap.drones.length;
+  document.getElementById('resurrect-num').textContent=snap.resurrections;
+  document.getElementById('swarm-count').textContent='1';
 
-  // Таблица дронов
-  const tbl = document.getElementById('drone-table');
-  tbl.innerHTML = snap.drones.map(d => {
-    const sc = d.surplus > 0 ? 'surplus-pos' : d.surplus < 0 ? 'surplus-neg' : 'surplus-zero';
-    const sign = d.surplus > 0 ? '+' : '';
-    return `<div class="drone-row">
+  const tbl=document.getElementById('drone-table');
+  tbl.innerHTML=snap.drones.map(d=>{
+    const sc=d.surplus>0?'surplus-pos':d.surplus<0?'surplus-neg':'surplus-zero';
+    const sign=d.surplus>0?'+':'';
+    const dead=d.dead?'drone-dead':'';
+    return `<div class="drone-row ${dead}">
       <span class="drone-icon" style="color:${ROLE_COLOR[d.role]}">${ROLE_ICON[d.role]}</span>
       <span class="drone-name">${d.id}</span>
-      <span class="drone-role" style="color:${ROLE_COLOR[d.role]}">${d.role}</span>
+      <span class="drone-role" style="color:${ROLE_COLOR[d.role]};font-size:0.6rem">${d.role}</span>
       <span class="drone-surplus ${sc}">${sign}${d.surplus}</span>
       <span class="drone-bat">${d.battery.toFixed(0)}%</span>
     </div>`;
   }).join('');
 
-  // W-матрица
-  const wm = document.getElementById('w-matrix');
-  wm.innerHTML = swarm.topLinks(6).map(([link, w]) =>
-    `<div class="w-link">${link} <span>×${w}</span></div>`
-  ).join('') || '<div style="color:#333;font-size:0.7rem">пока нет нитей</div>';
+  const wm=document.getElementById('w-matrix');
+  wm.innerHTML=swarm.topLinks(6).map(({key,w})=>
+    `<div class="w-link">${key}<span>×${w}</span></div>`
+  ).join('')||'<div style="color:#222;font-size:0.65rem">пока нет нитей</div>';
 
-  // Лог
-  const log = document.getElementById('log');
-  const entries = swarm.log.slice(-20);
-  log.innerHTML = entries.map(e =>
-    `<div class="entry ${e.complete ? 'complete' : ''}">[${e.tick}] ${e.msg}</div>`
-  ).join('');
-  log.scrollTop = log.scrollHeight;
+  const logEl=document.getElementById('log');
+  logEl.innerHTML=swarm.log.slice(-15).reverse().map(e=>{
+    const cls=e.type==='ok'?'log-ok':e.type==='dead'?'log-dead':
+               e.type==='merge'?'log-merge':'log-warn';
+    return `<div class="${cls}">[${e.tick}] ${e.msg}</div>`;
+  }).join('');
 }
 
-// ── Цикл ──
+// ── Цикл ──────────────────────────────────────────────────
 
-function initSwarm() {
-  swarm = new SwarmCoordinator({
-    droneCount,
-    gridW: 20, gridH: 20,
-    targetZone: { x1: 7, y1: 7, x2: 13, y2: 13 },
-  });
-  swarm.log.push({ tick: 0, msg: 'Рой инициализирован. Командира нет.' });
+function initSwarm(n) {
+  swarm=new SwarmCoordinator({ droneCount:n, gridW:22, gridH:22,
+    targetZone:{x1:8,y1:8,x2:14,y2:14} });
+  swarm._log('ok','Рой инициализирован. Командира нет.');
 }
 
-function tick() {
-  if (!running) return;
-  const now = Date.now();
-  if (now - lastTick >= speedMs) {
-    const snap = swarm.step();
-    draw(snap);
-    updatePanel(snap);
-    lastTick = now;
+function loop() {
+  if (!running) { animId=requestAnimationFrame(loop); return; }
+  const now=Date.now();
+  if (now-lastTick>=speedMs) {
+    const snap=swarm.step();
+    drawFrame(snap); updatePanel(snap); lastTick=now;
   }
-  animId = requestAnimationFrame(tick);
+  animId=requestAnimationFrame(loop);
 }
 
-function start() {
-  running = true;
-  document.getElementById('btn-start').textContent = '⏸ Пауза';
-  document.getElementById('btn-start').classList.add('active');
-  lastTick = 0;
-  animId = requestAnimationFrame(tick);
-}
+// ── События ───────────────────────────────────────────────
 
-function pause() {
-  running = false;
-  cancelAnimationFrame(animId);
-  document.getElementById('btn-start').textContent = '▶ Старт';
-  document.getElementById('btn-start').classList.remove('active');
-}
-
-function reset() {
-  pause();
-  initSwarm();
-  const snap = swarm.snapshot();
-  draw(snap);
-  updatePanel(snap);
-}
-
-// ── Кнопки ──
-
-document.getElementById('btn-start').addEventListener('click', () => {
-  running ? pause() : start();
+document.getElementById('btn-start').addEventListener('click',()=>{
+  running=!running;
+  document.getElementById('btn-start').textContent=running?'⏸ Пауза':'▶ Старт';
+  document.getElementById('btn-start').classList.toggle('active',running);
 });
 
-document.getElementById('btn-reset').addEventListener('click', reset);
-
-document.getElementById('speed').addEventListener('input', e => {
-  speedMs = parseInt(e.target.value);
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  initSwarm(droneCount);
+  const snap=swarm.snapshot(); drawFrame(snap); updatePanel(snap);
 });
 
-document.getElementById('drone-count').addEventListener('input', e => {
-  droneCount = parseInt(e.target.value);
-  document.getElementById('drone-count-label').textContent = droneCount;
-  reset();
+document.getElementById('btn-kill').addEventListener('click',()=>{
+  swarm.killLeader();
 });
 
-// ── Init ──
-initSwarm();
-const initSnap = swarm.snapshot();
-draw(initSnap);
-updatePanel(initSnap);
-start();
+document.getElementById('btn-obstacle').addEventListener('click',()=>{
+  const gx=8+Math.floor(Math.random()*7), gy=8+Math.floor(Math.random()*7);
+  swarm.addObstacle(gx,gy);
+});
+
+document.getElementById('btn-drain').addEventListener('click',()=>{
+  swarm.drainBattery();
+});
+
+document.getElementById('btn-spawn-swarm').addEventListener('click',()=>{
+  const s2=new SwarmCoordinator({ droneCount:3, gridW:22, gridH:22,
+    targetZone:{x1:8,y1:8,x2:14,y2:14}, swarmId:1, offsetX:15, offsetY:15 });
+  swarm.mergeSwarm(s2);
+  document.getElementById('swarm-count').textContent='2→1';
+});
+
+document.getElementById('speed').addEventListener('input',e=>{ speedMs=parseInt(e.target.value); });
+
+document.getElementById('drone-count').addEventListener('input',e=>{
+  droneCount=parseInt(e.target.value);
+  document.getElementById('drone-count-label').textContent=droneCount;
+  initSwarm(droneCount);
+  const snap=swarm.snapshot(); drawFrame(snap); updatePanel(snap);
+});
+
+// Клик на канвасе → препятствие
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
+  const pad=22, cw=(W-pad*2)/swarm.gridW, ch=(H-pad*2)/swarm.gridH;
+  const gx=Math.round((cx-pad)/cw), gy=Math.round((cy-pad)/ch);
+  if (gx>=0&&gx<swarm.gridW&&gy>=0&&gy<swarm.gridH) swarm.addObstacle(gx,gy);
+});
+
+// ── Старт ─────────────────────────────────────────────────
+initSwarm(droneCount);
+const initSnap=swarm.snapshot(); drawFrame(initSnap); updatePanel(initSnap);
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
