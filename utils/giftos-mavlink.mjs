@@ -2,17 +2,32 @@
 /**
  * giftos-mavlink.mjs — Мост: GiftOS surplus-роли → MAVLink команды полётному контроллеру
  *
+ * Целевое железо: Speedybee Wing Mini (STM32F405) + Tang Nano 9K
+ * Прошивка: ArduPlane 4.x или INAV 7.x (MAVLink на UART2 / TELEM)
+ *
+ * Подключение WSL2:
+ *   Windows: usbipd list → usbipd bind --busid X-Y → usbipd attach --wsl
+ *   WSL:     ls /dev/ttyUSB* (обычно /dev/ttyUSB0, baud 57600)
+ *
  * W-матрица определяет surplus каждого дрона → роль → MAVLink команда.
  * Никакого командира. Соборная координация.
  *
  * Режимы:
- *   node utils/giftos-mavlink.mjs --sim              # UDP loopback 14550 (default)
- *   node utils/giftos-mavlink.mjs --serial /dev/ttyUSB0  # реальный FC
- *   node utils/giftos-mavlink.mjs --demo             # цикл по ролям каждые 3 сек
+ *   node utils/giftos-mavlink.mjs --sim                       # UDP loopback 14550
+ *   node utils/giftos-mavlink.mjs --serial /dev/ttyUSB0       # Speedybee Wing Mini
+ *   node utils/giftos-mavlink.mjs --serial /dev/ttyUSB0 --baud 115200  # INAV
+ *   node utils/giftos-mavlink.mjs --demo                      # цикл по ролям
  *
  * Stdin (JSON Lines):
  *   {"drone":"Адам","role":"EXECUTOR","surplus":5}
  *   {"drone":"Ева","role":"RELAY","surplus":2}
+ *
+ * ArduPlane режимы (фиксированное крыло):
+ *   EXECUTOR → GUIDED  (автономный полёт к цели)
+ *   RELAY    → LOITER  (вираж над точкой, держит связь)
+ *   SCOUT    → AUTO    (выполняет маршрут разведки)
+ *   GUARDIAN → CIRCLE  (орбита вокруг охраняемой точки)
+ *   RESTING  → RTL     (возврат домой / субботний покой)
  *
  * MAVLink v2 минимальный фрейм — без внешних зависимостей.
  */
@@ -28,6 +43,8 @@ const args       = process.argv.slice(2);
 const SIM_MODE   = !args.includes('--serial');
 const DEMO_MODE  = args.includes('--demo');
 const SERIAL_DEV = args.includes('--serial') ? args[args.indexOf('--serial') + 1] : null;
+// Speedybee Wing Mini: ArduPlane 57600, INAV 115200
+const BAUD_RATE  = args.includes('--baud') ? parseInt(args[args.indexOf('--baud') + 1]) : 57600;
 
 const SIM_HOST   = '127.0.0.1';
 const SIM_PORT   = 14550;
@@ -73,16 +90,20 @@ const MSGID = {
   MISSION_ITEM_INT: 73,   // mission waypoint (int координаты)
 };
 
-// MAVLink MAV_MODE_FLAG + базовые режимы (APM/PX4)
-// Custom mode числа для ArduCopter:
-const COPTER_MODE = {
-  STABILIZE: 0,
-  GUIDED:    4,
-  AUTO:      3,
-  LOITER:    5,
-  LAND:      9,
-  CIRCLE:    7,
-  RTL:       6,
+// ArduPlane custom modes (фиксированное крыло — Speedybee Wing Mini)
+// Источник: ardupilot/ArduPlane/mode.h
+const PLANE_MODE = {
+  MANUAL:     0,
+  CIRCLE:     1,
+  STABILIZE:  2,
+  FBWA:       5,   // Fly-by-wire A
+  FBWB:       6,   // Fly-by-wire B
+  CRUISE:     7,
+  AUTO:      10,
+  RTL:       11,
+  LOITER:    12,
+  TAKEOFF:   13,
+  GUIDED:    15,
 };
 
 // MAV_CMD
@@ -237,49 +258,33 @@ const THEOLOGICAL_NOTE = {
 
 /**
  * Вернуть массив MAVLink фреймов для заданной роли.
- * targetSys = 1 по умолчанию (один дрон или broadcast).
+ * Целевой FC: Speedybee Wing Mini / ArduPlane (фиксированное крыло)
+ * targetSys = 1 по умолчанию.
  */
 function roleToFrames(role, targetSys = 1) {
   const frames = [];
 
   switch (role) {
     case 'EXECUTOR': {
-      // 1. SET_MODE → GUIDED
+      // ArduPlane: GUIDED — автономный полёт к заданной точке
       frames.push({
-        label: 'SET_MODE → GUIDED',
+        label: 'SET_MODE → GUIDED (ArduPlane, автономный полёт)',
         frame: buildFrame(
           MSGID.SET_MODE,
-          setModePayload(targetSys, COPTER_MODE.GUIDED),
+          setModePayload(targetSys, PLANE_MODE.GUIDED),
           1, 1
         ),
       });
-      // 2. DO_CHANGE_SPEED → 10 m/s (airspeed, speed type 0)
+      // DO_CHANGE_SPEED: крейсерская 18 m/s (~65 km/h для крыла)
       frames.push({
-        label: 'DO_CHANGE_SPEED → 10 m/s',
+        label: 'DO_CHANGE_SPEED → 18 m/s (крейсер крыла)',
         frame: buildFrame(
           MSGID.COMMAND_LONG,
           commandLong(targetSys, 1, MAV_CMD.DO_CHANGE_SPEED, 0,
-            0,    // speed type: 0=airspeed
-            10,   // speed m/s
-            -1,   // throttle -1 = no change
+            0,    // 0=airspeed
+            18,   // m/s — хорошая крейсерская для Wing Mini
+            -1,   // throttle без изменений
             0, 0, 0, 0
-          ),
-          1, 1
-        ),
-      });
-      // 3. NAV_WAYPOINT к цели (пример: 55.7558° N, 37.6173° E, alt 50m)
-      frames.push({
-        label: 'NAV_WAYPOINT mission target',
-        frame: buildFrame(
-          MSGID.COMMAND_LONG,
-          commandLong(targetSys, 1, MAV_CMD.NAV_WAYPOINT, 0,
-            0,          // hold time
-            2,          // accept radius
-            0,          // pass radius
-            0,          // yaw (NaN = keep current)
-            55.7558,    // lat (example)
-            37.6173,    // lon
-            50          // altitude
           ),
           1, 1
         ),
@@ -288,12 +293,12 @@ function roleToFrames(role, targetSys = 1) {
     }
 
     case 'RELAY': {
-      // SET_MODE → LOITER (hold position)
+      // ArduPlane: LOITER — вираж над точкой (держит связь)
       frames.push({
-        label: 'SET_MODE → LOITER (hold position)',
+        label: 'SET_MODE → LOITER (ArduPlane, вираж/ретрансляция)',
         frame: buildFrame(
           MSGID.SET_MODE,
-          setModePayload(targetSys, COPTER_MODE.LOITER),
+          setModePayload(targetSys, PLANE_MODE.LOITER),
           1, 1
         ),
       });
@@ -301,24 +306,12 @@ function roleToFrames(role, targetSys = 1) {
     }
 
     case 'SCOUT': {
-      // SET_MODE → AUTO (search pattern, waypoints pre-loaded)
+      // ArduPlane: AUTO — выполняет миссию разведки
       frames.push({
-        label: 'SET_MODE → AUTO (search pattern)',
+        label: 'SET_MODE → AUTO (ArduPlane, разведочная миссия)',
         frame: buildFrame(
           MSGID.SET_MODE,
-          setModePayload(targetSys, COPTER_MODE.AUTO),
-          1, 1
-        ),
-      });
-      // Рекомендуется загрузить mission waypoints отдельно;
-      // здесь шлём LOITER_UNLIM как fallback если миссия не загружена
-      frames.push({
-        label: 'NAV_LOITER_UNLIM (scout fallback)',
-        frame: buildFrame(
-          MSGID.COMMAND_LONG,
-          commandLong(targetSys, 1, MAV_CMD.NAV_LOITER_UNLIM, 0,
-            0, 0, 0, 0, 0, 0, 50
-          ),
+          setModePayload(targetSys, PLANE_MODE.AUTO),
           1, 1
         ),
       });
@@ -326,12 +319,12 @@ function roleToFrames(role, targetSys = 1) {
     }
 
     case 'GUARDIAN': {
-      // SET_MODE → CIRCLE (orbit perimeter)
+      // ArduPlane: CIRCLE — орбита вокруг охраняемой точки
       frames.push({
-        label: 'SET_MODE → CIRCLE (orbit perimeter)',
+        label: 'SET_MODE → CIRCLE (ArduPlane, орбита охраны)',
         frame: buildFrame(
           MSGID.SET_MODE,
-          setModePayload(targetSys, COPTER_MODE.CIRCLE),
+          setModePayload(targetSys, PLANE_MODE.CIRCLE),
           1, 1
         ),
       });
@@ -344,7 +337,7 @@ function roleToFrames(role, targetSys = 1) {
         label: 'SET_MODE → LAND',
         frame: buildFrame(
           MSGID.SET_MODE,
-          setModePayload(targetSys, COPTER_MODE.LAND),
+          setModePayload(targetSys, PLANE_MODE.RTL),
           1, 1
         ),
       });
@@ -402,20 +395,32 @@ class UDPTransport {
 }
 
 class SerialTransport {
-  constructor(device) {
+  constructor(device, baud = 57600) {
     this.device = device;
+    this.baud   = baud;
     this.fd     = null;
-    // Используем fs синхронные методы — без npm зависимостей
-    // Для реального использования рекомендуется установить serialport:
-    //   npm install serialport
-    // Здесь — минимальная запись через /dev/ttyUSBx напрямую
+    // Speedybee Wing Mini: ArduPlane → 57600, INAV → 115200
+    // WSL2: usbipd attach --wsl → /dev/ttyUSB0 или /dev/ttyACM0
+    // stty нужен для установки baud rate перед открытием
+    import('node:child_process').then(({ execSync }) => {
+      try {
+        execSync(`stty -F ${device} ${baud} raw`);
+        console.log(`${GREEN}Serial: baud=${baud} установлен на ${device}${RESET}`);
+      } catch (e) {
+        console.warn(`${YELLOW}stty: ${e.message} (игнорирую)${RESET}`);
+      }
+    });
     import('node:fs').then(({ openSync }) => {
       try {
         this.fd = openSync(this.device, 'r+');
-        console.log(`${GREEN}Serial: открыт ${this.device}${RESET}`);
+        console.log(`${GREEN}Serial: открыт ${this.device} (Speedybee Wing Mini / ArduPlane)${RESET}`);
       } catch (e) {
         console.error(`${RED}Serial: не удалось открыть ${this.device}: ${e.message}${RESET}`);
-        console.error(`${YELLOW}Подсказка: попробуйте --sim для симуляции${RESET}`);
+        console.error(`${YELLOW}WSL2: запусти в Windows:${RESET}`);
+        console.error(`${YELLOW}  usbipd list${RESET}`);
+        console.error(`${YELLOW}  usbipd bind --busid X-Y${RESET}`);
+        console.error(`${YELLOW}  usbipd attach --wsl${RESET}`);
+        console.error(`${YELLOW}Или используй --sim для симуляции${RESET}`);
         process.exit(1);
       }
     });
