@@ -5,3 +5,7 @@ data/spec-vectors.db
 data/.anamnesis-cache.json
 data/.session-heartbeat.json
 data/pulse-pid.txt
+data/lora/
+dist/
+colab/__pycache__/
+colab/gift-colab-package.zip
