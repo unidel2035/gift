@@ -143,7 +143,7 @@ async function llmExtract(sessionData) {
       const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
         ? '/home/new/.local/bin/claude'
         : 'claude';
-      const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print`], {
+      const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
         input: prompt,
         encoding: 'utf8',
         timeout: 120_000,
