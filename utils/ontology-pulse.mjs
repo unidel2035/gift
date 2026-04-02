@@ -33,6 +33,40 @@ const NO_ISSUES = process.argv.includes('--no-issues');
 const maxIdx    = process.argv.indexOf('--max');
 const MAX_NEW   = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 10 : 10;
 
+const NOUS_URL    = process.env.NOUS_URL    || 'http://localhost:8089';
+const QDRANT_URL  = process.env.QDRANT_URL  || 'http://localhost:6333';
+const OLLAMA_URL2 = process.env.OLLAMA_URL  || 'http://localhost:11434';
+const SIM_THRESH  = 0.88; // порог семантического дубликата
+
+// Семантическая проверка дубликата через Qdrant gift_insights
+async function isSemanticDuplicate(text) {
+  try {
+    // Векторизуем через Ollama nomic-embed-text
+    const embRes = await fetch(`${OLLAMA_URL2}/api/embeddings`, {
+      method: 'POST', signal: AbortSignal.timeout(10_000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'nomic-embed-text', prompt: text }),
+    });
+    if (!embRes.ok) return false;
+    const { embedding } = await embRes.json();
+    if (!embedding?.length) return false;
+
+    // Ищем в gift_insights и gift_acts
+    const searchRes = await fetch(`${QDRANT_URL}/collections/gift_insights/points/search`, {
+      method: 'POST', signal: AbortSignal.timeout(5_000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vector: embedding, limit: 1, with_payload: true }),
+    });
+    if (!searchRes.ok) return false;
+    const { result } = await searchRes.json();
+    if (result?.[0]?.score >= SIM_THRESH) {
+      console.log(`  ↩ семантический дубликат (sim=${result[0].score.toFixed(3)}): "${(result[0].payload?.content||'').slice(0,50)}"`);
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
 if (!existsSync(SNAP)) {
   console.log('[пульс] Матрица не найдена — онтология ещё не родилась.');
   process.exit(0);
@@ -191,6 +225,7 @@ const toProcess = deserts
   .slice(0, MAX_NEW);
 
 const newProposals = [];
+let skippedDuplicates = 0;
 
 // Типы, которые рождают code-задачи (а не только вопросы)
 const CODE_DESERT_TYPES = new Set(['anastasis', 'theosis_stasis', 'leksis_pending', 'fading']);
@@ -200,6 +235,13 @@ for (const desert of toProcess) {
 
   if (DRY_RUN) {
     console.log('  [dry-run] пропущено');
+    continue;
+  }
+
+  // ── Семантическая дедупликация: пропустить если пустыня похожа на уже решённую ──
+  if (await isSemanticDuplicate(desert.desc)) {
+    console.log('  → пустыня уже в памяти — пропускаю');
+    skippedDuplicates++;
     continue;
   }
 
@@ -376,6 +418,7 @@ const declined   = mem.declined().length;
 console.log('\n╔══════════════════════════════════════════════════════╗');
 console.log(`║  Пульс завершён                                      ║`);
 console.log(`║  Пустынь обработано: ${String(toProcess.length).padEnd(4)} Посев: ${String(newProposals.length).padEnd(4)}            ║`);
+console.log(`║  Дубликатов RAG:     ${String(skippedDuplicates).padEnd(4)}                              ║`);
 console.log(`║  Issues созданы:     ${String(issuesCreated).padEnd(4)}                           ║`);
 console.log(`║  Pending proposals: ${String(existingProposals.filter(p=>p.status==='pending').length).padEnd(5)}                          ║`);
 if (topTheosis.length)
