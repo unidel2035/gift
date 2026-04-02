@@ -91,6 +91,23 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'anamnesis_search',
+    description: 'Семантический поиск по актам дара. Находит релевантные акты по тексту запроса (Qdrant векторный поиск).',
+    inputSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'string', description: 'поисковый запрос' },
+        limit: { type: 'number', description: 'максимум результатов (по умолчанию 7)' },
+      },
+    },
+  },
+  {
+    name: 'anamnesis_matrix',
+    description: 'W-матрица общины в GiftMemory-формате: persons, W (тензор весов), actsCount.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ];
 
 async function callTool(name, args) {
@@ -107,6 +124,10 @@ async function callTool(name, args) {
       return httpGet(`/commune/${args.from}/${args.to}`);
     case 'anamnesis_add_gift':
       return httpPost('/gift', args);
+    case 'anamnesis_search':
+      return httpGet(`/search?q=${encodeURIComponent(args.query)}&limit=${args.limit || 7}`);
+    case 'anamnesis_matrix':
+      return httpGet('/matrix');
     default:
       throw new Error(`unknown tool: ${name}`);
   }
