@@ -1,0 +1,63 @@
+{
+  "profiles": {
+    "_claude": {
+      "personId": "_claude",
+      "score": 1,
+      "violations": 0,
+      "totalActs": 8,
+      "kenoticActs": 8,
+      "lastViolation": null,
+      "history": [
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T11:51:57.509Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T18:16:20.977Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T18:18:53.209Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T18:22:10.851Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T18:36:37.589Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T18:39:41.888Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T19:31:47.147Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-02T20:21:48.243Z"
+        }
+      ]
+    }
+  },
+  "violations": []
+}

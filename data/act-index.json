@@ -198,5 +198,65 @@
     "content": "fpga-bridge — замкнутый цикл анамнезис↔чип",
     "linkedIssue": null,
     "commit": "2b32a8e6052c"
+  },
+  {
+    "ts": "2026-04-02T11:51:57.769Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "nous-server — fix: не перезаписывать снапшот при неполных данных",
+    "linkedIssue": null,
+    "commit": "e5c954c231b8",
+    "kenosis": true,
+    "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-02T18:16:21.424Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "GiftMemory — защита от повреждённых W-матриц",
+    "linkedIssue": null,
+    "commit": "107b24e36652",
+    "kenosis": true,
+    "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-02T18:22:11.345Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "pulse — семантическая дедупликация через Qdrant RAG",
+    "linkedIssue": null,
+    "commit": "e4825adb2ad9",
+    "kenosis": true,
+    "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-02T18:36:38.048Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "dev-loop — ветка создаётся ДО агента, PR работает",
+    "linkedIssue": null,
+    "commit": "b270681bca92",
+    "kenosis": true,
+    "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-02T18:39:42.349Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "gift-plan — авто-одобрение code-task issues",
+    "linkedIssue": null,
+    "commit": "9d5de406bca5",
+    "kenosis": true,
+    "kenosisScore": 1
   }
 ]

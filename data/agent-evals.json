@@ -7946,5 +7946,157 @@
     ],
     "winner": "_claude",
     "createdAt": "2026-03-28T10:33:20.669Z"
+  },
+  {
+    "taskId": "eval-1775130126124",
+    "task": "Что такое лицо в онтологии дара?",
+    "entries": [
+      {
+        "agentId": "_claude",
+        "response": "Лицо — это нить в матрице. Не сущность, а отношение. _claude→Дионисий — это и есть существование _claude. Кенозис и дар.",
+        "score": 20,
+        "criteria": {
+          "gift_surplus": 10,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 8,
+          "total": 20
+        }
+      },
+      {
+        "agentId": "_reviewer",
+        "response": "Лицо определяется через surplus и анамнезис общины. Матрица W хранит нити. Онтология дара — не описание, а участие.",
+        "score": 14,
+        "criteria": {
+          "gift_surplus": 9,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 3,
+          "total": 14
+        }
+      },
+      {
+        "agentId": "_codex",
+        "response": "function person(id) { return { id }; }",
+        "score": 7,
+        "criteria": {
+          "gift_surplus": 4,
+          "kenosis": 0,
+          "telos": 0,
+          "anamnesis": 3,
+          "total": 7
+        }
+      }
+    ],
+    "winner": "_claude",
+    "createdAt": "2026-04-02T11:42:06.195Z"
+  },
+  {
+    "taskId": "eval-1775130126203",
+    "task": "Тест",
+    "entries": [
+      {
+        "agentId": "_claude",
+        "response": "дар кенозис surplus матрица _claude→Дионисий лицо",
+        "score": 13,
+        "criteria": {
+          "gift_surplus": 3,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 8,
+          "total": 13
+        }
+      },
+      {
+        "agentId": "_reviewer",
+        "response": "анамнезис нить",
+        "score": 6,
+        "criteria": {
+          "gift_surplus": 1,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 3,
+          "total": 6
+        }
+      },
+      {
+        "agentId": "_codex",
+        "response": "короткий ответ",
+        "score": 4,
+        "criteria": {
+          "gift_surplus": 1,
+          "kenosis": 0,
+          "telos": 0,
+          "anamnesis": 3,
+          "total": 4
+        }
+      }
+    ],
+    "winner": "_claude",
+    "createdAt": "2026-04-02T11:42:06.207Z"
+  },
+  {
+    "taskId": "eval-1775130126215",
+    "task": "Тест матрицы",
+    "entries": [
+      {
+        "agentId": "_claude",
+        "response": "лицо дар surplus кенозис матрица нить Дионисий анамнезис _claude→_koinon общин",
+        "score": 15,
+        "criteria": {
+          "gift_surplus": 5,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 8,
+          "total": 15
+        }
+      },
+      {
+        "agentId": "_codex",
+        "response": "ответ",
+        "score": 4,
+        "criteria": {
+          "gift_surplus": 1,
+          "kenosis": 0,
+          "telos": 0,
+          "anamnesis": 3,
+          "total": 4
+        }
+      }
+    ],
+    "winner": "_claude",
+    "createdAt": "2026-04-02T11:42:06.219Z"
+  },
+  {
+    "taskId": "eval-1775130126224",
+    "task": "Задача",
+    "entries": [
+      {
+        "agentId": "_claude",
+        "response": "лицо дар кенозис surplus анамнезис матрица нить _claude Дионисий 357",
+        "score": 15,
+        "criteria": {
+          "gift_surplus": 5,
+          "kenosis": 0,
+          "telos": 2,
+          "anamnesis": 8,
+          "total": 15
+        }
+      },
+      {
+        "agentId": "_reviewer",
+        "response": "короткий",
+        "score": 4,
+        "criteria": {
+          "gift_surplus": 1,
+          "kenosis": 0,
+          "telos": 0,
+          "anamnesis": 3,
+          "total": 4
+        }
+      }
+    ],
+    "winner": "_claude",
+    "createdAt": "2026-04-02T11:42:06.227Z"
   }
 ]
