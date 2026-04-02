@@ -148,27 +148,69 @@ async function orchestrate() {
   const mem = await loadMem();
   console.log(`[оркестратор] Открытых issues: ${issues.length} | Лиц в матрице: ${mem.n}`);
 
+  // Убедиться что мы на main и она свежая
+  try {
+    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
+    execSync('git pull origin main', { cwd: ROOT, stdio: 'pipe', env: GH_ENV });
+  } catch {}
+
   for (const issue of issues) {
     const { number, title, body } = issue;
     console.log(`\n── Issue #${number}: ${title}`);
 
-    // Выбрать агента (простая эвристика — можно усложнить)
     const agentId = pickAgent(title, body);
     const agent   = AGENTS[agentId];
     console.log(`   Агент: ${agent.name} (${agentId})`);
 
-    // Записать в матрицу: агент берёт задачу
     recordAct(mem, agentId, 'Дионисий', 'presence',
       `берёт issue #${number}: ${title}`, agent.weight, number);
 
-    // Запустить агента
+    // ── Создать ветку ДО запуска агента ─────────────────────────────────────
+    const branch = `gift/issue-${number}`;
+    let onBranch = false;
+    try {
+      // Убрать незафиксированные изменения (data-файлы от хука)
+      execSync('git checkout -- .', { cwd: ROOT, stdio: 'pipe' });
+      try {
+        execSync(`git checkout -b ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+      } catch {
+        // Ветка уже есть — переключаемся
+        execSync(`git checkout ${branch}`, { cwd: ROOT, stdio: 'pipe' });
+        execSync(`git reset --hard main`, { cwd: ROOT, stdio: 'pipe' });
+      }
+      onBranch = true;
+    } catch (e) {
+      console.log(`   ! Не удалось создать ветку: ${e.message?.slice(0, 80)}`);
+    }
+
+    // Запустить агента (коммитит на текущую ветку — gift/issue-N)
     const result = await runAgent(agentId, number, title, body);
 
     if (result.success) {
-      // Создать ветку и PR
-      const prUrl = createPR(number, title, result.summary, agentId);
+      // Запушить ветку и создать PR
+      let prUrl = null;
+      if (onBranch) {
+        try {
+          execSync(`git push origin ${branch} --force-with-lease`, { cwd: ROOT, stdio: 'pipe', env: GH_ENV });
+          const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '').replace(/\s*\n\s*/g, ' — ').trim()}`.slice(0, 70);
+          const prBody = [
+            `## Дар`, ``, `Реализует #${number}`, ``, result.summary, ``,
+            `**Агент:** ${agentId}`, ``, `---`, `Создано gift-dev-loop.mjs`,
+          ].join('\n');
+          const r = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody,
+            '--head', branch, '--base', 'main'], {
+            cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: GH_ENV,
+          });
+          if (r.status === 0) prUrl = r.stdout.trim();
+          else console.log(`   ! PR: ${r.stderr?.slice(0, 100)}`);
+        } catch (e) {
+          console.log(`   ! PR не создан: ${e.message?.slice(0, 80)}`);
+        }
+      }
 
-      // Дар выполнен
+      // Вернуться на main
+      try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+
       recordAct(mem, agentId, 'Дионисий', 'code',
         `выполнил #${number}: ${result.summary}`, agent.weight + 1, number);
       if (prUrl) {
@@ -178,7 +220,8 @@ async function orchestrate() {
       console.log(`   ✦ Выполнено: ${result.summary}`);
       if (prUrl) console.log(`   PR: ${prUrl}`);
     } else {
-      // Кенозис — не получилось
+      // Кенозис — вернуться на main
+      try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
       recordAct(mem, agentId, '_koinon', 'kenosis',
         `кенозис по #${number}: ${result.error}`, 1, number);
       console.log(`   ✗ Кенозис: ${result.error}`);
@@ -201,53 +244,6 @@ function pickAgent(title, body = '') {
   const text = (title + ' ' + body).toLowerCase();
   if (text.includes('вопрос') || text.includes('question'))  return '_questioner';
   return '_executor'; // реализация — роль по умолчанию
-}
-
-// ── Создать PR ────────────────────────────────────────────────────────────
-function createPR(issueNumber, title, summary, agentId) {
-  try {
-    const branch = `gift/issue-${issueNumber}`;
-
-    // Создать ветку если её нет
-    try {
-      execSync(`git checkout -b ${branch}`, { cwd: ROOT, stdio: 'pipe' });
-    } catch {
-      execSync(`git checkout ${branch}`, { cwd: ROOT, stdio: 'pipe' });
-    }
-
-    // Запушить
-    execSync(`git push origin ${branch} --force-with-lease 2>/dev/null || git push origin ${branch}`,
-      { cwd: ROOT, stdio: 'pipe' });
-
-    // Вернуться на main
-    execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
-
-    // Создать PR
-    // Заголовок: убрать prefix вопрошания, схлопнуть переносы строк в пробел
-    const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '').replace(/\s*\n\s*/g, ' — ').trim()}`.slice(0, 70);
-    const prBody = [
-      `## Дар`,
-      ``,
-      `Реализует #${issueNumber}`,
-      ``,
-      `${summary}`,
-      ``,
-      `**Агент:** ${agentId}`,
-      ``,
-      `---`,
-      `Создано gift-dev-loop.mjs`,
-    ].join('\n');
-
-    // Передаём title и body как аргументы массива — никаких проблем с кавычками и спецсимволами
-    const r = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', branch, '--base', 'main'], {
-      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (r.status !== 0) throw new Error(r.stderr?.slice(0, 200) || `exit ${r.status}`);
-    return r.stdout.trim();
-  } catch (err) {
-    console.log(`   ! PR не создан: ${err.message?.slice(0, 100)}`);
-    return null;
-  }
 }
 
 // ── Запуск агента ─────────────────────────────────────────────────────────
