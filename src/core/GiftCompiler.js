@@ -266,12 +266,22 @@ export class GiftCompiler {
 
         // ── gift ────────────────────────────────────────────────
         if (firstLine.startsWith('gift ')) {
+          // Support tuple receivers: to (A, B) and single: to A
           const m = block.match(
-            /^gift\s+(\S+)\s+(?:from\s+(\S+)\s+)?(?:through\s+(\S+)\s+)?(?:(?:to|кому)\s+(\S+)\s*)?\{/
+            /^gift\s+(\S+)\s+(?:from\s+(\S+)\s+)?(?:through\s+(\S+)\s+)?(?:(?:to|кому)\s+(?:\(([^)]+)\)|(\S+))\s*)?\{/
           );
           if (!m) { errors.push(`gift: parse error: ${firstLine}`); continue; }
-          const [, giftName, giver, mediator, receiver] = m;
+          const [, giftName, giver, mediator, tupleReceivers, singleReceiver] = m;
+          const receiver = singleReceiver || (tupleReceivers ? tupleReceivers.split(/\s*,\s*/)[0].trim() : undefined);
           const body = inst._extractBody(block);
+
+          // from/to can be in header OR in body (от:/кому: properties)
+          const bodyFrom = inst._extractWordProp(body, 'from')
+            || inst._extractWordProp(body, 'от');
+          const bodyTo = inst._extractWordProp(body, 'to')
+            || inst._extractWordProp(body, 'кому');
+          const bodyThrough = inst._extractWordProp(body, 'through')
+            || inst._extractWordProp(body, 'через');
 
           const content = inst._extractStringProp(body, 'content')
             || inst._extractStringProp(body, 'содержание') || giftName;
@@ -289,9 +299,9 @@ export class GiftCompiler {
 
           giftTemplates.push({
             name: giftName,
-            from: giver || undefined,
-            to: receiver || 'all',
-            through: mediator || undefined,
+            from: giver || bodyFrom || undefined,
+            to: receiver || bodyTo || 'all',
+            through: mediator || bodyThrough || undefined,
             content,
             telos: telos || undefined,
             type: type || undefined,
@@ -557,9 +567,12 @@ module.exports = { persons, giftTemplates, covenants, witnesses, liturgies, regi
         }
       }
 
-      // Validate gift has from
+      // Validate gift has from (in header or body)
       if (keyword === 'gift') {
-        if (!firstLine.includes('from') && !firstLine.includes('от')) {
+        const hasFromInHeader = firstLine.includes('from') || firstLine.includes('от');
+        const blockBody = block.includes('{') ? inst._extractBody(block) : '';
+        const hasFromInBody = /(?:^|\n)\s*(?:from|от)\s*:/m.test(blockBody);
+        if (!hasFromInHeader && !hasFromInBody) {
           errors.push(`gift missing 'from': ${firstLine.slice(0, 60)}`);
         }
       }

@@ -43,6 +43,7 @@ import { getGiftChronicle } from '../memory/GiftChronicle.js';
 import { getGiftStore } from './GiftStore.js';
 import { enrichWithAnamnesis } from './AutoAnamnesis.js';
 import HolySpiritEngine from '../theology/HolySpiritEngine.js';
+import { GiftSpecLoader } from './GiftSpecLoader.js';
 import NewJerusalem from '../theology/NewJerusalem.js';
 import TernaryRegister from './TernaryCore.js';
 import { AngelicOrder, TemptationField } from '../theology/AngelicOrder.js';
@@ -715,6 +716,21 @@ export class GiftEngine {
       logger.info(`[Gift] PersonRegistry Integram ready, ${this.persons.count()} persons cached`);
     } catch (e) {
       logger.warn(`[Gift] PersonRegistry init (memory-only mode): ${e.message}`);
+    }
+
+    // ── Загрузка скомпилированных .gift спецификаций ──────
+    // Применяет behaviorPolicy к лицам, записывает заветы в W-матрицу.
+    try {
+      const specResult = await GiftSpecLoader.load(
+        this.persons,
+        this.memory,
+        { compileIfMissing: true }
+      );
+      if (specResult.persons > 0) {
+        logger.info(`[Gift] .gift specs loaded: ${specResult.persons} лиц, ${specResult.covenants} заветов`);
+      }
+    } catch (e) {
+      logger.warn(`[Gift] GiftSpecLoader: ${e.message}`);
     }
 
     // Init GiftStore (Integram persistence)

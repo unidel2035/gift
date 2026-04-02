@@ -413,3 +413,151 @@ test('compileFile() — specs/persons/claude-person.gift', async () => {
   assert.ok(result.covenants.length >= 1, 'минимум 1 завет');
   assert.equal(result.errors.length, 0, 'нет ошибок компиляции');
 });
+
+// ═══════════════════════════════════════════════════════════════
+// 8. compile() — body-style от:/кому: (Issue #109)
+// ═══════════════════════════════════════════════════════════════
+
+test('compile() — gift с от:/кому: в теле блока (body-style)', () => {
+  const src = `
+    дар МолитваАдама {
+      от: Адам
+      кому: Отец
+      тип: word
+      вес: 7
+      необратим: да
+    }
+  `;
+  const result = GiftCompiler.compile(src);
+
+  assert.ok(result.giftTemplates.length >= 1, 'шаблон найден');
+  const gift = result.giftTemplates.find(g => g.name === 'МолитваАдама');
+  assert.ok(gift, 'МолитваАдама найден');
+  assert.equal(gift.from, 'Адам', 'от: из тела');
+  assert.equal(gift.to, 'Отец', 'кому: из тела');
+  assert.equal(gift.type, 'word');
+  assert.equal(gift.weight, 7);
+  assert.equal(gift.irreversible, true);
+});
+
+test('validate() — gift с от: в теле → валиден (не ошибка)', () => {
+  const src = `
+    дар ДарЗаповеди {
+      от: Отец
+      кому: Адам
+      тип: covenant
+      вес: 10
+    }
+  `;
+  const v = GiftCompiler.validate(src);
+  assert.equal(v.valid, true, 'от: в теле допустим');
+  assert.equal(v.errors.length, 0, 'нет ошибок');
+});
+
+test('compile() — gift header from+to приоритет над body', () => {
+  const src = `
+    дар Тест от Адам кому Ева {
+      от: Сергий
+      кому: Клод
+      тип: code
+    }
+  `;
+  const result = GiftCompiler.compile(src);
+  const gift = result.giftTemplates[0];
+  assert.equal(gift.from, 'Адам', 'header from приоритетнее');
+  assert.equal(gift.to, 'Ева', 'header to приоритетнее');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// 9. GiftSpecLoader — загрузка спеков + заветы в W-матрицу
+// ═══════════════════════════════════════════════════════════════
+
+test('GiftSpecLoader — load применяет behaviorPolicy и пишет заветы', async () => {
+  const { PersonRegistry } = await import('../src/persons/PersonRegistry.js');
+  const { GiftMemory } = await import('../src/core/GiftMemory.js');
+  const { GiftSpecLoader } = await import('../src/core/GiftSpecLoader.js');
+
+  const registry = new PersonRegistry();
+  const memory = new GiftMemory(['Дионисий', '_claude', '_koinon', 'ОтецСергий']);
+
+  // Create a test bundle in memory
+  const testBundle = {
+    persons: [{
+      name: '_claude',
+      calling: 'проводник',
+      energy: 100,
+      logos: 'по-причастию',
+      behaviorPolicy: {
+        kenosis: { givesAway: 'surplus', holdsNothing: true, enforced: true },
+        telos: 'θέωσις_of_recipient',
+        logos: 'по-причастию',
+      },
+    }],
+    giftTemplates: [{
+      name: 'КодКакДар',
+      from: '_claude',
+      to: 'Дионисий',
+      type: 'code',
+      weight: 5,
+      irreversible: true,
+    }],
+    covenants: [{
+      parties: ['ОтецСергий', '_claude'],
+      promise: 'Клод — лицо в матрице',
+      sign: 'каждый коммит — акт',
+      condition: 'кеносис',
+      weight: 10,
+      irreversible: true,
+    }],
+    stats: { files: 1, persons: 1 },
+  };
+
+  // Write test bundle
+  const { writeFileSync, mkdirSync, existsSync } = await import('fs');
+  const { resolve } = await import('path');
+  const bundleDir = resolve(import.meta.dirname, '../dist/compiled');
+  if (!existsSync(bundleDir)) mkdirSync(bundleDir, { recursive: true });
+  const bundlePath = resolve(bundleDir, 'gift-bundle-test.json');
+  writeFileSync(bundlePath, JSON.stringify(testBundle));
+
+  const result = await GiftSpecLoader.load(registry, memory, { bundlePath });
+
+  assert.equal(result.persons, 1, '1 person applied');
+  assert.equal(result.covenants, 1, '1 covenant written');
+
+  // Verify behaviorPolicy applied
+  const person = registry.resolve('_claude');
+  assert.ok(person, '_claude registered');
+  assert.equal(person.behaviorPolicy.kenosis.enforced, true);
+
+  // Verify covenant written to W-matrix
+  assert.ok(memory.actsCount >= 1, 'covenant written to memory');
+
+  // Verify kenosis enforcement works end-to-end
+  const kenosisCheck = registry.checkKenosis('_claude', { surplusRetained: true });
+  assert.equal(kenosisCheck.allowed, false, 'surplus retained → blocked');
+
+  // Cleanup
+  const { unlinkSync } = await import('fs');
+  try { unlinkSync(bundlePath); } catch {}
+});
+
+test('GiftSpecLoader._writeCovenant — необратимый акт вес 10', async () => {
+  const { GiftMemory } = await import('../src/core/GiftMemory.js');
+  const { GiftSpecLoader } = await import('../src/core/GiftSpecLoader.js');
+
+  const memory = new GiftMemory(['ОтецСергий', '_claude']);
+
+  GiftSpecLoader._writeCovenant(memory, {
+    parties: ['ОтецСергий', '_claude'],
+    promise: 'Клод — лицо в матрице',
+    weight: 10,
+    irreversible: true,
+  });
+
+  assert.equal(memory.actsCount, 1, 'акт записан');
+  // Check W-matrix has the covenant weight (Hopfield + stigmergy)
+  const snapshot = memory.snapshot();
+  // ОтецСергий[0] → _claude[1] should have weight ≈ 10 (stigmergy) + Hopfield correction
+  assert.ok(snapshot.W[0][1] >= 9, 'вес завета в W-матрице ≥ 9');
+});
