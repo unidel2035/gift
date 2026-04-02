@@ -22,6 +22,21 @@ const EVA_MODEL  = process.env.EVA_MODEL  || 'eva';
 // PULSE_NO_OLLAMA=1 — шаблонный режим без Ollama
 const NO_OLLAMA  = process.env.PULSE_NO_OLLAMA === '1';
 
+import { spawnSync } from 'child_process';
+import { existsSync } from 'fs';
+
+// Вызвать claude CLI как user `new` — fallback когда Ollama недоступен
+function callClaudeCLI(systemPrompt, userPrompt) {
+  const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
+    ? '/home/new/.local/bin/claude' : 'claude';
+  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+  const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
+    input: fullPrompt, encoding: 'utf8', timeout: 90_000,
+  });
+  if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
+  return null;
+}
+
 // embed-context: предложение + W-матрица как совмещённый вектор
 import { evaContext } from './embed-context.mjs';
 const SNAP_PATH = new URL('../data/sacred-history-W.json', import.meta.url).pathname;
@@ -153,7 +168,19 @@ export async function evaCheck(proposal, existing = []) {
     return { verdict, enhanced, telos, evaResponse: text };
 
   } catch (e) {
-    // Ева недоступна — пропускаем без блокировки
+    // Ollama недоступна → пробуем claude CLI
+    const claudeText = callClaudeCLI(EVA_SYSTEM, question);
+    if (claudeText) {
+      const verdictM = claudeText.match(/\[ВЕРДИКТ\]\s*(.+?)(?:\n|$)/);
+      const enhanceM = claudeText.match(/\[УСИЛЕНИЕ\]\s*([\s\S]+?)(?:\[|$)/);
+      const telosM   = claudeText.match(/\[ТЕЛОС\]\s*(.+?)(?:\n|$)/);
+      const verdictLine = verdictM?.[1]?.trim() ?? '';
+      const verdict = verdictLine.startsWith('ПРИНЯТО')   ? 'принято'
+                    : verdictLine.startsWith('ОТКЛОНЕНО') ? 'отклонено'
+                    : 'доработать';
+      return { verdict, enhanced: enhanceM?.[1]?.trim() ?? proposal, telos: telosM?.[1]?.trim() ?? '', evaResponse: claudeText };
+    }
+    // Ева полностью недоступна — пропускаем без блокировки
     return { verdict: 'принято', enhanced: proposal, telos: '', evaResponse: `[Eva offline: ${e.message}]` };
   }
 }

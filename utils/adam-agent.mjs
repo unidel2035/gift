@@ -13,6 +13,19 @@ const ADAM_MODEL    = process.env.ADAM_MODEL  || 'adam';
 // PULSE_NO_OLLAMA=1 — отключить Ollama, использовать шаблонный режим
 const NO_OLLAMA     = process.env.PULSE_NO_OLLAMA === '1';
 
+import { spawnSync } from 'child_process';
+import { existsSync } from 'fs';
+
+function callClaudeCLI(systemPrompt, userPrompt) {
+  const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
+    ? '/home/new/.local/bin/claude' : 'claude';
+  const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
+    input: `${systemPrompt}\n\n${userPrompt}`, encoding: 'utf8', timeout: 90_000,
+  });
+  if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
+  return null;
+}
+
 // embed-context: W-матрица как вектор → сжатие → краткий текст для промпта
 import { adamContext } from './embed-context.mjs';
 const SNAP_PATH = new URL('../data/sacred-history-W.json', import.meta.url).pathname;
@@ -115,6 +128,15 @@ export async function adamGenerate(desertDesc, context = []) {
       : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
 
   } catch (e) {
+    // Ollama недоступна → пробуем claude CLI
+    const claudeText = callClaudeCLI(ADAM_SYSTEM, question);
+    if (claudeText) {
+      const m = claudeText.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
+      if (m) return `вопрошание: ${m[1].trim().replace(/\??\s*$/, '?')}`;
+      const firstLine = claudeText.split('\n')[0].trim();
+      return firstLine.startsWith('вопрошание:') ? firstLine
+        : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
+    }
     // Адам молчит → формулируем из пустыни механически
     return `вопрошание: как восстановить нить в пустыне — ${desertDesc.slice(0, 60)}?`;
   }
@@ -200,6 +222,15 @@ export async function adamCodeTask(desertDesc, desertType = 'silent', context = 
       .slice(0, 80);
     return line || `добавить обработку пустыни: ${desertDesc.slice(0, 50)}`;
   } catch {
+    // Ollama недоступна → пробуем claude CLI
+    const claudeText = callClaudeCLI(ADAM_CODE_SYSTEM, question);
+    if (claudeText) {
+      const line = claudeText.split('\n')[0].trim()
+        .replace(/^[-*•]\s*/, '')
+        .replace(/^задача:\s*/i, '')
+        .slice(0, 80);
+      if (line) return line;
+    }
     // Шаблонная задача по типу
     const templates = {
       silent:         `добавить .gift спек с начальным даром: ${desertDesc.slice(0, 40)}`,
