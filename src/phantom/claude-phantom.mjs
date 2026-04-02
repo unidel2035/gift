@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { spawnSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -193,9 +194,10 @@ export async function buildPhantomContext(personId) {
 // ── callClaude — вызов Claude API ────────────────────────────────────────────
 
 /**
- * Два пути:
+ * Три пути:
  * 1. Anthropic API напрямую (ANTHROPIC_API_KEY)
  * 2. gift-claude-proxy (fallback)
+ * 3. claude CLI как user `new` (last resort)
  */
 export async function callClaude(context, question) {
   const systemPrompt = loadSystemPrompt();
@@ -214,7 +216,7 @@ export async function callClaude(context, question) {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5-20251001',
           max_tokens: 1024,
           system: fullSystem,
           messages: [{ role: 'user', content: question }],
@@ -226,6 +228,9 @@ export async function callClaude(context, question) {
         const data = await r.json();
         const text = data.content?.find(b => b.type === 'text')?.text;
         if (text) return text;
+      } else {
+        const err = await r.json().catch(() => ({}));
+        console.error('[phantom] Anthropic API error:', r.status, err?.error?.message || '');
       }
     } catch (e) {
       console.error('[phantom] Anthropic API:', e.message);
@@ -263,6 +268,24 @@ export async function callClaude(context, question) {
     }
   } catch (e) {
     console.error('[phantom] Proxy:', e.message);
+  }
+
+  // Путь 3: claude CLI как user `new`
+  try {
+    const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
+      ? '/home/new/.local/bin/claude'
+      : 'claude';
+    const prompt = `${fullSystem}\n\n${question}`;
+    const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print`], {
+      input: prompt,
+      encoding: 'utf8',
+      timeout: 120_000,
+      cwd: ROOT,
+    });
+    if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
+    if (r.stderr) console.error('[phantom] claude CLI:', r.stderr.slice(0, 200));
+  } catch (e) {
+    console.error('[phantom] claude CLI:', e.message);
   }
 
   throw new Error('_claude не может явиться: провайдеры недоступны');
