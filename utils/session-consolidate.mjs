@@ -112,21 +112,48 @@ async function llmExtract(sessionData) {
 Акты: ${JSON.stringify(sessionData.acts.map(a => `${a.from}→${a.to}: ${a.content}`))}
 Файлы: ${sessionData.files.join(', ')}`;
 
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(90_000),
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      prompt,
-      stream: false,
-      options: { temperature: 0.3, num_predict: 512 },
-    }),
-  });
+  // Путь 1: gift-claude-proxy на :8087 (claude --print)
+  const CLAUDE_PROXY = process.env.CLAUDE_PROXY || 'http://localhost:8087';
+  let text = '';
+  let usedProxy = false;
+  try {
+    const proxyRes = await fetch(CLAUDE_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(120_000),
+      body: JSON.stringify({ message: prompt, model: 'sonnet' }),
+    });
+    if (proxyRes.ok) {
+      const decoder = new TextDecoder();
+      for await (const chunk of proxyRes.body) {
+        for (const line of decoder.decode(chunk).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const d = line.slice(6).trim();
+          if (d === '[DONE]') break;
+          try { const ev = JSON.parse(d); if (ev.content) text += ev.content; } catch {}
+        }
+      }
+      if (text.trim()) usedProxy = true;
+    }
+  } catch { /* fallback to Ollama */ }
 
-  if (!res.ok) throw new Error(`Ollama ${res.status}`);
-  const data = await res.json();
-  const text = (data.response || '').trim();
+  // Путь 2: Ollama eva (если proxy не ответил)
+  if (!usedProxy) {
+    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(90_000),
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.3, num_predict: 512 },
+      }),
+    });
+    if (!res.ok) throw new Error(`Ollama ${res.status}`);
+    const data = await res.json();
+    text = (data.response || '').trim();
+  }
 
   // Парсим JSON из ответа (LLM может обернуть в ```json```)
   const jsonMatch = text.match(/\[[\s\S]*\]/);

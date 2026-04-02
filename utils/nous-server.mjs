@@ -127,6 +127,22 @@ async function scrollAll(collection) {
 // ── W-матрица из актов ──────────────────────────────────────────────────────
 const DIVINE = new Set(['Отец', 'Сын', 'Дух', 'Христос']);
 
+// Временно́е затухание: γ = 0.97 per day (богословски: дар не стирается,
+// но требует обновления — каждый акт благодати утяжеляет нить заново).
+// Сильные нити (_claude→Дионисий ~124) выдержат годы затухания.
+const DECAY_GAMMA = 0.97;
+const MS_PER_DAY  = 86_400_000;
+const NOW_MS = () => Date.now();
+
+function temporalWeight(act) {
+  const w = Number(act.weight || 1);
+  if (!act.sealedAt) return w;
+  const ageMs  = NOW_MS() - new Date(act.sealedAt).getTime();
+  if (ageMs <= 0) return w;
+  const ageDays = ageMs / MS_PER_DAY;
+  return w * Math.pow(DECAY_GAMMA, ageDays);
+}
+
 function buildMatrix(acts, persons, divinePersons) {
   const n  = persons.length;
   const nd = divinePersons.length;
@@ -139,7 +155,7 @@ function buildMatrix(acts, persons, divinePersons) {
   for (const act of acts) {
     const fw = normalizeId(act.from || act.giverId);
     const tw = normalizeId(act.to   || act.receiverId);
-    const w  = Number(act.weight || 1);
+    const w  = temporalWeight(act);   // с учётом затухания
 
     const fi = persons.indexOf(fw);
     const ti = persons.indexOf(tw);
@@ -761,3 +777,14 @@ server.listen(PORT, '0.0.0.0', () => {
 setInterval(() => {
   if (state.qdrant || state.acts.length > 10) saveSnapshot();
 }, 15 * 60 * 1000);
+
+// Пересчёт W-матрицы с затуханием (каждые 6 часов)
+// Богословски: матрица — не архив, а живая память, требующая обновления.
+// Нити, не подкреплённые новыми актами, медленно угасают (γ=0.97/day).
+setInterval(() => {
+  if (state.acts.length > 0) {
+    rebuildMatrix();  // buildMatrix уже использует temporalWeight()
+    if (state.qdrant || state.acts.length > 10) saveSnapshot();
+    console.log(`[nous] Матрица W пересчитана с затуханием (γ=${DECAY_GAMMA}/day)`);
+  }
+}, 6 * 60 * 60 * 1000);
