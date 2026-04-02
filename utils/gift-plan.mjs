@@ -230,6 +230,26 @@ try {
   execSync(`gh issue edit ${issueNum} --add-label plan-ready`, { cwd: ROOT });
 } catch {}
 
-console.log(`\n⏳ Жду одобрения Дионисия.`);
-console.log(`   Одобрить: gh issue edit ${issueNum} --add-label plan-approved`);
+// ── Авто-одобрение для code-task (не вопрошание) ──────────────────────────
+// Вопрошание — богословский вопрос, требует рефлексии Дионисия (ждём).
+// Code-task (укрепить нить, добавить .gift, обработать λήψις) — авто-одобряем.
+const isVopros = issue.title.toLowerCase().startsWith('вопрошание:') ||
+                 issue.labels?.some(l => l.name === 'vopros');
+const isCodeTask = !isVopros && (
+  /укрепить|добавить|создать|обработать|исправить|обновить/i.test(issue.title) ||
+  issue.labels?.some(l => l.name === 'code-task')
+);
+
+if (isCodeTask) {
+  try {
+    execSync(`gh issue edit ${issueNum} --add-label plan-approved`, { cwd: ROOT });
+    console.log(`\n✦ Авто-одобрено (code-task). dev-loop запустит при следующем цикле.`);
+  } catch (e) {
+    console.log(`\n⏳ Жду одобрения Дионисия.`);
+    console.log(`   Одобрить: gh issue edit ${issueNum} --add-label plan-approved`);
+  }
+} else {
+  console.log(`\n⏳ Вопрошание — жду рефлексии Дионисия.`);
+  console.log(`   Одобрить: gh issue edit ${issueNum} --add-label plan-approved`);
+}
 console.log(`   Или: node utils/gift-dev-loop.mjs --once  (после одобрения)`);
