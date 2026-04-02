@@ -253,6 +253,60 @@ function rebuildMatrix() {
   state.W = W;
 }
 
+// ── Профиль лица в gift_persons ───────────────────────────────────────────────
+// Каждый акт обновляет профиль участвующих лиц в Qdrant gift_persons.
+// Профиль = агрегированный текст о лице для семантического поиска.
+async function updatePersonProfile(personId, latestAct) {
+  if (!state.qdrant) return;
+  if (!personId || personId.startsWith('_') || personId === 'бездна') return;
+
+  // Собрать все акты этого лица
+  const personActs = state.acts.filter(a =>
+    normalizeId(a.from) === personId || normalizeId(a.to) === personId
+  );
+  if (personActs.length === 0) return;
+
+  // Агрегировать профиль
+  const given    = personActs.filter(a => normalizeId(a.from) === personId);
+  const received = personActs.filter(a => normalizeId(a.to)   === personId);
+  const givenW   = given.reduce((s, a) => s + (a.weight || 0), 0);
+  const recvW    = received.reduce((s, a) => s + (a.weight || 0), 0);
+
+  // Последние вопросы и ответы этого лица (для семантического профиля)
+  const questions = personActs
+    .filter(a => a.type === 'question' && a.content)
+    .slice(-5).map(a => a.content).join(' | ');
+  const recentContent = personActs
+    .filter(a => a.content && !a.content.startsWith('[снапшот'))
+    .slice(-10).map(a => a.content).join(' ');
+
+  const profileText = [
+    `Лицо: ${personId}`,
+    `Отдал: ${givenW.toFixed(1)}, принял: ${recvW.toFixed(1)}`,
+    `Актов: ${personActs.length}`,
+    questions ? `Вопросы: ${questions.slice(0, 300)}` : '',
+    recentContent ? `Акты: ${recentContent.slice(0, 300)}` : '',
+  ].filter(Boolean).join('\n');
+
+  try {
+    const vector = await embed(profileText);
+    await qdrant('PUT', `/collections/${COL_PERSONS}/points`, {
+      points: [{
+        id: hashId(personId),
+        vector,
+        payload: {
+          id: personId,
+          givenWeight: givenW,
+          receivedWeight: recvW,
+          actsCount: personActs.length,
+          lastSeen: latestAct.sealedAt,
+          profileText: profileText.slice(0, 500),
+        },
+      }],
+    });
+  } catch { /* skip */ }
+}
+
 // ── Добавить акт ─────────────────────────────────────────────────────────────
 async function addAct(raw) {
   const id = raw.id || Date.now();
@@ -318,6 +372,10 @@ async function addAct(raw) {
     } catch (e) {
       console.warn('  ! Qdrant: не сохранили акт:', e.message);
     }
+
+    // Обновить профиль лиц в gift_persons (асинхронно, не блокируем ответ)
+    updatePersonProfile(fw, act).catch(() => {});
+    if (fw !== tw) updatePersonProfile(tw, act).catch(() => {});
   }
 
   // Сохранить снапшот только если данные полные (Qdrant или >10 актов)

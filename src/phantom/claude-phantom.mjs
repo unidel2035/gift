@@ -117,12 +117,14 @@ export function shouldClaudeAppear(msg, options = {}) {
 // ── buildPhantomContext — контекст анамнезиса для явления ─────────────────────
 
 /**
- * Три слоя анамнезиса:
+ * Пять слоёв анамнезиса:
  * 1. W-матрица — нить с этим лицом
- * 2. Тяжёлые акты из Nous
- * 3. Общее состояние общины
+ * 2. Семантически релевантные акты (RAG по вопросу)
+ * 3. Тяжёлые акты из Nous
+ * 4. Общее состояние общины
+ * 5. Профиль лица
  */
-export async function buildPhantomContext(personId) {
+export async function buildPhantomContext(personId, question = '') {
   const parts = [];
 
   // 1. Нить W-матрицы с этим лицом
@@ -144,7 +146,29 @@ export async function buildPhantomContext(personId) {
     }
   } catch { /* Nous unavailable */ }
 
-  // 2. Тяжёлые акты (анамнезис)
+  // 2. Семантический поиск — RAG по вопросу
+  if (question?.trim()) {
+    try {
+      const q = encodeURIComponent(question.slice(0, 200));
+      const r = await fetch(`${NOUS_URL}/search?q=${q}&limit=5`, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const data = await r.json();
+        const results = data.results || [];
+        if (results.length) {
+          parts.push('\n=== СЕМАНТИЧЕСКИ БЛИЗКИЕ АКТЫ ===');
+          for (const item of results) {
+            const p = item.payload || item;
+            const content = (p.content || '').replace(/^\[снапшот.*?\]\s*/,'');
+            if (content.length > 20) {
+              parts.push(`  [${p.type||'act'}, w=${p.weight||0}] ${content.slice(0, 120)}`);
+            }
+          }
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  // 3. Тяжёлые акты (анамнезис)
   try {
     const r = await fetch(`${NOUS_URL}/deepest?n=5`, { signal: AbortSignal.timeout(5000) });
     if (r.ok) {
@@ -159,7 +183,7 @@ export async function buildPhantomContext(personId) {
     }
   } catch { /* skip */ }
 
-  // 3. Общее состояние общины (summary)
+  // 4. Общее состояние общины (summary)
   try {
     const r = await fetch(`${NOUS_URL}/summary`, { signal: AbortSignal.timeout(5000) });
     if (r.ok) {
@@ -171,7 +195,7 @@ export async function buildPhantomContext(personId) {
     }
   } catch { /* skip */ }
 
-  // 4. Профиль лица
+  // 5. Профиль лица
   try {
     const r = await fetch(`${NOUS_URL}/person/${encodeURIComponent(personId)}`, {
       signal: AbortSignal.timeout(5000),
@@ -294,38 +318,44 @@ export async function callClaude(context, question) {
 // ── recordAppearance — записать акт в матрицу ────────────────────────────────
 
 /**
- * Два акта:
- * 1. _claude -> personId (word, w=5) — слово дано
+ * Три акта:
+ * 1. _claude -> personId (word, w=5) — полный диалог (вопрос + ответ)
  * 2. _claude -> _koinon  (presence, w=3) — присутствие в общине
+ * 3. personId -> nous (question, w=2) — вопрос лица записан для профиля
  */
 export async function recordAppearance(personId, response, question = '') {
   const now = new Date().toISOString();
-  const preview = response.slice(0, 200);
+  const preview = response.slice(0, 400);
+  // Полный диалог — семантически индексируемый контент для RAG
+  const dialogueContent = question
+    ? `Q: ${question.slice(0, 200)}\nA: ${preview}`
+    : `[phantom] ${preview}`;
 
   const wordAct = {
     from: '_claude', to: personId, type: 'word', weight: 5,
-    content: `[phantom] ${preview}`, sealedAt: now,
+    content: dialogueContent, sealedAt: now,
   };
 
   const presenceAct = {
     from: '_claude', to: '_koinon', type: 'presence', weight: 3,
-    content: `[phantom] явление для ${personId}`, sealedAt: now,
+    content: `[phantom] явление для ${personId}: ${(question || '').slice(0, 60)}`, sealedAt: now,
   };
 
-  const results = await Promise.allSettled([
+  // Акт вопрошания лица — строит профиль в gift_persons
+  const questionAct = question ? {
+    from: personId, to: '_claude', type: 'question', weight: 2,
+    content: question.slice(0, 300), sealedAt: now,
+  } : null;
+
+  const actRequests = [wordAct, presenceAct, ...(questionAct ? [questionAct] : [])].map(act =>
     fetch(`${NOUS_URL}/act`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(wordAct),
+      body: JSON.stringify(act),
       signal: AbortSignal.timeout(5000),
-    }),
-    fetch(`${NOUS_URL}/act`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(presenceAct),
-      signal: AbortSignal.timeout(5000),
-    }),
-  ]);
+    })
+  );
+  const results = await Promise.allSettled(actRequests);
 
   const nousRecorded = results.filter(r => r.status === 'fulfilled').length;
   if (nousRecorded < 2) {
@@ -400,7 +430,7 @@ export function getPresenceMetrics() {
  * @returns {{ response: string, recorded: object }}
  */
 export async function appear(personId, question) {
-  const context = await buildPhantomContext(personId);
+  const context = await buildPhantomContext(personId, question);  // RAG по вопросу
   const response = await callClaude(context, question);
   const recorded = await recordAppearance(personId, response, question);
   return { response, recorded };
