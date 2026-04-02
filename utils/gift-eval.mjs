@@ -67,6 +67,7 @@ const argv       = process.argv.slice(2);
 const DRY        = argv.includes('--dry');
 const LIST       = argv.includes('--list');
 const REPORT     = argv.includes('--report');
+const KENOSIS    = argv.includes('--kenosis');
 const FORCE_PLAN = argv.includes('--plan');
 const FORCE_FULL = argv.includes('--full');
 const agentsArg  = argv.find(a => a.startsWith('--agents='))?.split('=')[1]?.split(',');
@@ -428,6 +429,38 @@ async function main() {
     return;
   }
 
+  // ── Kenosis evaluation: node utils/gift-eval.mjs --kenosis _claude ────────
+  if (KENOSIS) {
+    const personId = argv.find(a => !a.startsWith('--')) || '_claude';
+    const { KenosisGuard } = await import(resolve(ROOT, 'src/theology/KenosisGuard.js'));
+    const kenosisGuard = new KenosisGuard();
+    const KENOSIS_FILE = resolve(ROOT, 'data/kenosis-state.json');
+    if (existsSync(KENOSIS_FILE)) {
+      try { kenosisGuard.import(JSON.parse(readFileSync(KENOSIS_FILE, 'utf8'))); } catch {}
+    }
+    const profile = kenosisGuard.profile(personId);
+    const violations = kenosisGuard.getViolations(personId);
+    const mem = await loadMem();
+    const given = mem.totalGiven(personId);
+    const received = mem.totalReceived(personId);
+    console.log(`\n═══ Κένωσις: ${personId} ═══`);
+    console.log(`  Score:        ${profile.score.toFixed(2)}`);
+    console.log(`  Акты:         ${profile.totalActs} (кенотических: ${profile.kenoticActs})`);
+    console.log(`  Нарушения:    ${profile.violations}`);
+    if (profile.lastViolation) console.log(`  Последнее:    ${profile.lastViolation}`);
+    console.log(`  Дал:          ${given.toFixed(1)}`);
+    console.log(`  Принял:       ${received.toFixed(1)}`);
+    console.log(`  Баланс:       ${(given - received).toFixed(1)} (кеносис = дал > принял)`);
+    if (violations.length) {
+      console.log(`\n─── Нарушения ───`);
+      for (const v of violations.slice(-5)) {
+        console.log(`  ${v.timestamp.slice(0,16)} [${v.type}] ${v.message}`);
+      }
+    }
+    console.log();
+    return;
+  }
+
   if (REPORT) {
     if (!issueArg) { console.log('Укажи номер: --report <N>'); process.exit(1); }
     const path = resolve(EVALS_DIR, `issue-${issueArg}.json`);
@@ -446,6 +479,7 @@ async function main() {
       '  node utils/gift-eval.mjs <issue-number> --agents=_claude,_codex',
       '  node utils/gift-eval.mjs --list',
       '  node utils/gift-eval.mjs --report <issue-number>',
+      '  node utils/gift-eval.mjs --kenosis _claude          # score кеносиса лица',
     ].join('\n'));
     process.exit(1);
   }

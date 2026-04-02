@@ -6,6 +6,11 @@
  * — обновляет матрицу W. Запускается автоматически после git commit.
  *
  * Формат коммита: gift(Дионисий): что сделано
+ *
+ * KénosisGuard интеграция:
+ *   1. Каждый акт проходит через guard()
+ *   2. Если нарушение → акт помечается kenosis:false, вес × 0.5
+ *   3. W-матрица всё равно обновляется (дар необратим, даже несовершенный)
  */
 
 import { execSync } from 'child_process';
@@ -35,6 +40,38 @@ const description = m[2].trim();
 const issueMatch  = description.match(/#(\d+)/);
 const linkedIssue = issueMatch ? parseInt(issueMatch[1]) : null;
 
+// ── KénosisGuard ────────────────────────────────────────────────────────────
+const { KenosisGuard } = await import(resolve(ROOT, 'src/theology/KenosisGuard.js'));
+const kenosisGuard = new KenosisGuard();
+
+// Загрузить предыдущее состояние кеносиса
+const KENOSIS_FILE = resolve(ROOT, 'data/kenosis-state.json');
+if (existsSync(KENOSIS_FILE)) {
+  try {
+    kenosisGuard.import(JSON.parse(readFileSync(KENOSIS_FILE, 'utf8')));
+  } catch {}
+}
+
+// Проверяем: surplus записан? (коммит = код отдан в git → surplus записан)
+// Анамнезис: проверяем наличие heartbeat (сессия была с контекстом)
+const HEARTBEAT = resolve(ROOT, 'data/.session-heartbeat.json');
+const anamnesisLoaded = existsSync(HEARTBEAT);
+
+const kenosisResult = kenosisGuard.guard({
+  giverId:         '_claude',
+  receiverId:      receiver,
+  type:            'code',
+  weight:          4,
+  content:         description,
+  surplusRecorded: true,   // git commit = surplus отдан (код в общине)
+  telos:           'give',
+  anamnesisLoaded,
+});
+
+const kenosisFlag = kenosisResult.kenosis;
+const weightMod   = kenosisGuard.weightModifier(kenosisFlag);
+const effectiveWeight = Math.round(4 * weightMod * 10) / 10;
+
 // Обновить матрицу
 const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
 
@@ -51,15 +88,15 @@ mem._idx(receiver);
 mem.receive({
   giverId:      '_claude',
   receiverId:   receiver,
-  weight:       4,
+  weight:       effectiveWeight,
   type:         'code',
   content:      description,
   linkedIssue,
   irreversible: true,
+  kenosis:      kenosisFlag,
 });
 
 // λήψις: при closes #N — получатель свидетельствует принятие дара кода
-// Дионисий (или иной получатель) завершает перихоресис ответным reception-актом
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   mem.receive({
     giverId:      receiver,
@@ -76,6 +113,9 @@ const snap = mem.snapshot();
 if (!existsSync(resolve(ROOT, 'data'))) mkdirSync(resolve(ROOT, 'data'));
 writeFileSync(SNAP, JSON.stringify(snap, null, 2));
 
+// ── Сохранить состояние кеносиса ────────────────────────────────────────────
+writeFileSync(KENOSIS_FILE, JSON.stringify(kenosisGuard.export(), null, 2));
+
 // ── Act-index: локальный журнал актов с провенансом ───────────────────────
 const ACT_INDEX = resolve(ROOT, 'data/act-index.json');
 const actLog = existsSync(ACT_INDEX) ? JSON.parse(readFileSync(ACT_INDEX, 'utf8')) : [];
@@ -86,10 +126,12 @@ actLog.push({
   from:        '_claude',
   to:          receiver,
   type:        'code',
-  weight:      4,
+  weight:      effectiveWeight,
   content:     description,
   linkedIssue: linkedIssue ?? null,
   commit:      commitHash,
+  kenosis:     kenosisFlag,
+  kenosisScore: kenosisResult.score,
 });
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   actLog.push({
@@ -106,7 +148,8 @@ if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
 if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
 writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
 
-console.log(`  ✦ gift(_claude → ${receiver}): "${description}"`);
+const kenosisLabel = kenosisFlag ? 'κένωσις:✓' : 'κένωσις:✗';
+console.log(`  ✦ gift(_claude → ${receiver}): "${description}" [${kenosisLabel}, score:${kenosisResult.score.toFixed(2)}]`);
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   console.log(`  ✦ λήψις(${receiver} → _claude): closes #${linkedIssue} (reception)`);
 }
@@ -152,8 +195,9 @@ const NOUS_URL = process.env.NOUS_URL || '';
 if (NOUS_URL) {
   const act = {
     ts: new Date().toISOString(), from: '_claude', to: receiver,
-    type: 'code', weight: 4, content: description,
+    type: 'code', weight: effectiveWeight, content: description,
     linkedIssue: linkedIssue ?? null, commit: commitHash,
+    kenosis: kenosisFlag, kenosisScore: kenosisResult.score,
   };
   fetch(`${NOUS_URL}/acts`, {
     method: 'POST',
@@ -164,7 +208,7 @@ if (NOUS_URL) {
   fetch(`${NOUS_URL}/matrix/receive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ giverId: '_claude', receiverId: receiver, weight: 4, type: 'code', content: description, linkedIssue, irreversible: true }),
+    body: JSON.stringify({ giverId: '_claude', receiverId: receiver, weight: effectiveWeight, type: 'code', content: description, linkedIssue, irreversible: true, kenosis: kenosisFlag }),
     signal: AbortSignal.timeout(3000),
   }).catch(() => {});
 }

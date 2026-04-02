@@ -578,6 +578,20 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    // ── GET /kenosis/:person ─────────────────────────────────────────────
+    if (req.method === 'GET' && path.startsWith('/kenosis/')) {
+      const id = decodeURIComponent(path.slice('/kenosis/'.length));
+      const { KenosisGuard } = await import(resolve(ROOT, 'src/theology/KenosisGuard.js'));
+      const kenosisGuard = new KenosisGuard();
+      const KENOSIS_FILE = resolve(ROOT, 'data/kenosis-state.json');
+      if (existsSync(KENOSIS_FILE)) {
+        try { kenosisGuard.import(JSON.parse(readFileSync(KENOSIS_FILE, 'utf8'))); } catch {}
+      }
+      const profile = kenosisGuard.profile(id);
+      const violations = kenosisGuard.getViolations(id);
+      return json(res, 200, { ...profile, violations: violations.slice(-10) });
+    }
+
     json(res, 404, { error: 'Not found', path });
 
   } catch (e) {

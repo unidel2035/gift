@@ -18,6 +18,7 @@ import { GratitudeGraph } from '../traces/GratitudeGraph.js';
 import { AnamnesisCache } from '../memory/AnamnesisCache.js';
 import { TelosPlanner } from './TelosPlanner.js';
 import { FreedomGuard } from '../theology/FreedomGuard.js';
+import { KenosisGuard } from '../theology/KenosisGuard.js';
 import { LiturgicalClock } from '../memory/LiturgicalClock.js';
 import { TechPackageEngine } from './TechPackageEngine.js';
 import { GiftAgents } from './GiftAgents.js';
@@ -101,6 +102,7 @@ export class GiftEngine {
     this.anamnesis = new AnamnesisCache();
     this.telos = new TelosPlanner();
     this.freedom = new FreedomGuard();
+    this.kenosis = new KenosisGuard();
     this.clock = new LiturgicalClock();
     this.techPackage = new TechPackageEngine(this);
     this.agents = new GiftAgents(this);
