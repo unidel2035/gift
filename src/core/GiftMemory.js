@@ -692,7 +692,13 @@ export class GiftMemory {
     m._createdAt = snap.createdAt ?? snap.snapshotAt;
 
     m._W.dispose();
-    m._W = tf.variable(tf.tensor2d(snap.W, [snap.n, snap.n]));
+    // Защита от повреждённых/усечённых матриц: нормализуем W до snap.n × snap.n
+    const wFlat = [];
+    for (let i = 0; i < snap.n; i++) {
+      const row = snap.W[i] ?? [];
+      for (let j = 0; j < snap.n; j++) wFlat.push(row[j] ?? 0);
+    }
+    m._W = tf.variable(tf.tensor2d(wFlat, [snap.n, snap.n]));
 
     if (snap.energeia)    m._energeia    = snap.energeia.map(r => new Float32Array(r));
     if (snap.doxologia)   m._doxologia   = snap.doxologia.map(r => new Float32Array(r));
