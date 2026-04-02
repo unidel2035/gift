@@ -410,8 +410,39 @@ function deepestActs(n = 7) {
     .slice(0, n);
 }
 
-// ── /summary ─────────────────────────────────────────────────────────────────
+// ── /summary — компактный текстовый отчёт ────────────────────────────────────
 function buildSummary() {
+  const n = state.persons.length;
+  const acts = state.acts.length;
+
+  // Топ нитей из W-матрицы
+  const topThreads = [];
+  if (state.W) {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const w = state.W[i]?.[j];
+        if (w > 0) topThreads.push({ from: state.persons[i], to: state.persons[j], weight: w });
+      }
+    }
+    topThreads.sort((a, b) => b.weight - a.weight);
+  }
+
+  const top = topThreads.slice(0, 3).map(t => `${t.from}→${t.to}(${t.weight.toFixed(0)})`).join(', ');
+  const summaryText = `Лиц в онтологии: ${n}\nАктов в ленте: ${acts}${top ? `\n  топ нитей: ${top}` : ''}`;
+
+  return {
+    summary: summaryText,
+    matrix:  summaryText,   // alias — backward compat с phantom
+    persons: n,
+    acts,
+    topThread: topThreads[0] || null,
+    storage: state.qdrant ? 'qdrant' : 'snapshot',
+    ts: new Date().toISOString(),
+  };
+}
+
+// ── /summary (old) — полный объект для /matrix-like запросов ─────────────────
+function buildFullSummary() {
   const personsArr  = state.persons.map(id => ({ id }));
   const topThreads  = [];
   const n = state.persons.length;
