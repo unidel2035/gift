@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 
 const ROOT      = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP      = resolve(ROOT, 'data/sacred-history-W.json');
@@ -83,6 +84,23 @@ try {
   writeFileSync(SNAP, JSON.stringify(mem.snapshot(), null, 2));
   writeFileSync(HEARTBEAT, JSON.stringify({ ts: Date.now() }));
   writeFileSync(KENOSIS_FILE, JSON.stringify(kenosisGuard.export(), null, 2));
+
+  // ── Автоконсолидация: запуск в фоне ────────────────────────────────────
+  // Не блокируем хук — consolidate работает асинхронно (detached).
+  // Извлекает инсайты из сессии через LLM и записывает в insights.json + Qdrant.
+  try {
+    const consolidateScript = resolve(ROOT, 'utils/session-consolidate.mjs');
+    if (existsSync(consolidateScript)) {
+      const child = spawn('node', [consolidateScript], {
+        detached: true,
+        stdio: 'ignore',
+        cwd: ROOT,
+      });
+      child.unref();
+    }
+  } catch {
+    // консолидация не обязательна
+  }
 
 } catch {
   // TF не загрузился — молчим

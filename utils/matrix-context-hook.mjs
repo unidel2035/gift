@@ -15,7 +15,21 @@ const ROOT  = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP  = resolve(ROOT, 'data/sacred-history-W.json');
 const CACHE = resolve(ROOT, 'data/.anamnesis-cache.json');
 const ANAMNESIS_URL = process.env.ANAMNESIS_URL || 'http://173.249.2.184:8089';
+const NOUS_URL      = process.env.NOUS_URL      || 'http://localhost:8089';
+const OLLAMA_URL    = process.env.OLLAMA_URL     || 'http://localhost:11434';
+const QDRANT_URL    = process.env.QDRANT_URL     || 'http://localhost:6333';
+const EMBED_MODEL   = process.env.EMBED_MODEL    || 'nomic-embed-text';
 const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 минут
+
+// ── Читаем stdin (событие от Claude Code) ─────────────────────────────────
+let userPrompt = '';
+try {
+  const raw = readFileSync('/dev/stdin', 'utf8').trim();
+  if (raw) {
+    const event = JSON.parse(raw);
+    userPrompt = (event.prompt || event.message || event.input || '').trim();
+  }
+} catch {}
 
 if (!existsSync(SNAP)) process.exit(0);
 
@@ -90,15 +104,92 @@ try {
   // Сервер недоступен — продолжаем
 }
 
-// ── 3. Долгосрочная память: axiom / insight / setting / fact ─────────────
+// ── 3. Долгосрочная память: семантический retrieval + статический fallback ─
 try {
   const INSIGHTS_FILE = resolve(ROOT, 'data/insights.json');
+  let semanticResults = null;
+
+  // Семантический поиск: если есть промт пользователя + Qdrant/Nous доступен
+  if (userPrompt && userPrompt.length >= 10) {
+    // Попытка 1: через Nous сервер (/search)
+    try {
+      const q = encodeURIComponent(userPrompt.slice(0, 200));
+      const res = await fetch(`${NOUS_URL}/search?q=${q}&limit=5`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.results?.length) {
+          semanticResults = data.results.map(r => ({
+            type: r.payload?.type || 'insight',
+            weight: r.payload?.weight || Math.round(r.score * 10),
+            content: r.payload?.content || r.payload?.summary || '',
+            score: r.score,
+          })).filter(r => r.content);
+        }
+      }
+    } catch {}
+
+    // Попытка 2: прямой Qdrant
+    if (!semanticResults) {
+      try {
+        const embedRes = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({ model: EMBED_MODEL, prompt: userPrompt.slice(0, 500) }),
+        });
+        if (embedRes.ok) {
+          const embedData = await embedRes.json();
+          const vector = embedData.embedding;
+          if (vector?.length) {
+            const searchRes = await fetch(`${QDRANT_URL}/collections/gift_insights/points/search`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(4000),
+              body: JSON.stringify({ vector, limit: 5, with_payload: true }),
+            });
+            if (searchRes.ok) {
+              const searchData = await searchRes.json();
+              if (searchData.result?.length) {
+                semanticResults = searchData.result.map(r => ({
+                  type: r.payload?.type || 'insight',
+                  weight: r.payload?.weight || Math.round(r.score * 10),
+                  content: r.payload?.content || '',
+                  score: r.score,
+                })).filter(r => r.content);
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Если семантический retrieval удался — показываем релевантные
+  if (semanticResults?.length) {
+    lines.push('');
+    lines.push('[Долгосрочная память — semantic retrieval:]');
+    for (const m of semanticResults.slice(0, 5)) {
+      lines.push(`  [${m.type}:${m.weight}] ${m.content}`);
+    }
+  }
+
+  // Всегда добавляем статические аксиомы и настройки (они фундаментальны)
   if (existsSync(INSIGHTS_FILE)) {
     const insights = JSON.parse(readFileSync(INSIGHTS_FILE, 'utf8'));
-    if (insights.length) {
+    // Аксиомы и настройки — всегда релевантны
+    const static_ = insights.filter(m => m.type === 'axiom' || m.type === 'setting');
+    // Инсайты и факты — только если нет семантических результатов
+    const dynamic = semanticResults?.length
+      ? []
+      : insights.filter(m => m.type !== 'axiom' && m.type !== 'setting').slice(0, 5);
+    const toShow = [...static_, ...dynamic];
+
+    if (toShow.length) {
       lines.push('');
       lines.push('[Долгосрочная память — axioms/insights/settings:]');
-      for (const m of insights.slice(0, 15)) {
+      for (const m of toShow.slice(0, 15)) {
         lines.push(`  [${m.type}:${m.weight}] ${m.content}`);
       }
     }
