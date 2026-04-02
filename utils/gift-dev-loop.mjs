@@ -42,6 +42,33 @@ const AGENTS = {
   '_claude':     { name: 'Исполнитель', type: 'llm',      weight: 4 },
 };
 
+// ── Загрузка скомпилированных .gift спецификаций ──────────────────────────
+const BUNDLE = resolve(ROOT, 'dist/compiled/gift-bundle.json');
+
+async function loadCompiledSpecs() {
+  // Пересобрать если бандл старее 24 часов или отсутствует
+  const needRebuild = !existsSync(BUNDLE) ||
+    (Date.now() - (new Date((JSON.parse(readFileSync(BUNDLE,'utf8')).compiledAt||0))).getTime() > 86400_000);
+  if (needRebuild) {
+    spawnSync('node', ['utils/gift-compile.mjs'], { cwd: ROOT, stdio: 'pipe', timeout: 60_000 });
+  }
+  if (!existsSync(BUNDLE)) return null;
+  try {
+    const bundle = JSON.parse(readFileSync(BUNDLE, 'utf8'));
+    const { PersonRegistry } = await import(resolve(ROOT, 'src/persons/PersonRegistry.js'));
+    const registry = new PersonRegistry();
+    let loaded = 0;
+    for (const spec of (bundle.persons || [])) {
+      if (spec.name) { registry.applyCompiledSpec(spec.name, spec); loaded++; }
+    }
+    if (loaded) console.log(`[оркестратор] .gift спеки загружены: ${loaded} лиц`);
+    return registry;
+  } catch (e) {
+    console.log(`[оркестратор] .gift спеки: ${e.message}`);
+    return null;
+  }
+}
+
 // ── Матрица ────────────────────────────────────────────────────────────────
 async function loadMem() {
   const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
@@ -109,6 +136,9 @@ function closeIssue(number, comment) {
 
 // ── Оркестратор ───────────────────────────────────────────────────────────
 async function orchestrate() {
+  // Загрузить скомпилированные .gift спецификации (связывает онтологию с рантаймом)
+  await loadCompiledSpecs();
+
   const issues = getReadyIssues();
   if (!issues.length) {
     console.log('[оркестратор] Нет issues с меткой gift-ready');

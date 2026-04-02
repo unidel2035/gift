@@ -253,6 +253,25 @@ export class PersonRegistry {
   }
 
   /**
+   * Apply compiled .gift spec to a person (behaviorPolicy, kenosis, telos).
+   * Called after GiftCompiler.compile() to connect spec → runtime.
+   */
+  applyCompiledSpec(name, compiledSpec) {
+    let person = this.findByName(name);
+    if (!person) {
+      person = this.register(name, {
+        calling: compiledSpec.telos,
+        description: compiledSpec.description,
+      });
+    }
+    // Store compiled policy on person object
+    person._behaviorPolicy = compiledSpec.behaviorPolicy || null;
+    person._compiledTelos  = compiledSpec.telos || person.calling;
+    person._compiledAt     = compiledSpec.compiledAt || new Date().toISOString();
+    return person;
+  }
+
+  /**
    * Stats for diagnostics.
    */
   async stats() {
