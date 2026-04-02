@@ -126,3 +126,40 @@ export function reportValidation(stats, source = '') {
   }
   return lines.join('\n');
 }
+
+/**
+ * Validate a .gift specification file (syntax + structure).
+ * @param {string} filePath — path to .gift file
+ * @returns {{ valid: boolean, errors: string[], warnings: string[], stats: object }}
+ */
+export async function validateGiftFile(filePath) {
+  const { GiftCompiler } = await import('../src/core/GiftCompiler.js');
+  const source = readFileSync(filePath, 'utf8');
+  return GiftCompiler.validate(source);
+}
+
+// ── CLI: node utils/gift-validator.mjs <file.gift> ──────────────────────
+if (process.argv[1]?.endsWith('gift-validator.mjs') && process.argv[2]?.endsWith('.gift')) {
+  const filePath = process.argv[2].startsWith('/')
+    ? process.argv[2]
+    : join(process.cwd(), process.argv[2]);
+
+  validateGiftFile(filePath).then(result => {
+    const icon = result.valid ? '✓' : '✗';
+    const statsStr = `persons:${result.stats.persons} gifts:${result.stats.gifts} covenants:${result.stats.covenants} liturgies:${result.stats.liturgies} witnesses:${result.stats.witnesses}`;
+    console.log(`\n${icon} ${filePath}`);
+    console.log(`  ${statsStr}`);
+    if (result.errors.length) {
+      console.log(`\n  Ошибки:`);
+      for (const e of result.errors) console.log(`    ✗ ${e}`);
+    }
+    if (result.warnings.length) {
+      console.log(`\n  Предупреждения:`);
+      for (const w of result.warnings) console.log(`    ⚠ ${w}`);
+    }
+    process.exit(result.valid ? 0 : 1);
+  }).catch(e => {
+    console.error(`Ошибка: ${e.message}`);
+    process.exit(1);
+  });
+}

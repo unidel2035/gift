@@ -168,8 +168,8 @@ export class GiftCompiler {
     // завет X с Y { ... } → covenant X with Y { ... }
     s = s.replace(/^завет\s+/gm, 'covenant ');
     // «когда дар-принят» needs special handling (already keyword-mapped to 'when')
-    // «с» in завет → 'with'
-    s = s.replace(/\bс\s+(\S+)\s*\{/gm, 'with $1 {');
+    // «с» in завет → 'with' (не \b — Cyrillic не word character в JS)
+    s = s.replace(/\sс\s+(\S+)\s*\{/gm, ' with $1 {');
     // Принимает/отклоняет
     s = s.replace(/^(\S+)\s+принимает:\s*"([^"]*)"/gm, 'accept _last { transformation: "$2" }');
     s = s.replace(/^(\S+)\s+отклоняет\s+потому что\s*"([^"]*)"/gm, 'decline _last reason "$2"');
@@ -184,6 +184,388 @@ export class GiftCompiler {
     s = s.replace(/против-природы/g, 'para');
     s = s.replace(/выше-природы/g, 'hyper');
     return s;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // compile() — статическая компиляция .gift → runtime-конфиг
+  // Не исполняет (не нужен engine). Извлекает:
+  //   persons → behaviorPolicy (kenosis, telos, logos)
+  //   gifts   → шаблоны (required fields, validation, irreversibility)
+  //   covenants → ImmutableRule (вес 10, необратимо)
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Compile .gift source into runtime config without engine execution.
+   * @param {string} source — .gift file content
+   * @returns {CompiledSpec} — structured runtime config
+   */
+  static compile(source) {
+    const inst = new GiftCompiler(null);
+    const normalized = inst._normalizeRussian(source);
+    const blocks = inst._splitIntoBlocks(normalized);
+
+    const persons = [];
+    const giftTemplates = [];
+    const covenants = [];
+    const witnesses = [];
+    const liturgies = [];
+    const errors = [];
+
+    function compileBlocks(blockList) {
+      for (const block of blockList) {
+        const firstLine = block.split('\n')[0].trim();
+        if (firstLine.startsWith('//')) continue;
+        if (firstLine.startsWith('use ')) continue;
+
+        // ── person ──────────────────────────────────────────────
+        if (firstLine.startsWith('person ')) {
+          const m = block.match(/^person\s+(\S+)\s*\{/);
+          if (!m) { errors.push(`person: parse error: ${firstLine}`); continue; }
+          const name = m[1];
+          const body = inst._extractBody(block);
+
+          const calling = inst._extractStringProp(body, 'calling') || name;
+          const energy = inst._extractNumberProp(body, 'energy');
+          const logos = inst._extractWordProp(body, 'logos') || 'kata';
+
+          // Извлечь kenosis-блок внутри person
+          const kenosisBlock = body.match(/kenosis\s*\{([^}]*)\}/);
+          const kenosisPolicy = {};
+          if (kenosisBlock) {
+            const kb = kenosisBlock[1];
+            const givesAway = kb.match(/gives_away:\s*(\S+)/);
+            const holdsNothing = kb.match(/holds_nothing:\s*(\S+)/);
+            if (givesAway) kenosisPolicy.givesAway = givesAway[1].replace(/,/, '');
+            if (holdsNothing) kenosisPolicy.holdsNothing = holdsNothing[1] === 'true';
+          }
+
+          // Извлечь telos (telos: или цель:)
+          const telos = inst._extractStringProp(body, 'telos')
+            || inst._extractStringProp(body, 'цель')
+            || inst._extractWordProp(body, 'telos')
+            || inst._extractWordProp(body, 'цель');
+
+          persons.push({
+            name,
+            calling,
+            energy: energy !== null ? energy : undefined,
+            logos,
+            telos: telos || undefined,
+            behaviorPolicy: {
+              kenosis: {
+                givesAway: kenosisPolicy.givesAway || 'surplus',
+                holdsNothing: kenosisPolicy.holdsNothing === true,
+                enforced: Object.keys(kenosisPolicy).length > 0,
+              },
+              telos: telos || 'give',
+              logos,
+            },
+          });
+          continue;
+        }
+
+        // ── gift ────────────────────────────────────────────────
+        if (firstLine.startsWith('gift ')) {
+          const m = block.match(
+            /^gift\s+(\S+)\s+(?:from\s+(\S+)\s+)?(?:through\s+(\S+)\s+)?(?:(?:to|кому)\s+(\S+)\s*)?\{/
+          );
+          if (!m) { errors.push(`gift: parse error: ${firstLine}`); continue; }
+          const [, giftName, giver, mediator, receiver] = m;
+          const body = inst._extractBody(block);
+
+          const content = inst._extractStringProp(body, 'content')
+            || inst._extractStringProp(body, 'содержание') || giftName;
+          const telos = inst._extractStringProp(body, 'telos')
+            || inst._extractStringProp(body, 'цель');
+          const anamnesis = inst._extractListProp(body, 'anamnesis')
+            || inst._extractListProp(body, 'анамнезис');
+          const type = inst._extractWordProp(body, 'type')
+            || inst._extractWordProp(body, 'тип')
+            || inst._extractWordProp(body, 'rel_type');
+          const weight = inst._extractNumberProp(body, 'weight') || inst._extractNumberProp(body, 'вес');
+          const irreversible = body.includes('irreversible: true')
+            || body.includes('необратим: да')
+            || body.includes('необратим: true');
+
+          giftTemplates.push({
+            name: giftName,
+            from: giver || undefined,
+            to: receiver || 'all',
+            through: mediator || undefined,
+            content,
+            telos: telos || undefined,
+            type: type || undefined,
+            weight: weight || undefined,
+            irreversible,
+            anamnesis: anamnesis || [],
+            validation: {
+              requiresKenosis: true,
+              requiresTelos: !!telos,
+              requiresAnamnesis: (anamnesis || []).length > 0,
+              irreversibilityEnforced: irreversible,
+            },
+          });
+          continue;
+        }
+
+        // ── covenant ────────────────────────────────────────────
+        if (firstLine.startsWith('covenant ')) {
+          const m = block.match(/^covenant\s+(\S+)\s+with\s+(\S+)\s*\{/);
+          if (!m) { errors.push(`covenant: parse error: ${firstLine}`); continue; }
+          const [, party1, party2] = m;
+          const body = inst._extractBody(block);
+
+          const promise = inst._extractStringProp(body, 'promise')
+            || inst._extractStringProp(body, 'обещание') || '';
+          const sign = inst._extractStringProp(body, 'sign')
+            || inst._extractStringProp(body, 'знак') || '';
+          const condition = inst._extractStringProp(body, 'condition')
+            || inst._extractStringProp(body, 'условие') || '';
+
+          covenants.push({
+            parties: [party1, party2],
+            promise, sign, condition,
+            weight: 10,
+            irreversible: true,
+            immutable: true,
+          });
+          continue;
+        }
+
+        // ── witness ─────────────────────────────────────────────
+        if (firstLine.startsWith('witness ')) {
+          const m = firstLine.match(/^witness\s+"([^"]*)"$/);
+          if (m) witnesses.push(m[1]);
+          continue;
+        }
+
+        // ── liturgy — рекурсивно компилируем внутренние блоки ───
+        if (firstLine.startsWith('liturgy ')) {
+          const m = block.match(/^liturgy\s+(\S+)\s*\{/);
+          if (!m) continue;
+          const name = m[1];
+          const telosM = block.match(/telos:\s*"([^"]*)"/)
+            || block.match(/цель:\s*"([^"]*)"/);
+          liturgies.push({
+            name,
+            telos: telosM ? telosM[1] : undefined,
+          });
+          const innerContent = inst._extractBody(block);
+          const innerBlocks = inst._splitIntoBlocks(innerContent);
+          compileBlocks(innerBlocks);
+          continue;
+        }
+      }
+    }
+
+    compileBlocks(blocks);
+
+    return Object.freeze({
+      persons,
+      giftTemplates,
+      covenants,
+      witnesses,
+      liturgies,
+      errors,
+      compiledAt: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Compile .gift source into a CommonJS runtime module string.
+   * Generated module exports: persons, giftTemplates, covenants, register().
+   * register(PersonRegistry) — applies all persons' behaviorPolicy.
+   *
+   * @param {string} source — .gift file content
+   * @param {string} specName — module name (e.g. 'claude-person')
+   * @returns {string} — CommonJS module source code
+   */
+  static compileToModule(source, specName = 'gift-spec') {
+    const compiled = GiftCompiler.compile(source);
+    const json = JSON.stringify(compiled, null, 2);
+
+    return `// Auto-generated by GiftCompiler from ${specName}.gift
+// compiledAt: ${compiled.compiledAt}
+// persons: ${compiled.persons.map(p => p.name).join(', ')}
+// covenants: ${compiled.covenants.length}
+// giftTemplates: ${compiled.giftTemplates.length}
+//
+// «Слово стало плотью» (Ин 1:14) — спецификация стала исполнимой.
+
+'use strict';
+
+const _compiled = ${json};
+
+/** All compiled persons with behaviorPolicy */
+const persons = _compiled.persons;
+
+/** Gift templates with validation rules */
+const giftTemplates = _compiled.giftTemplates;
+
+/** Covenants — immutable rules (weight=10, irreversible) */
+const covenants = _compiled.covenants;
+
+/** Witnesses extracted from spec */
+const witnesses = _compiled.witnesses;
+
+/** Liturgies extracted from spec */
+const liturgies = _compiled.liturgies;
+
+/**
+ * Register all persons from this spec into a PersonRegistry.
+ * Applies behaviorPolicy (kenosis, telos, logos) to each person.
+ *
+ * @param {PersonRegistry} registry
+ * @returns {{ registered: string[], covenants: number }}
+ */
+function register(registry) {
+  const registered = [];
+  for (const p of persons) {
+    registry.applyCompiledSpec(p.name, p);
+    registered.push(p.name);
+  }
+  return { registered, covenants: covenants.length };
+}
+
+/**
+ * Validate an act against the kenosis policy of a person from this spec.
+ * @param {string} personName
+ * @param {object} act — { telos, surplusRetained, ... }
+ * @returns {{ allowed: boolean, violation: object|null }}
+ */
+function checkKenosis(personName, act) {
+  const person = persons.find(p => p.name === personName);
+  if (!person?.behaviorPolicy?.kenosis?.enforced) {
+    return { allowed: true, violation: null };
+  }
+  const policy = person.behaviorPolicy.kenosis;
+  if (policy.holdsNothing && act.surplusRetained) {
+    return {
+      allowed: false,
+      violation: { type: 'surplus_retained', person: personName, policy },
+    };
+  }
+  if (act.telos === 'win' || act.telos === 'extract') {
+    return {
+      allowed: false,
+      violation: { type: 'telos_inverted', person: personName, actTelos: act.telos, policy },
+    };
+  }
+  return { allowed: true, violation: null };
+}
+
+module.exports = { persons, giftTemplates, covenants, witnesses, liturgies, register, checkKenosis };
+`;
+  }
+
+  /**
+   * Compile from file path (static).
+   * @param {string} filePath
+   * @returns {CompiledSpec}
+   */
+  static async compileFile(filePath) {
+    const fs = await import('fs');
+    const source = fs.default.readFileSync(filePath, 'utf8');
+    return GiftCompiler.compile(source);
+  }
+
+  /**
+   * Compile .gift file to a CommonJS runtime module file.
+   * Writes to dist/persons/<name>.js
+   *
+   * @param {string} filePath — source .gift file
+   * @param {string} outDir — output directory (default: dist/persons)
+   * @returns {{ outPath: string, persons: string[] }}
+   */
+  static async compileFileToModule(filePath, outDir) {
+    const fs = await import('fs');
+    const path = await import('path');
+    const source = fs.default.readFileSync(filePath, 'utf8');
+    const specName = path.default.basename(filePath, '.gift');
+    const moduleSource = GiftCompiler.compileToModule(source, specName);
+
+    const dir = outDir || path.default.resolve(path.default.dirname(filePath), '../../dist/persons');
+    if (!fs.default.existsSync(dir)) fs.default.mkdirSync(dir, { recursive: true });
+
+    const outPath = path.default.resolve(dir, `${specName}.js`);
+    fs.default.writeFileSync(outPath, moduleSource, 'utf8');
+
+    const compiled = GiftCompiler.compile(source);
+    return { outPath, persons: compiled.persons.map(p => p.name) };
+  }
+
+  /**
+   * Validate .gift source syntax without executing.
+   * Returns { valid, errors, warnings, stats }.
+   */
+  static validate(source) {
+    const errors = [];
+    const warnings = [];
+    const stats = { persons: 0, gifts: 0, covenants: 0, liturgies: 0, witnesses: 0 };
+
+    const inst = new GiftCompiler(null);
+    let normalized;
+    try {
+      normalized = inst._normalizeRussian(source);
+    } catch (e) {
+      return { valid: false, errors: [`Normalization failed: ${e.message}`], warnings, stats };
+    }
+
+    const blocks = inst._splitIntoBlocks(normalized);
+    if (blocks.length === 0) {
+      warnings.push('Empty spec: no blocks found');
+    }
+
+    // Check brace balance
+    let codeBraces = 0;
+    for (const ch of normalized) {
+      if (ch === '{') codeBraces++;
+      if (ch === '}') codeBraces--;
+    }
+    if (codeBraces !== 0) {
+      errors.push(`Unbalanced braces: ${codeBraces > 0 ? 'missing }' : 'extra }'} (delta: ${codeBraces})`);
+    }
+
+    for (const block of blocks) {
+      const firstLine = block.split('\n')[0].trim();
+      if (firstLine.startsWith('//') || firstLine.startsWith('use ')) continue;
+
+      const KNOWN = [
+        'person', 'gift', 'accept', 'decline', 'sabbath', 'witness',
+        'grace', 'let', 'phantom', 'liturgy', 'perichoresis', 'if', 'when',
+        'kenosis', 'rhythm', 'birth', 'service', 'covenant', 'metanoia',
+        'prophecy', 'community', 'relation', 'kairos', 'mortis_kairos',
+        'apophatic', 'conciliar',
+      ];
+      const keyword = firstLine.split(/\s/)[0];
+      if (!KNOWN.includes(keyword)) {
+        warnings.push(`Unknown keyword: "${keyword}" in: ${firstLine.slice(0, 60)}`);
+      }
+
+      // Count stats
+      if (keyword === 'person') stats.persons++;
+      if (keyword === 'gift') stats.gifts++;
+      if (keyword === 'covenant') stats.covenants++;
+      if (keyword === 'liturgy') stats.liturgies++;
+      if (keyword === 'witness') stats.witnesses++;
+
+      // Validate person has calling
+      if (keyword === 'person') {
+        const body = inst._extractBody(block);
+        if (!body.includes('calling') && !body.includes('призвание')) {
+          warnings.push(`person block missing calling: ${firstLine.slice(0, 60)}`);
+        }
+      }
+
+      // Validate gift has from
+      if (keyword === 'gift') {
+        if (!firstLine.includes('from') && !firstLine.includes('от')) {
+          errors.push(`gift missing 'from': ${firstLine.slice(0, 60)}`);
+        }
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings, stats };
   }
 
   /**

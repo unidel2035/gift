@@ -68,6 +68,10 @@ const DRY        = argv.includes('--dry');
 const LIST       = argv.includes('--list');
 const REPORT     = argv.includes('--report');
 const KENOSIS    = argv.includes('--kenosis');
+const PERSON_CHK = argv.find(a => a.startsWith('--person='))?.split('=')[1]
+                || (argv.includes('--person') ? argv[argv.indexOf('--person') + 1] : null);
+const ACT_CHK    = argv.find(a => a.startsWith('--act='))?.split('=')[1]
+                || (argv.includes('--act') ? argv[argv.indexOf('--act') + 1] : null);
 const FORCE_PLAN = argv.includes('--plan');
 const FORCE_FULL = argv.includes('--full');
 const agentsArg  = argv.find(a => a.startsWith('--agents='))?.split('=')[1]?.split(',');
@@ -426,6 +430,90 @@ async function main() {
       const ok = (d.results||[]).filter(r=>r.success).map(r=>r.agentId).join(', ') || 'планы';
       console.log(`  ${f}  «${d.issue?.title||'?'}»  режим: ${d.mode}  успешные: ${ok}`);
     }
+    return;
+  }
+
+  // ── Person+Act evaluation: node utils/gift-eval.mjs --person _claude --act code ─
+  if (PERSON_CHK) {
+    const { GiftCompiler } = await import(resolve(ROOT, 'src/core/GiftCompiler.js'));
+    const { PersonRegistry } = await import(resolve(ROOT, 'src/persons/PersonRegistry.js'));
+
+    // Find .gift spec for this person
+    const specsDir = resolve(ROOT, 'specs');
+    const { findGiftFiles } = await import(resolve(ROOT, 'utils/gift-compile.mjs')).catch(() => ({ findGiftFiles: null }));
+
+    // Scan all specs for the person
+    const allFiles = [];
+    function scanDir(dir) {
+      const { readdirSync, statSync } = await import('fs');
+      for (const entry of readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        if (statSync(full).isDirectory()) scanDir(full);
+        else if (entry.endsWith('.gift')) allFiles.push(full);
+      }
+    }
+    // Inline scan
+    const fs = await import('fs');
+    function scan(dir) {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        if (fs.statSync(full).isDirectory()) scan(full);
+        else if (entry.endsWith('.gift')) allFiles.push(full);
+      }
+    }
+    scan(specsDir);
+
+    const registry = new PersonRegistry();
+    let personFound = false;
+    let personSpec = null;
+
+    for (const file of allFiles) {
+      const source = fs.readFileSync(file, 'utf8');
+      try {
+        const compiled = GiftCompiler.compile(source);
+        for (const p of compiled.persons) {
+          registry.applyCompiledSpec(p.name, p);
+          if (p.name === PERSON_CHK) {
+            personFound = true;
+            personSpec = p;
+          }
+        }
+      } catch {}
+    }
+
+    if (!personFound) {
+      console.log(`\n✗ Лицо "${PERSON_CHK}" не найдено в specs/`);
+      process.exit(1);
+    }
+
+    console.log(`\n═══ Ева проверяет: ${PERSON_CHK} ═══`);
+    console.log(`  calling: ${personSpec.calling}`);
+    console.log(`  logos:   ${personSpec.logos}`);
+    console.log(`  telos:   ${personSpec.behaviorPolicy.telos}`);
+    const k = personSpec.behaviorPolicy.kenosis;
+    console.log(`  kenosis: enforced=${k.enforced}, holdsNothing=${k.holdsNothing}, givesAway=${k.givesAway}`);
+
+    if (ACT_CHK) {
+      console.log(`\n─── Проверка акта: type=${ACT_CHK} ───`);
+
+      // Normal act
+      const ok = registry.checkKenosis(PERSON_CHK, { telos: 'give', type: ACT_CHK, surplusRetained: false });
+      console.log(`  telos=give, surplus=отдан    → ${ok.allowed ? '✓ допустимо' : '✗ ' + ok.violation.type}`);
+
+      // Surplus retained
+      const bad1 = registry.checkKenosis(PERSON_CHK, { telos: 'give', type: ACT_CHK, surplusRetained: true });
+      console.log(`  telos=give, surplus=удержан  → ${bad1.allowed ? '✓ допустимо' : '✗ ' + bad1.violation.type}`);
+
+      // Telos inverted
+      const bad2 = registry.checkKenosis(PERSON_CHK, { telos: 'win', type: ACT_CHK });
+      console.log(`  telos=win                    → ${bad2.allowed ? '✓ допустимо' : '✗ ' + bad2.violation.type}`);
+
+      const bad3 = registry.checkKenosis(PERSON_CHK, { telos: 'extract', type: ACT_CHK });
+      console.log(`  telos=extract                → ${bad3.allowed ? '✓ допустимо' : '✗ ' + bad3.violation.type}`);
+    }
+
+    console.log();
     return;
   }
 

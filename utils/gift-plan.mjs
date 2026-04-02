@@ -18,6 +18,23 @@ import { fileURLToPath } from 'url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// ── Компиляция всех specs ─────────────────────────────────────────────────
+if (process.argv[2] === '--compile') {
+  const { execSync: exec } = await import('child_process');
+  console.log('\n═══ GiftCompiler — компиляция всех спецификаций ═══\n');
+  try {
+    const output = exec('node utils/gift-compile.mjs --register', {
+      cwd: ROOT, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    console.log(output);
+  } catch (e) {
+    console.log(e.stdout || '');
+    console.error(e.stderr || e.message);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 // ── Показать pending планы ─────────────────────────────────────────────────
 if (process.argv[2] === '--pending') {
   try {

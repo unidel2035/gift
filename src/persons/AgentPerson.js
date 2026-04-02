@@ -32,6 +32,56 @@ export class AgentPerson {
     // Режим дара: PERICHORESIS (в роу/присутствии) или ANAMNESIS (изолирован/пророческий)
     this.telos = 'give';
     this.giftMode = GiftMode.PERICHORESIS;
+
+    // behaviorPolicy from compiled .gift spec (set via applyBehaviorPolicy)
+    this._behaviorPolicy = null;
+  }
+
+  /**
+   * Apply compiled behaviorPolicy from .gift spec.
+   * Called after GiftCompiler.compile() + PersonRegistry.applyCompiledSpec().
+   */
+  applyBehaviorPolicy(policy) {
+    this._behaviorPolicy = policy;
+    if (policy?.telos) this.telos = policy.telos;
+    if (policy?.logos) this._persona._logos = policy.logos;
+  }
+
+  /**
+   * Runtime kenosis check — enforces behaviorPolicy from compiled spec.
+   * Returns { pass, violation, rejected }.
+   * When enforced=true, acts that violate kenosis are REJECTED (not just marked).
+   */
+  checkKenosisPolicy(act) {
+    if (!this._behaviorPolicy?.kenosis?.enforced) {
+      return { pass: true, violation: null, rejected: false };
+    }
+
+    const k = this._behaviorPolicy.kenosis;
+
+    // holds_nothing: surplus не должен удерживаться
+    if (k.holdsNothing && act.surplusRetained === true) {
+      const violation = {
+        type: 'surplus_retained',
+        agent: this._personId,
+        message: `behaviorPolicy: holds_nothing=true, surplus retained`,
+      };
+      logger.warn(`[AgentPerson:${this._personId}] REJECTED: ${violation.message}`);
+      return { pass: false, violation, rejected: true };
+    }
+
+    // telos: акт не должен быть 'win' или 'extract'
+    if (act.telos === 'win' || act.telos === 'extract') {
+      const violation = {
+        type: 'telos_inverted',
+        agent: this._personId,
+        message: `behaviorPolicy: telos=${this._behaviorPolicy.telos}, act telos=${act.telos}`,
+      };
+      logger.warn(`[AgentPerson:${this._personId}] REJECTED: ${violation.message}`);
+      return { pass: false, violation, rejected: true };
+    }
+
+    return { pass: true, violation: null, rejected: false };
   }
 
   /**
@@ -115,6 +165,16 @@ export class AgentPerson {
         const response = await this._llm.ask(prompt);
         const gift = this._parseGiftFromResponse(response.answer, perception);
         if (gift) {
+          // Runtime kenosis check from compiled .gift spec
+          const kenosisCheck = this.checkKenosisPolicy(gift);
+          if (!kenosisCheck.pass) {
+            if (kenosisCheck.rejected) {
+              // Акт отклонён — кеносис нарушен, спецификация запрещает
+              return { rejected: true, violation: kenosisCheck.violation };
+            }
+            gift._kenosisViolation = kenosisCheck.violation;
+          }
+
           return this._engine.offer({
             giver: this._personId,
             ...gift,
