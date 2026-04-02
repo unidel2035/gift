@@ -320,8 +320,9 @@ async function addAct(raw) {
     }
   }
 
-  // Сохранить снапшот
-  saveSnapshot();
+  // Сохранить снапшот только если данные полные (Qdrant или >10 актов)
+  // В snapshot-fallback режиме не перезаписываем — state.acts неполный
+  if (state.qdrant || state.acts.length > 10) saveSnapshot();
   return act;
 }
 
@@ -667,7 +668,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`    POST /consolidate — консолидация сессии`);
 });
 
-// Периодически обновляем снапшот (каждые 15 мин)
+// Периодически обновляем снапшот (каждые 15 мин, только при полных данных)
 setInterval(() => {
-  if (state.acts.length > 0) saveSnapshot();
+  if (state.qdrant || state.acts.length > 10) saveSnapshot();
 }, 15 * 60 * 1000);
