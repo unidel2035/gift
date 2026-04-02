@@ -21,7 +21,7 @@
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 const ROOT         = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const INSIGHTS_FILE = resolve(ROOT, 'data/insights.json');
@@ -137,7 +137,26 @@ async function llmExtract(sessionData) {
     }
   } catch { /* fallback to Ollama */ }
 
-  // Путь 2: Ollama eva (если proxy не ответил)
+  // Путь 2: claude CLI как user `new` (надёжнее proxy)
+  if (!usedProxy) {
+    try {
+      const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
+        ? '/home/new/.local/bin/claude'
+        : 'claude';
+      const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print`], {
+        input: prompt,
+        encoding: 'utf8',
+        timeout: 120_000,
+        cwd: ROOT,
+      });
+      if (r.status === 0 && r.stdout?.trim()) {
+        text = r.stdout.trim();
+        usedProxy = true;
+      }
+    } catch { /* fallback to Ollama */ }
+  }
+
+  // Путь 3: Ollama eva (если claude недоступен)
   if (!usedProxy) {
     const res = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: 'POST',
