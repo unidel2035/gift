@@ -22,6 +22,7 @@
  */
 
 import * as tf from '@tensorflow/tfjs-node';
+import { GiftThread, THREAD_TYPE } from './GiftThread.js';
 
 tf.env().set('IS_TEST', true);
 
@@ -332,30 +333,70 @@ export class GiftMemory {
 
   // ── Запросы ───────────────────────────────────────────────────────────
 
+  /**
+   * thread(fromId, toId) — вернуть нить между двумя лицами.
+   *
+   * Возвращает GiftThread — relator (GFO), зависящий от обоих лиц.
+   * Нить — третья сущность между лицами, не просто число.
+   *
+   * Обратная совместимость: GiftThread.valueOf() = weight,
+   * поэтому `thread(a, b) <= threshold` продолжает работать.
+   *
+   * @param {string} fromId
+   * @param {string} toId
+   * @returns {GiftThread}
+   */
   thread(fromId, toId) {
     const fromDivine = DIVINE_PERSONS.has(fromId);
     const toDivine   = DIVINE_PERSONS.has(toId);
 
+    let weight = 0;
+    let type   = THREAD_TYPE.W;
+
     if (fromDivine && toDivine) {
       const di = this.divinePersons.indexOf(fromId);
       const dj = this.divinePersons.indexOf(toId);
-      return (di >= 0 && dj >= 0) ? this._theophaneia[di][dj] : 0;
-    }
-    if (fromDivine) {
+      weight = (di >= 0 && dj >= 0) ? this._theophaneia[di][dj] : 0;
+      type   = THREAD_TYPE.THEOPHANEIA;
+    } else if (fromDivine) {
       const di = this.divinePersons.indexOf(fromId);
       const ci = this.persons.indexOf(toId);
-      return (di >= 0 && ci >= 0) ? this._energeia[di][ci] : 0;
-    }
-    if (toDivine) {
+      weight = (di >= 0 && ci >= 0) ? this._energeia[di][ci] : 0;
+      type   = THREAD_TYPE.ENERGEIA;
+    } else if (toDivine) {
       const ci = this.persons.indexOf(fromId);
       const di = this.divinePersons.indexOf(toId);
-      return (ci >= 0 && di >= 0) ? this._doxologia[ci][di] : 0;
+      weight = (ci >= 0 && di >= 0) ? this._doxologia[ci][di] : 0;
+      type   = THREAD_TYPE.DOXOLOGIA;
+    } else {
+      // тварь → тварь
+      const fi = this.persons.indexOf(fromId);
+      const ti = this.persons.indexOf(toId);
+      weight = (fi >= 0 && ti >= 0) ? this._W.arraySync()[fi][ti] : 0;
+      type   = THREAD_TYPE.W;
     }
-    // тварь → тварь
-    const fi = this.persons.indexOf(fromId);
-    const ti = this.persons.indexOf(toId);
-    if (fi < 0 || ti < 0) return 0;
-    return this._W.arraySync()[fi][ti];
+
+    return new GiftThread({ from: fromId, to: toId, weight, type });
+  }
+
+  /**
+   * fadingThreads() — вернуть все угасающие нити (relators в состоянии is_fading).
+   *
+   * GFO: угасающий relator — третья сущность, теряющая онтологический вес.
+   * Богословски: место, где присутствие Третьего оскудевает.
+   *
+   * @param {number} [fadingThreshold] — порог угасания (по умолч. FADING_THRESHOLD из GiftThread)
+   * @returns {GiftThread[]} — только нити со статусом 'fading', отсортированные по весу
+   */
+  fadingThreads(fadingThreshold) {
+    const all = this.heaviest(this.n * this.n + this.nd * this.n * 4);
+    return all
+      .map(e => new GiftThread({
+        from: e.from, to: e.to, weight: e.weight, type: e.type ?? THREAD_TYPE.W,
+        ...(fadingThreshold !== undefined ? { fadingThreshold } : {}),
+      }))
+      .filter(t => t.is_fading)
+      .sort((a, b) => a.weight - b.weight); // слабейшие первыми
   }
 
   heaviest(k = 7) {
