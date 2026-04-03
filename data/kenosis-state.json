@@ -4,8 +4,8 @@
       "personId": "_claude",
       "score": 1,
       "violations": 0,
-      "totalActs": 9,
-      "kenoticActs": 9,
+      "totalActs": 10,
+      "kenoticActs": 10,
       "lastViolation": null,
       "history": [
         {
@@ -61,6 +61,12 @@
           "score": 1,
           "violations": [],
           "timestamp": "2026-04-02T20:34:39.999Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-03T22:40:00.086Z"
         }
       ]
     }

@@ -270,5 +270,27 @@
     "commit": "533e9ad86ea9",
     "kenosis": true,
     "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-03T22:40:00.354Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "specs отецсергий→ева — пастырская молитва и благословение различения (closes #124)",
+    "linkedIssue": 124,
+    "commit": "470401f020f5",
+    "kenosis": true,
+    "kenosisScore": 1
+  },
+  {
+    "ts": "2026-04-03T22:40:00.354Z",
+    "from": "Дионисий",
+    "to": "_claude",
+    "type": "reception",
+    "weight": 8,
+    "content": "λήψις кода closes #124",
+    "linkedIssue": 124,
+    "commit": "470401f020f5"
   }
 ]
