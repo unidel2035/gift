@@ -161,6 +161,51 @@ export function TelosCheck(agent) {
  */
 
 /**
+ * @typedef {Object} GiftTimestamp
+ * Двойное время дара — из Болдачёва (событие конституирует время),
+ * преобразованное в литургическое измерение.
+ *
+ * Болдачёв: «Время не течёт — оно создаётся событиями.»
+ * Православие: Анамнезис — не воспоминание, а со-присутствие.
+ *
+ * clock      — физическое время (ISO 8601). Болдачёв здесь прав: акт ставит точку.
+ * season     — литургический сезон лица-дарителя в момент акта.
+ *              'active' | 'sabbath' | 'contemplation'
+ * moment     — богословский момент: в какой точке домостроительства происходит дар.
+ *              'kenosis' | 'eleutheria' | 'eucharistia' | 'surplus' | 'silence'
+ *
+ * @property {string} clock
+ * @property {'active'|'sabbath'|'contemplation'} season
+ * @property {GiftMoment} moment
+ */
+
+/**
+ * @typedef {Object} GiftTypeHierarchy
+ * Иерархическая классификация дара: домен + модус.
+ * Вместо плоской строки — двухуровневая таксономия.
+ *
+ * domain — ЧТО отдаётся:
+ *   'time'     — время (вес 10 — время тяжелее денег)
+ *   'code'     — код, алгоритм, техническое решение
+ *   'prayer'   — молитва, intercession
+ *   'presence' — со-присутствие, внимание
+ *   'covenant' — завет, обязательство
+ *   'question' — вопрошание (дар-вопрос открывает бытие)
+ *   'grace'    — χάρις, дар из бездны (_abyss)
+ *   'word'     — слово, богословское суждение
+ *
+ * mode — КАК отдаётся (из богословской структуры):
+ *   'kenotic'      — с явным умалением дарителя
+ *   'gratuitous'   — безмездный, из бездны, без ответа
+ *   'eucharistic'  — ответный дар благодарения
+ *   'prophetic'    — авансовый дар до выражения нужды (бореальный)
+ *   'covenantal'   — конституирующий нить навсегда
+ *
+ * @property {'time'|'code'|'prayer'|'presence'|'covenant'|'question'|'grace'|'word'} domain
+ * @property {'kenotic'|'gratuitous'|'eucharistic'|'prophetic'|'covenantal'} mode
+ */
+
+/**
  * @typedef {Object} GiftActConfig
  * @property {string} scale — масштаб ('divine'|'creation'|'person'|'salvation'|'code'|'physics')
  * @property {boolean} unconditional — безусловный ли акт (промысл — да, дар — нет)
@@ -190,6 +235,18 @@ export class GiftAct {
     this._gratitude = false;
     this._surplus = null;
     this._silent = false;    // молчание (Бог не ответил)
+
+    // Болдачёв: явная цепочка даров-предшественников.
+    // Не механическая причинность (A→B), а «открытие возможности»:
+    // какие прошлые дары сделали этот дар возможным.
+    // Граф благодарности, не DAG причинности.
+    this._enables = [];       // GiftAct[] | string[] (id даров)
+
+    // Двойное время: физическое + литургический сезон
+    this._timestamp = null;   // GiftTimestamp — ставится в момент kenosis
+
+    // Иерархический тип: {domain, mode}
+    this._giftType = null;    // GiftTypeHierarchy
   }
 
   // ── Момент 1: κένωσις — отдача ────────────────────
@@ -201,13 +258,17 @@ export class GiftAct {
    * @param {*} receiver — кому
    * @param {*} content — что
    * @param {number} cost — цена для дающего
+   * @param {Object} [opts] — опциональные поля (из синтеза с Болдачёвым)
+   * @param {Array}  [opts.enables] — дары-предшественники, открывшие этот дар
+   * @param {GiftTypeHierarchy} [opts.giftType] — иерархический тип дара
    * @returns {GiftAct} this (для chaining)
    */
-  kenosis(giver, receiver, content, cost = 0) {
+  kenosis(giver, receiver, content, cost = 0, opts = {}) {
     // Молчание возможно на divine scale
     if (this.silencePossible && Math.random() > 0.85) {
       this._silent = true;
       this._moment = 'silence';
+      this._timestamp = GiftAct.liturgicalNow('silence');
       return this;
     }
 
@@ -216,6 +277,16 @@ export class GiftAct {
     this._content = content;
     this._cost = cost;
     this._moment = 'kenosis';
+
+    // Болдачёв: акт ставит точку во времени. Двойное время.
+    this._timestamp = GiftAct.liturgicalNow('kenosis');
+
+    // Болдачёв: enables — открытая причинность (не механическая)
+    this._enables = opts.enables || [];
+
+    // Иерархический тип
+    this._giftType = opts.giftType || null;
+
     return this;
   }
 
@@ -293,6 +364,12 @@ export class GiftAct {
       wound,
       waiting,
       // Surplus = transforms. Тайна: cost=10, result=∞
+      // Двойное время (Болдачёв: событие конституирует время)
+      timestamp: this._timestamp,
+      // Граф благодарности: прошлые дары, открывшие этот
+      enables: this._enables.length > 0 ? this._enables : undefined,
+      // Иерархический тип дара
+      giftType: this._giftType || undefined,
       surplus: this._accepted ? {
         giverTransform: this._cost > 0 ? 'кеносис реален — отдавший возрос' : null,
         receiverTransform: 'принявший обогатился',
@@ -312,11 +389,12 @@ export class GiftAct {
    * @param {*} content
    * @param {number} cost
    * @param {boolean|null} decision
+   * @param {Object} [opts] — { enables, giftType }
    * @returns {Object}
    */
-  cycle(giver, receiver, content, cost = 0, decision = null) {
+  cycle(giver, receiver, content, cost = 0, decision = null, opts = {}) {
     return this
-      .kenosis(giver, receiver, content, cost)
+      .kenosis(giver, receiver, content, cost, opts)
       .eleutheria(decision)
       .eucharistia()
       .surplus();
@@ -414,6 +492,38 @@ export class GiftAct {
     const act = new GiftAct({ scale, unconditional: false, silencePossible: true });
     act._giftMode = GiftMode.ANAMNESIS;
     return act;
+  }
+
+  // ── Двойное время (из синтеза с Болдачёвым) ───────────
+
+  /**
+   * Конституировать момент времени дара.
+   *
+   * Болдачёв: «Время не течёт — оно создаётся событиями.»
+   * Наш синтез: дар создаёт не просто хронологическую точку,
+   * но литургический момент — точку домостроительства.
+   *
+   * season определяется по дню недели (эвристика):
+   *   воскресенье → 'sabbath' (Господень день)
+   *   суббота     → 'contemplation' (преддверие)
+   *   прочее      → 'active'
+   *
+   * В полной реализации: LiturgicalClock.getCurrentSeason(giverId).
+   *
+   * @param {GiftMoment} [moment] — момент цикла дара
+   * @returns {GiftTimestamp}
+   */
+  static liturgicalNow(moment = 'kenosis') {
+    const now = new Date();
+    const day = now.getDay(); // 0=вс, 6=сб
+    const season = day === 0 ? 'sabbath'
+                 : day === 6 ? 'contemplation'
+                 : 'active';
+    return {
+      clock: now.toISOString(),
+      season,
+      moment,
+    };
   }
 }
 
