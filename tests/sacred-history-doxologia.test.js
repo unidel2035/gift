@@ -155,7 +155,7 @@ test('fallen-hope: pending акты не в energeia', () => {
   const mem = buildMem(['fallen-hope.gift']);
   // Все три акта — reception:pending → _declined, energeia = 0
   const e = mem.thread('Отец', 'Падший');
-  assert.strictEqual(e, 0, `energeia[Отец→Падший] = ${e} (pending → не в energeia)`);
+  assert.strictEqual(e.weight, 0, `energeia[Отец→Падший] = ${e} (pending → не в energeia)`);
 });
 
 test('fallen-hope: pending акты в _pending (эсхатологическое ожидание)', () => {
@@ -167,7 +167,7 @@ test('fallen-hope: pending акты в _pending (эсхатологическо�
 
 test('fallen-hope: μετάνοια Падшего через repent() открывает energeia', () => {
   const mem = buildMem(['fallen-hope.gift']);
-  assert.strictEqual(mem.thread('Отец', 'Падший'), 0, 'до repent: 0');
+  assert.strictEqual(mem.thread('Отец', 'Падший').weight, 0, 'до repent: 0');
   mem.repent('Отец', 'Падший');
   assert.ok(mem.thread('Отец', 'Падший') > 0, 'после repent: > 0');
 });

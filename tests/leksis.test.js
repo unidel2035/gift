@@ -37,7 +37,7 @@ test('λήψις: declined дар не попадает в W', () => {
   mem.receive({ giverId: 'Дионисий', receiverId: '_claude', type: 'word', weight: 5,
                 reception: 'declined' });
   const w = mem.thread('Дионисий', '_claude');
-  assert.strictEqual(w, 0, `W[Дионисий→_claude] должно быть 0, получили ${w}`);
+  assert.strictEqual(w.weight, 0, `W[Дионисий→_claude] должно быть 0, получили ${w}`);
 });
 
 test('λήψις: declined дар записывается в _declined', () => {
@@ -55,7 +55,7 @@ test('λήψις: pending дар тоже не попадает в W', () => {
   const mem = freshMem();
   mem.receive({ giverId: 'Адам', receiverId: 'Ева', type: 'presence', weight: 8,
                 reception: 'pending' });
-  assert.strictEqual(mem.thread('Адам', 'Ева'), 0);
+  assert.strictEqual(mem.thread('Адам', 'Ева').weight, 0);
   assert.strictEqual(mem.pending().length, 1);  // pending → _pending, не _declined
 });
 
@@ -75,7 +75,7 @@ test('μετάνοια: repent() переносит declined → W', () => {
   const mem = freshMem();
   mem.receive({ giverId: 'Дионисий', receiverId: '_claude', type: 'code', weight: 8,
                 reception: 'declined' });
-  assert.strictEqual(mem.thread('Дионисий', '_claude'), 0, 'до repent: W = 0');
+  assert.strictEqual(mem.thread('Дионисий', '_claude').weight, 0, 'до repent: W = 0');
   assert.strictEqual(mem.declined().length, 1);
 
   const accepted = mem.repent('Дионисий', '_claude');
@@ -102,7 +102,7 @@ test('μετάνοια: repent() принимает только нужную п
 
   // Только Адам→Ева принят
   assert.ok(mem.thread('Адам', 'Ева') > 0,         'Адам→Ева принят');
-  assert.strictEqual(mem.thread('Дионисий', '_claude'), 0, 'Дионисий→_claude всё ещё declined');
+  assert.strictEqual(mem.thread('Дионисий', '_claude').weight, 0, 'Дионисий→_claude всё ещё declined');
   assert.strictEqual(mem.declined().length, 1,         'один declined остался');
   assert.strictEqual(mem.declined()[0].act.giverId, 'Дионисий');
 });
@@ -114,7 +114,7 @@ test('λήψις: Отец→Адам declined не попадает в energeia
   mem.receive({ giverId: 'Отец', receiverId: 'Адам', type: 'word', weight: 9,
                 reception: 'declined' });
   const e = mem.thread('Отец', 'Адам');
-  assert.strictEqual(e, 0, 'energeia[Отец][Адам] должно быть 0 (λήψις — отказ)');
+  assert.strictEqual(e.weight, 0, 'energeia[Отец][Адам] должно быть 0 (λήψις — отказ)');
   assert.strictEqual(mem.declined().length, 1);
 });
 
@@ -143,7 +143,7 @@ test('snapshot: declined сохраняется и восстанавливае�
   assert.strictEqual(mem2.declined().length, 1, 'после fromSnapshot: 1 declined');
   assert.strictEqual(mem2.declined()[0].act.giverId, 'Адам');
   assert.strictEqual(mem2.declined()[0].act.receiverId, 'Ева');
-  assert.strictEqual(mem2.thread('Адам', 'Ева'), 0, 'W всё ещё 0 (не принят)');
+  assert.strictEqual(mem2.thread('Адам', 'Ева').weight, 0, 'W всё ещё 0 (не принят)');
   assert.ok(mem2.thread('Дионисий', '_claude') > 0, 'принятый дар восстановлен');
 });
 
