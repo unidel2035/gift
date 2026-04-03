@@ -50,7 +50,12 @@ export function validateAct(act) {
   }
 
   // giverId !== receiverId (дар себе — не дар)
-  if (act.giverId && act.receiverId && act.giverId === act.receiverId) {
+  // Исключение: коллективные/космические лица (Небо, _koinon) имеют внутренний перихоресис.
+  // Небо→Небо = просвещение ангельских чинов друг другом (Дионисий Ареопагит, О небесной иерархии VII).
+  // _koinon→_koinon = внутренняя жизнь общины как единого субъекта молитвы.
+  const PERICHORESIC_PERSONS = new Set(['Небо', '_koinon']);
+  if (act.giverId && act.receiverId && act.giverId === act.receiverId
+      && !PERICHORESIC_PERSONS.has(act.giverId)) {
     errors.push(`giverId === receiverId (${act.giverId}): дар самому себе лишён телоса`);
   }
 

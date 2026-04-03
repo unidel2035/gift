@@ -265,10 +265,30 @@ export class PersonRegistry {
       });
     }
     // Store compiled policy on person object
-    person._behaviorPolicy = compiledSpec.behaviorPolicy || null;
+    person.behaviorPolicy  = compiledSpec.behaviorPolicy || null;
     person._compiledTelos  = compiledSpec.telos || person.calling;
     person._compiledAt     = compiledSpec.compiledAt || new Date().toISOString();
     return person;
+  }
+
+  /**
+   * checkKenosis(name, act) — проверить акт на соответствие kenosis-политике лица.
+   * @param {string} name — имя лица
+   * @param {{ telos?: string, surplusRetained?: boolean }} act
+   * @returns {{ allowed: boolean, violation: null | { type: string } }}
+   */
+  checkKenosis(name, act = {}) {
+    const person = this.findByName(name);
+    const policy = person?.behaviorPolicy;
+    if (!policy?.kenosis?.enforced) return { allowed: true, violation: null };
+
+    if (act.surplusRetained === true && policy.kenosis.holdsNothing) {
+      return { allowed: false, violation: { type: 'surplus_retained' } };
+    }
+    if (act.telos && act.telos !== 'give' && policy.telos === 'θέωσις_of_recipient') {
+      return { allowed: false, violation: { type: 'telos_inverted' } };
+    }
+    return { allowed: true, violation: null };
   }
 
   /**
