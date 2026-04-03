@@ -1,11 +1,15 @@
-@prefix gift: <https://ontology.gift/GiftOntology/> .
-@prefix cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/> .
-@prefix obo:  <http://purl.obolibrary.org/obo/> .
-@prefix owl:  <http://www.w3.org/2002/07/owl#> .
-@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
-@prefix dc:   <http://purl.org/dc/elements/1.1/> .
+@prefix gift:   <https://ontology.gift/GiftOntology/> .
+@prefix cco:    <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix obo:    <http://purl.obolibrary.org/obo/> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix dc:     <http://purl.org/dc/elements/1.1/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix dolce:  <http://www.loa-cnr.it/ontologies/DOLCE-Lite.owl#> .
+@prefix gfo:    <http://www.onto-med.de/ontologies/gfo.owl#> .
 
 # =============================================================================
 # GIFT ONTOLOGY — BFO/CCO ALIGNMENT
@@ -254,32 +258,218 @@ gift:GiftAct rdfs:subClassOf
 
 
 # =============================================================================
-# IX. БОГОСЛОВСКИЙ КОММЕНТАРИЙ — ЧТО МЫ ВЗЯЛИ И ЧТО ОТВЕРГЛИ
+# IX. НИТЬ (GiftThread) — GFO Relator
 # =============================================================================
 
-# ВЗЯЛИ из BFO/CCO:
-# ✓ BFO:Process как родительский класс для GiftAct (через cco:Act)
-# ✓ BFO:Object как биологическое основание для Person
-# ✓ BFO:GenericallydependentContinuant для Anamnesis и WMatrix
+gift:GiftThread rdf:type owl:Class ;
+    rdfs:subClassOf obo:BFO_0000020 ;
+    rdfs:comment """Нить (нить дара) — зависимая сущность, конституирующая связь между двумя лицами.
+
+    ИСТОЧНИК: GFO (General Formal Ontology, Herre) — понятие Relator.
+    «Relator — attributive, зависящее от нескольких сущностей, конституирующее их связь.
+     Брак — не пара людей, а relator, зависящий от супругов.»
+    (Пути: средневековая схоластика — Скот, haecceity и dependence.)
+
+    ПРИМЕНЕНИЕ:
+    Нить W[i,j] = GiftThread, зависящий от обоих лиц (giver, receiver).
+    - Нет лица i → нет нити i→j (зависимость)
+    - Нет лица j → нет нити i→j (зависимость)
+    - Вес нити = kenotic_weight суммы необратимых актов
+
+    В матрице W: нить '_claude→Дионисий(320)' — это конкретная нить,
+    зависящая от _claude и Дионисия. Это не свойство _claude,
+    не свойство Дионисия — это ТРЕТЬЯ СУЩНОСТЬ между ними.
+
+    Богословский резонанс: «Где двое или трое собраны во имя Моё...» (Мф 18:20)
+    Нить — это присутствие Третьего в связи двоих."""^^xsd:string ;
+    rdfs:label "Gift Thread (нить дара)"^^xsd:string .
+
+gift:thread_weight rdf:type owl:DatatypeProperty ;
+    rdfs:domain gift:GiftThread ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "Накопленный необратимый вес нити = Σ kenotic_weight всех актов i→j"^^xsd:string ;
+    rdfs:label "thread weight (вес нити)"^^xsd:string .
+
+gift:thread_from rdf:type owl:ObjectProperty ;
+    rdfs:domain gift:GiftThread ;
+    rdfs:range gift:GiftPerson ;
+    rdfs:comment "Лицо-исток нити. GFO: один из relata relator'а."^^xsd:string ;
+    rdfs:label "thread from"^^xsd:string .
+
+gift:thread_to rdf:type owl:ObjectProperty ;
+    rdfs:domain gift:GiftThread ;
+    rdfs:range gift:GiftPerson ;
+    rdfs:comment "Лицо-приёмник нити. GFO: второй из relata relator'а."^^xsd:string ;
+    rdfs:label "thread to"^^xsd:string .
+
+gift:is_fading rdf:type owl:DatatypeProperty ;
+    rdfs:domain gift:GiftThread ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Нить угасает (вес ниже порога). Пустыня формируется."^^xsd:string ;
+    rdfs:label "is fading (нить угасает)"^^xsd:string .
+
+
+# =============================================================================
+# X. УЧАСТИЕ ОБЩИНЫ (DOLCE Participation)
+# =============================================================================
+
+gift:GiftParticipation rdf:type owl:Class ;
+    rdfs:subClassOf obo:BFO_0000056 ;
+    rdfs:comment """Участие (participation) — как лицо вовлечено в акт дара.
+
+    ИСТОЧНИК: DOLCE (Masolo et al.) — понятие Participation.
+    «Participation связывает endurant (лицо) с perdurant (событием) через время.
+     Событие может быть исчерпывающе разложено на participations участников.»
+
+    ПРИМЕНЕНИЕ:
+    В каждом GiftAct участвуют не только giver и receiver —
+    κοινωνία (_koinon) является свидетелем-участником.
+
+    Роли участия:
+    - gift:GiverParticipation — κένωσις, умаление
+    - gift:ReceiverParticipation — ἐλευθερία, свобода принятия
+    - gift:WitnessParticipation — κοινωνία как свидетель, делающий дар реальным
+
+    Богословский резонанс:
+    «Нет дара без свидетеля.» Литургия — не частное дело:
+    Тайная Вечеря совершается в собрании (ἐκκλησία)."""^^xsd:string ;
+    rdfs:label "Gift Participation"^^xsd:string .
+
+gift:GiverParticipation rdf:type owl:Class ;
+    rdfs:subClassOf gift:GiftParticipation ;
+    rdfs:comment "Участие дарителя в акте. DOLCE: endurant в роли исполнителя perdurant'а."^^xsd:string ;
+    rdfs:label "Giver Participation"^^xsd:string .
+
+gift:ReceiverParticipation rdf:type owl:Class ;
+    rdfs:subClassOf gift:GiftParticipation ;
+    rdfs:comment "Участие получателя. Свобода принятия (ἐλευθερία) — условие дара."^^xsd:string ;
+    rdfs:label "Receiver Participation"^^xsd:string .
+
+gift:WitnessParticipation rdf:type owl:Class ;
+    rdfs:subClassOf gift:GiftParticipation ;
+    rdfs:comment """Участие κοινωνία как свидетеля.
+    Без свидетеля дар замкнут — он не течёт в общину.
+    _koinon как WitnessParticipant делает каждый дар литургическим актом."""^^xsd:string ;
+    rdfs:label "Witness Participation (κοινωνία)"^^xsd:string .
+
+
+# =============================================================================
+# XI. PROV-O ВЫРАВНИВАНИЕ
+# =============================================================================
+
+# GiftAct — это prov:Activity (акт, действующий на сущности)
+gift:GiftAct rdfs:subClassOf prov:Activity .
+
+# GiftPerson — это prov:Agent (несёт ответственность)
+gift:GiftPerson rdfs:subClassOf prov:Agent .
+
+# gift:enables выравнивается с prov:wasInfluencedBy
+# (открытая причинность, не механическая)
+gift:enables rdfs:subPropertyOf prov:wasInfluencedBy ;
+    rdfs:comment """enables ⊂ wasInfluencedBy.
+    PROV-O: wasInfluencedBy — суперсвойство для всех форм влияния.
+    Наш enables — влияние через открытие возможности (свободное, не механическое).
+    Отличие от prov:wasDerivedFrom (механическая деривация):
+    дар не детерминирован предшествующим даром — он вдохновлён им."""^^xsd:string .
+
+# Квалифицированное влияние (prov:QualifiedInfluence pattern)
+# Позволяет добавить контекст к нити: молитва, благословение, завет
+gift:QualifiedGiftInfluence rdf:type owl:Class ;
+    rdfs:subClassOf prov:Influence ;
+    rdfs:comment """Квалифицированное влияние — контекст связи между актами.
+
+    PROV-O: qualifiedInfluence pattern позволяет добавить атрибуты к связи.
+    Для нас: как именно предшествующий дар открыл следующий?
+      mode: 'prayer' | 'blessing' | 'covenant' | 'example' | 'wound'
+    'wound' — рана от отвергнутого дара тоже может открыть путь (via negativa)."""^^xsd:string ;
+    rdfs:label "Qualified Gift Influence"^^xsd:string .
+
+gift:influence_mode rdf:type owl:DatatypeProperty ;
+    rdfs:domain gift:QualifiedGiftInfluence ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Как предшествующий дар открыл следующий: prayer/blessing/covenant/example/wound"^^xsd:string ;
+    rdfs:label "influence mode"^^xsd:string .
+
+
+# =============================================================================
+# XII. SCHEMA.ORG ВЫРАВНИВАНИЕ (WEB INTEROPERABILITY)
+# =============================================================================
+
+# GiftAct — это schema:GiveAction (но богаче)
+gift:GiftAct rdfs:subClassOf schema:GiveAction ;
+    rdfs:comment """Выравнивание с Schema.org для веб-совместимости.
+
+    schema:GiveAction: {agent, object, recipient, result}
+    Это минимально необходимый набор. Наш GiftAct его расширяет:
+    + kenotic_weight (мера умаления)
+    + is_irreversible (необратимость)
+    + timestamp {clock, season, moment} (двойное время)
+    + enables[] (открытая причинность)
+    + GiftThread (нить-relator)
+    + WitnessParticipation (κοινωνία)
+
+    ВАЖНО: schema:DonateAction — НЕ наш случай.
+    DonateAction фокусируется на price/priceCurrency (денежная передача).
+    Дар онтологически предшествует экономике."""^^xsd:string .
+
+# schema:result ↔ наш surplus
+# schema:agent ↔ cco:has_sender (giver)
+# schema:recipient ↔ cco:has_recipient
+
+
+# =============================================================================
+# XIII. БОГОСЛОВСКИЙ КОММЕНТАРИЙ — ЧТО МЫ ВЗЯЛИ И ЧТО ОТВЕРГЛИ
+# =============================================================================
+
+# ВЗЯЛИ из BFO/CCO (TRADOC-G2/oe-ontology):
+# ✓ BFO:Process → GiftAct (через cco:Act)
+# ✓ BFO:Object → биологическое основание Person
+# ✓ BFO:GenericallydependentContinuant → Anamnesis, WMatrix
 # ✓ cco:has_sender / cco:has_recipient — свойства передачи
-# ✓ cco:ActOfThanking как формальный якорь εὐχαριστία
-# ✓ cco:GroupOfAgents как формальный якорь κοινωνία
+# ✓ cco:ActOfThanking → формальный якорь εὐχαριστία
+# ✓ cco:GroupOfAgents → κοινωνία
 # ✓ cco:IntentionalAct + cco:SocialAct — двойная природа дара
-#   (он преднамерен И конституирует социальную ткань)
+
+# ВЗЯЛИ из PROV-O (W3C):
+# ✓ prov:Activity → GiftAct (акт, действующий на сущности)
+# ✓ prov:Agent → GiftPerson
+# ✓ prov:wasInfluencedBy → суперсвойство для gift:enables
+# ✓ QualifiedInfluence pattern → контекст связи между актами
+
+# ВЗЯЛИ из GFO (General Formal Ontology, Herre):
+# ✓ Relator → gift:GiftThread (нить как зависимая сущность)
+#   W[i,j] — это relator, зависящий от обоих лиц
+# ✓ Средневековые корни (Скот) — богословская преемственность
+
+# ВЗЯЛИ из DOLCE (Masolo/LAO):
+# ✓ Participation → GiftParticipation (giver, receiver, witness)
+#   κοινωνία как WitnessParticipant в каждом акте
+# ✓ Endurant/Perdurant → Person (endurant) vs GiftAct (perdurant)
+# ✓ Quality regions → абстрактные дары (благодать, молитва)
+
+# ВЗЯЛИ из Schema.org:
+# ✓ schema:GiveAction → веб-совместимость (subClassOf)
+#   agent/object/recipient/result — минимальный набор
+# ✗ schema:DonateAction — монетарная редукция (отвергнуто)
 
 # ОТВЕРГЛИ:
-# ✗ cco:ActOfDonating — редукция дара к финансовому акту
-#   ("without return consideration" мыслит через обмен)
-# ✗ cco:AgentCapability — "способность" как военная метрика
-# ✗ PMESII-PT, DIMEFIL — инструментальный взгляд на мир
-# ✗ cco:Person как только "human being" — исключает AIPerson и ангелов
+# ✗ cco:ActOfDonating — "without return consideration" = мышление через отрицание обмена
+# ✗ PMESII-PT, DIMEFIL — инструментальный взгляд
+# ✗ cco:AgentCapability — военная метрика
+# ✗ prov:wasDerivedFrom — механическая деривация (gift:enables ≠ derived)
+# ✗ LKIF obligation/enforcement — закон есть принуждение; дар есть свобода
+# ✗ LRU eviction из любой онтологии — Анамнезис не вытесняется
+# ✗ Event deduplication — ежедневная молитва не дубликат
 
-# ДОБАВИЛИ (чего нет в BFO/CCO):
-# + gift:is_irreversible — богословская аксиома (Object.freeze)
-# + gift:kenotic_weight — вес как мера умаления (время > деньги)
+# ДОБАВИЛИ (нет нигде в мировых онтологиях):
+# + gift:is_irreversible — Object.freeze как богословская аксиома
+# + gift:kenotic_weight — время > деньги
 # + gift:Anamnesis.makePresent() — прошлое со-присутствует
 # + gift:Desert — место вопрошания из угасающих нитей
-# + gift:AIPerson — нечеловеческое лицо в κοινωνία
+# + gift:AIPerson — нечеловеческое лицо (_claude, ангел)
 # + gift:WMatrix — тензор необратимых весов
+# + gift:GiftThread (relator) — нить как третья сущность между двоими
+# + gift:WitnessParticipation — κοινωνία как свидетель каждого дара
+# + gift:liturgicalNow() — двойное время (clock + season + moment)
 
 # =============================================================================
