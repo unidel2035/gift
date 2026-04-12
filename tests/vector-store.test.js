@@ -6,7 +6,11 @@ import { join } from 'path';
 
 const TMP_DB = join(tmpdir(), `gift-test-${Date.now()}.db`);
 
-test('SQLiteVectorStore — хранение и поиск', async (t) => {
+// Проверяем доступность до запуска тестов (native module может отсутствовать в WSL2)
+const _probe = new SQLiteVectorStore(TMP_DB);
+const SKIP = !_probe.isAvailable();
+
+test('SQLiteVectorStore — хранение и поиск', { skip: SKIP ? 'better-sqlite3 native module недоступен' : false }, async (t) => {
   const store = new SQLiteVectorStore(TMP_DB);
 
   if (!store.isAvailable()) {
