@@ -52,7 +52,7 @@
     "agent:once": "GITHUB_TOKEN=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 node utils/gift-dev-loop.mjs --once",
     "matrix": "node utils/matrix-context-hook.mjs | node -e \"process.stdin.setEncoding('utf8');let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).hookSpecificOutput.additionalContext))\"",
     "postinstall": "node utils/spec-index.mjs 2>/dev/null || true",
-    "test": "node --test tests/",
+    "test": "node --test 'tests/*.test.js'",
     "eval": "node utils/gift-eval.mjs",
     "eval:list": "node utils/gift-eval.mjs --list"
   },
