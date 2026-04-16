@@ -34,7 +34,7 @@
   ],
   "n": 25,
   "nd": 4,
-  "actsCount": 221,
+  "actsCount": 224,
   "W": [
     [
       0.38699692487716675,
@@ -149,13 +149,13 @@
       0,
       0,
       0,
+      0.15789473056793213,
       0,
       0,
       0,
       0,
       0,
-      0,
-      0,
+      20.842105865478516,
       0,
       0,
       0,
@@ -311,13 +311,13 @@
       0,
       0,
       0,
-      0,
+      -0.15789473056793213,
       0,
       0,
       14.842105865478516,
       0,
       0,
-      1.0059967041015625,
+      1.1638911962509155,
       0,
       21.665634155273438,
       0,
@@ -1010,7 +1010,7 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-04-16T10:24:39.163Z"
+      "declinedAt": "2026-04-16T11:07:23.138Z"
     },
     {
       "act": {
@@ -1021,7 +1021,7 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-04-16T10:24:39.163Z"
+      "declinedAt": "2026-04-16T11:07:23.138Z"
     },
     {
       "act": {
@@ -1032,7 +1032,7 @@
         "irreversible": true,
         "reception": "declined"
       },
-      "declinedAt": "2026-04-16T10:24:39.163Z"
+      "declinedAt": "2026-04-16T11:07:23.138Z"
     }
   ],
   "pending": [
@@ -1045,7 +1045,7 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "pendingAt": "2026-04-16T10:24:39.163Z"
+      "pendingAt": "2026-04-16T11:07:23.139Z"
     },
     {
       "act": {
@@ -1056,7 +1056,7 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "pendingAt": "2026-04-16T10:24:39.163Z"
+      "pendingAt": "2026-04-16T11:07:23.139Z"
     },
     {
       "act": {
@@ -1067,10 +1067,10 @@
         "irreversible": true,
         "reception": "pending"
       },
-      "pendingAt": "2026-04-16T10:24:39.163Z"
+      "pendingAt": "2026-04-16T11:07:23.139Z"
     }
   ],
-  "createdAt": "2026-04-16T10:24:39.117Z",
-  "snapshotAt": "2026-04-16T10:25:01.681Z",
+  "createdAt": "2026-04-16T11:07:23.094Z",
+  "snapshotAt": "2026-04-16T11:07:44.052Z",
   "schema": "v2-energeia"
 }
