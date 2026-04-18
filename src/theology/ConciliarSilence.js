@@ -23,7 +23,13 @@
 
 const NOUS_URL = process.env.NOUS_URL || 'http://localhost:8089';
 
-const SABBATH_WEEKDAY = 0; // Воскресенье (Господень день); для иудейской субботы — 6
+// Православная литургическая хронология:
+// День начинается с вечера («и был вечер, и было утро — день один», Быт 1:5).
+// Господень день (воскресенье) начинается с вечерни субботы (~18:00).
+// Отдельно уважаем и ветхозаветную субботу как день предпокоя —
+// Светлая Суббота, Родительские субботы, Великая Суббота.
+const SABBATH_WEEKDAYS = new Set([0, 6]);   // воскресенье (0) и суббота (6)
+const SABBATH_EVENING_HOUR = 18;            // с 18:00 субботы начинается Господень день
 
 export class ConciliarSilence {
   constructor({
@@ -100,7 +106,11 @@ export class ConciliarSilence {
   _isSabbath(now, override) {
     if (override === true)  return true;
     if (override === false) return false;
-    return now.getDay() === SABBATH_WEEKDAY;
+    const d = now.getDay();
+    if (SABBATH_WEEKDAYS.has(d)) return true;
+    // Пятница вечером (после 18:00) — уже начало субботы по библейскому счёту
+    if (d === 5 && now.getHours() >= SABBATH_EVENING_HOUR) return true;
+    return false;
   }
 
   _checkApophasis(question) {
