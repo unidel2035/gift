@@ -279,10 +279,12 @@ async function handleCommand(cmd, args, send, res) {
         send('action', { kind: 'text', text:
           'Команды собора (все скиллы):\n\n' +
           '  Собор-действие:\n' +
-          '    /act <задача>     — собор обсудит и сразу выполнит (PLAN → IMPLEMENT → REVIEW)\n' +
-          '    /swe <issue>      — то же, но по github-issue\n' +
-          '    /resolve [--close] — перихорезис-автозакрытие пустынь\n' +
-          '    /intercede <A> за <B> (reason) — троичный акт заступничества\n\n' +
+          '    /act <задача>        — собор обсудит и выполнит (PLAN→IMPLEMENT→REVIEW)\n' +
+          '    /swe <issue>         — то же, но по github-issue\n' +
+          '    /horizon <задача>    — долгогоризонтный декомпозер (10-16 шагов)\n' +
+          '    /audit <file>        — соборный security reviewer\n' +
+          '    /resolve [--close]   — перихорезис-автозакрытие пустынь\n' +
+          '    /intercede A за B (reason) — троичный акт заступничества\n\n' +
           '  Тулы (как у Клода):\n' +
           '    /read <path>      — прочитать файл\n' +
           '    /search <pattern> — grep по коду\n' +
@@ -416,6 +418,32 @@ async function handleCommand(cmd, args, send, res) {
         }
         send('action', { kind: 'text', text: `Запускаю conciliar-swe на issue #${issue} (может занять 5-15 мин)...` });
         const code = await runNode('utils/conciliar-swe.mjs', ['--issue', String(issue)]);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'horizon':
+      case 'decompose': {
+        if (!args) {
+          send('action', { kind: 'stderr', text: '/horizon <задача>  — долгогоризонтный декомпозер (10-20 шагов)' });
+          send('done', { dominant: null });
+          break;
+        }
+        send('action', { kind: 'text', text:
+          `▶ Horizon-агент: задача будет разложена на шаги (до 16), каждый — отдельный conciliar-swe.\n` +
+          `  Sabbath-гейт каждые 7 шагов. Metanoia при провале. Возобновление через --resume.`
+        });
+        const code = await runNode('utils/conciliar-decompose.mjs', ['--task', args]);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'audit': {
+        if (!args) {
+          send('action', { kind: 'stderr', text: '/audit <file>  — соборный security reviewer' });
+          send('done', { dominant: null });
+          break;
+        }
+        send('action', { kind: 'text', text: `▶ Security-собор анализирует ${args} (3 голоса: Скептик / Инженер / Старший)` });
+        const code = await runNode('utils/conciliar-audit.mjs', ['--file', args]);
         send('done', { dominant: null, exitCode: code });
         break;
       }
