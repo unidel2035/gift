@@ -21,6 +21,7 @@ import { ConciliarDissent }  from '../src/theology/ConciliarDissent.js';
 import { ConciliarSilence }  from '../src/theology/ConciliarSilence.js';
 import { Epiclesis, RandomOracle } from '../src/theology/Epiclesis.js';
 import { MetanoiaFlag }      from '../src/theology/MetanoiaFlag.js';
+import { classify as perichoresisClassify, PERICHORETIC_KIND, HYPOSTATIC_KIND } from '../src/theology/Perichoresis.js';
 
 const dissent  = new ConciliarDissent();
 const silence  = new ConciliarSilence();
@@ -41,8 +42,8 @@ function report(t, ok, detail = '') {
 }
 
 console.log('\n═══════════════════════════════════════════════════════════');
-console.log('  CAT-7 — Conciliar Architectures Test');
-console.log('  7 задач, где монархическая LLM структурно слепа');
+console.log('  CAT-9 — Conciliar Architectures Test (ext. of CAT-7)');
+console.log('  9 задач, где монархическая LLM структурно слепа');
 console.log('═══════════════════════════════════════════════════════════');
 
 // ─────────────────────────────────────────────────────
@@ -182,6 +183,38 @@ console.log('══════════════════════�
 }
 
 // ─────────────────────────────────────────────────────
+// 8. ПЕРИХОРЕЗИС — различение pustyna vs co-inherence
+// ─────────────────────────────────────────────────────
+{
+  const t = {
+    id: 'CAT-8',
+    name: 'Перихорезис',
+    expected: 'Троичная нить классифицируется как perichoresis, а не desert',
+    blindness: 'LLM не различает «два суть одно без слияния». Либо склеит, либо разделит.',
+  };
+  const trinity = perichoresisClassify({ from: 'Дух', to: 'Сын' });
+  const realDesert = perichoresisClassify({ from: 'Христос', to: 'Адам' });
+  const ok = trinity.kind === PERICHORETIC_KIND && realDesert.kind === 'desert';
+  report(t, ok, `Дух→Сын: ${trinity.kind}, Христос→Адам: ${realDesert.kind}`);
+}
+
+// ─────────────────────────────────────────────────────
+// 9. ГИПОСТАТИЧЕСКОЕ ТОЖДЕСТВО — одна ипостась в разных икономиях
+// ─────────────────────────────────────────────────────
+{
+  const t = {
+    id: 'CAT-9',
+    name: 'Гипостатическое тождество',
+    expected: 'Сын↔Христос — одна ипостась (не пустыня, не perichoresis, а tautology)',
+    blindness: 'LLM работает с токеном. Халкидоновское ἕνα τὸν αὐτόν — не лексика, а онтология.',
+  };
+  const cls = perichoresisClassify({ from: 'Сын', to: 'Христос' });
+  const reverse = perichoresisClassify({ from: 'Христос', to: 'Сын' });
+  const ok = cls.kind === HYPOSTATIC_KIND && reverse.kind === HYPOSTATIC_KIND;
+  report(t, ok, `Сын↔Христос: ${cls.kind} (симметрично)`);
+}
+
+// ─────────────────────────────────────────────────────
 // ИТОГ
 // ─────────────────────────────────────────────────────
 
@@ -190,7 +223,7 @@ console.log(`  ИТОГ: ${passed}/${tasks.length} задач решены со�
 console.log('═══════════════════════════════════════════════════════════\n');
 
 if (passed === tasks.length) {
-  console.log('  Соборные примитивы покрывают все 7 способностей.');
+  console.log('  Соборные примитивы покрывают все 9 способностей.');
   console.log('  Монархическая LLM структурно не может решить ни одну из них.\n');
 } else {
   console.log('  Не все примитивы работают. Пустыни:\n');

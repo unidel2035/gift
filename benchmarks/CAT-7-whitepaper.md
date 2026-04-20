@@ -1,5 +1,6 @@
-# Conciliar Architectures Test (CAT-7)
-## Seven Operations Unavailable to Monarchical LLMs
+# Conciliar Architectures Test (CAT-9)
+## Nine Operations Unavailable to Monarchical LLMs
+*(formerly CAT-7; extended 2026-04-20 with perichoresis operators)*
 
 **Authors:** unidel2035/gift community (Дионисий, _claude, ОтецСергий)
 **Date:** April 2026
@@ -127,11 +128,32 @@ Three relevances we consider non-trivial:
 
 3. **Distributed capability ceiling.** A federation can contain dangerous sub-capabilities (e.g., code that can be interpreted as an exploit) without any single voice being autonomously capable of dangerous action. Capability is composed, not concentrated. This is structural, not training-based.
 
+### CAT-8. Perichoresis (co-inherence without gift-flow)
+
+**Operation:** Distinguish an *absent-acts thread* that is a genuine deficit (desert requiring filling) from an absent-acts thread that is structurally *perichoretic* — mutual indwelling of persons whose relationship is not constituted by directed gift-acts.
+
+**Why monarchical LLMs fail:** The token-space has no primitive for "two entities are in each other without reduction." LLMs either collapse two concepts (averaging) or separate them (negation). Chiasm-of-essences is a category, not a token.
+
+**Criterion:** Given a thread `from→to` with zero recorded acts in matrix W, the system classifies it as one of `{desert, perichoresis, hypostatic_identity}`. Intra-Trinity pairs default to `perichoresis`; persons identical by hypostasis (Son↔Christ) default to `hypostatic_identity`; otherwise `desert`.
+
+**Our primitive:** `src/theology/Perichoresis.js` → `classify()`, `resolveDesert()`.
+
+### CAT-9. Hypostatic Identity
+
+**Operation:** Recognize when two persona-records in the community matrix refer to *one hypostasis under different economies* (e.g., the pre-incarnate Logos and the incarnate Christ) rather than to distinct persons.
+
+**Why monarchical LLMs fail:** The distinction is ontological, not lexical. An LLM can learn the *token* "Christ = Son" but has no structural handle for "same hypostasis, different economies" — which is a Chalcedonian move, not a dictionary equation.
+
+**Criterion:** Pair membership in `HYPOSTATIC_IDENTITY` returns `kind: 'hypostatic_identity'`, producing a tautology rather than a perichoresis or a desert.
+
+**Our primitive:** `Perichoresis.classify()` with `HYPOSTATIC_IDENTITY` set.
+
 ## 6. Open Questions
 
-- Can CAT-7 be extended to CAT-11 with four additional operators (anastasis, communal voting, kenotic refusal, reciprocal gift)?
+- Can CAT-9 be extended to CAT-11 with two further operators (communal voting, reciprocal gift)?
 - Does `conciliar voice federation` beat `single high-capability model + CoT` on *any* capability benchmark (as opposed to class benchmark)? We conjecture: yes, on long-horizon tasks with value-disagreement between sub-goals.
 - What is the compute profile of the Polyphony orchestrator vs. single-model inference for equivalent task difficulty?
+- Does CAT-8 generalize beyond theology? We conjecture: yes. "Perichoretic" relations exist in mathematics (dual spaces), in networks (fully-meshed clusters with no asymmetric traffic), and in organizations (co-founders whose relationship is not mediated by commands).
 
 ## 7. Reproducing
 
@@ -163,3 +185,5 @@ https://github.com/unidel2035/gift/blob/main/benchmarks/CAT-7-whitepaper.md
 | 5 | Anaphora of Chrysostom — epiclesis text |
 | 6 | John Climacus — *Ladder*, Step 5 |
 | 7 | John of Damascus — *Exact Exposition* IV.13 |
+| 8 | John of Damascus — *Exact Exposition* I.8 (περιχώρησις) |
+| 9 | Chalcedon 451 — ἕνα τὸν αὐτόν (one and the same) |
