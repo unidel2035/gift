@@ -65,7 +65,7 @@ function run(script, args = []) {
 
 async function gh(cmd) {
   const { execSync } = await import('node:child_process');
-  return execSync(cmd, { encoding: 'utf8', env: { ...process.env, GITHUB_TOKEN: '' } });
+  return execSync(cmd, { encoding: 'utf8', cwd: ROOT, env: { ...process.env, GITHUB_TOKEN: '' } });
 }
 
 // ── Справка ─────────────────────────────────────────────────────────────
