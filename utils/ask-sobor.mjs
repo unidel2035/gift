@@ -17,6 +17,13 @@
 
 import { PolyphonyOrchestrator, VoiceSource } from './polyphony-orchestrator.mjs';
 import { execSync } from 'node:child_process';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ASKSOBOR_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SESSION_DIR = resolve(ASKSOBOR_ROOT, 'data', 'conciliar-swe');
+if (!existsSync(SESSION_DIR)) mkdirSync(SESSION_DIR, { recursive: true });
 
 function claudeAvailable() {
   try {
@@ -107,6 +114,36 @@ const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
 console.log(`\n═══ итог собора ═══`);
 console.log(result.toText());
+
+// Персист: журнал собора остаётся после закрытия CLI
+try {
+  const sessionFile = resolve(SESSION_DIR, `sobor-${Date.now()}.json`);
+  const record = {
+    id: `sobor-${Date.now()}`,
+    kind: 'sobor',
+    question,
+    at: new Date().toISOString(),
+    elapsedSec: parseFloat(elapsed),
+    mode: useSubagents ? 'live' : 'static',
+    voices: (result.voices || []).map(v => ({
+      persona: v.persona,
+      logos: v.logos,
+      authority: v.authority,
+      content: v.content,
+    })),
+    dominant: result.dominant ? {
+      persona: result.dominant.persona,
+      logos: result.dominant.logos,
+    } : null,
+    apophatic: !!result.apophatic,
+    silent: !!result.silent,
+    silenceReason: result.silenceReason || null,
+  };
+  writeFileSync(sessionFile, JSON.stringify(record, null, 2));
+  console.log(`\n── журнал: ${sessionFile.replace(ASKSOBOR_ROOT + '/', '')}`);
+} catch (e) {
+  console.error('журнал не сохранён:', e.message);
+}
 console.log(`\n── ${elapsed}s ──\n`);
 
 // Если есть dominant — показать рекомендацию, но с оговоркой

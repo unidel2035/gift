@@ -13,7 +13,7 @@
  */
 
 import { createServer }          from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join }         from 'node:path';
 import { fileURLToPath }         from 'node:url';
 
@@ -81,6 +81,24 @@ const server = createServer(async (req, res) => {
   if (url.startsWith('/api/anamnesis')) {
     return proxyAnamnesis(res, url.replace('/api/anamnesis', '') || '/summary');
   }
+  // Сессии соборов
+  if (url === '/api/sessions') {
+    return serveJSON_data(res, listSessions());
+  }
+  if (url.startsWith('/api/session/')) {
+    const id = decodeURIComponent(url.slice('/api/session/'.length));
+    const sess = readSession(id);
+    if (!sess) { res.writeHead(404); return res.end('Session not found'); }
+    return serveJSON_data(res, sess);
+  }
+  // Эпиклезы
+  if (url === '/api/epiclesis') {
+    return serveJSON_data(res, listEpiclesis());
+  }
+  // Соборная страница-дашборд
+  if (url === '/sobor' || url === '/sobor.html') {
+    return serveHTML(res, join(ROOT, 'public', 'sobor.html'));
+  }
   // FPGA visualizers
   if (url === '/field-toroid.html') {
     return serveHTML(res, join(ROOT, '../fpga/simulator/field-toroid.html'));
@@ -99,6 +117,68 @@ const server = createServer(async (req, res) => {
 
   res.writeHead(404); res.end('Not found');
 });
+
+function serveJSON_data(res, data) {
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(data));
+}
+function listSessions() {
+  const dir = join(ROOT, 'data', 'conciliar-swe');
+  if (!existsSync(dir)) return { sessions: [] };
+  const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort().reverse();
+  const out = [];
+  for (const f of files.slice(0, 50)) {
+    try {
+      const r = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      out.push({
+        id: r.id || f.replace('.json',''),
+        file: f,
+        at: r.at,
+        kind: r.kind || 'sobor',
+        question: r.question || r.task?.title || '',
+        dominant: r.dominant?.persona || null,
+        apophatic: !!r.apophatic,
+        silent: !!r.silent,
+        elapsedSec: r.elapsedSec,
+        voiceCount: (r.voices || []).length,
+        mode: r.mode || null,
+      });
+    } catch {}
+  }
+  return { sessions: out };
+}
+function readSession(id) {
+  const dir = join(ROOT, 'data', 'conciliar-swe');
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+  for (const f of files) {
+    try {
+      const r = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      if ((r.id || f.replace('.json','')) === id) return r;
+    } catch {}
+  }
+  return null;
+}
+function listEpiclesis() {
+  const inbox  = join(ROOT, 'data', 'epiclesis-inbox');
+  const outbox = join(ROOT, 'data', 'epiclesis-outbox');
+  const list = { pending: [], answered: [] };
+  if (existsSync(inbox)) {
+    for (const f of readdirSync(inbox).filter(f => f.endsWith('.question.json'))) {
+      try {
+        const r = JSON.parse(readFileSync(join(inbox, f), 'utf8'));
+        const answer = join(outbox, `${r.id}.answer.json`);
+        if (existsSync(answer)) {
+          const a = JSON.parse(readFileSync(answer, 'utf8'));
+          list.answered.push({ ...r, answer: a });
+        } else {
+          list.pending.push(r);
+        }
+      } catch {}
+    }
+  }
+  return list;
+}
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✦ Скиния Дара открыта`);

@@ -1,0 +1,35 @@
+{
+  "id": "sobor-1776686842179",
+  "kind": "sobor",
+  "question": "первый журнальный собор для теста персиста",
+  "at": "2026-04-20T12:07:22.179Z",
+  "elapsedSec": 0,
+  "mode": "static",
+  "voices": [
+    {
+      "persona": "Разведчик",
+      "logos": "para",
+      "authority": 1,
+      "content": "[статика] Вопрос имеет несколько слоёв — стоит различить их прежде ответа."
+    },
+    {
+      "persona": "Критик",
+      "logos": "kata",
+      "authority": 1,
+      "content": "[статика] Проверь: это вопрос или уже скрытое утверждение?"
+    },
+    {
+      "persona": "Старший",
+      "logos": "hyper",
+      "authority": 1,
+      "content": "[статика] Различи: техническое или богословское? Ответ зависит от уровня."
+    }
+  ],
+  "dominant": {
+    "persona": "Старший",
+    "logos": "hyper"
+  },
+  "apophatic": false,
+  "silent": false,
+  "silenceReason": null
+}

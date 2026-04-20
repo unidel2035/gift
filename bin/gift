@@ -106,6 +106,15 @@ ${C.b('Матрица:')}
   gift matrix                     — сводка W
   gift matrix commune <from> <to> — история нити
 
+${C.b('Сессии (персистентная память):')}
+  gift session list               — прошлые соборы (от новых к старым)
+  gift session last               — последний собор целиком
+  gift session show <id>          — собор по id
+
+${C.b('Веб-Скиния:')}
+  gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
+  gift web --stop                 — остановить
+
 ${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — открытые пустыни + энергия
@@ -215,6 +224,81 @@ try {
 
     case 'benchmark': {
       await run('benchmarks/cat-7.mjs');
+      break;
+    }
+
+    case 'session': {
+      const { readdirSync, readFileSync } = await import('node:fs');
+      const sessDir = resolve(ROOT, 'data/conciliar-swe');
+      const files = existsSync(sessDir)
+        ? readdirSync(sessDir).filter(f => f.endsWith('.json')).sort().reverse()
+        : [];
+
+      if (sub === 'list' || !sub) {
+        if (!files.length) { console.log('Сессий не было.'); break; }
+        console.log(`\n${C.b('Прошлые соборы')} (${files.length}):\n`);
+        for (const f of files.slice(0, 20)) {
+          try {
+            const r = JSON.parse(readFileSync(resolve(sessDir, f), 'utf8'));
+            const time = new Date(r.at || 0).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+            const dom = r.dominant ? r.dominant.persona : (r.apophatic ? '⟨apophatic⟩' : '⟨silent⟩');
+            const q = (r.question || r.task?.title || '').slice(0, 60);
+            console.log(`  ${C.cyan(r.id || f.replace('.json',''))}  ${C.dim(time)}`);
+            console.log(`    → ${dom} · ${q}`);
+          } catch { console.log(`  ${f}  ${C.dim('(нечитабельный)')}`); }
+        }
+        console.log(`\n  gift session show <id> — подробно\n  gift session last — последний\n`);
+      } else if (sub === 'last' || sub === 'show') {
+        const target = sub === 'last' ? files[0] : files.find(f => f.includes(rest[0] || ''));
+        if (!target) { console.log('Сессия не найдена.'); break; }
+        const r = JSON.parse(readFileSync(resolve(sessDir, target), 'utf8'));
+        console.log(`\n${C.b(r.id || target)}  ${C.dim(r.at)}`);
+        if (r.question) console.log(`${C.b('Вопрос:')} ${r.question}`);
+        if (r.task)     console.log(`${C.b('Задача:')} ${r.task.title || r.task}`);
+        if (r.elapsedSec) console.log(`${C.dim('время:')} ${r.elapsedSec}s · ${C.dim('режим:')} ${r.mode || 'n/a'}`);
+        console.log();
+        const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+        for (const v of r.voices || []) {
+          console.log(`${logosIcon[v.logos] || '·'} ${C.b(v.persona)} (${v.logos})`);
+          console.log(`  ${(v.content || '').replace(/\n/g, '\n  ')}\n`);
+        }
+        if (r.dominant) console.log(`${C.gold('⟨dominant⟩')} ${r.dominant.persona} (${r.dominant.logos})`);
+        if (r.apophatic) console.log(`${C.violet('⟨apophatic⟩')} собор не сошёлся в dominant`);
+        if (r.silent)    console.log(`${C.dim('⟨silent⟩')} ${r.silenceReason || ''}`);
+        console.log();
+      } else { help(); process.exit(1); }
+      break;
+    }
+
+    case 'web': {
+      const { spawn } = await import('node:child_process');
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.portal.pid');
+
+      if (rest.includes('--stop') || sub === '--stop') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid); console.log(`Портал остановлен (pid ${pid}).`); } catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Портал не запущен.'); }
+        break;
+      }
+
+      const port = rest.includes('--port') ? rest[rest.indexOf('--port')+1] : '3700';
+      if (ex(pidFile)) {
+        const pid = parseInt(rf(pidFile, 'utf8'));
+        try { process.kill(pid, 0); console.log(`Портал уже работает на :${port} (pid ${pid})`); break; } catch { /* мёртвый pid */ }
+      }
+
+      const child = spawn('node', [resolve(ROOT, 'utils/gift-portal-server.mjs')], {
+        detached: true, stdio: 'ignore', cwd: ROOT,
+        env: { ...cleanEnv(), PORT: port },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Скиния Дара открыта`);
+      console.log(`  ${C.cyan(`http://localhost:${port}`)}`);
+      console.log(`  ${C.dim('gift web --stop  — остановить')}\n`);
       break;
     }
 
