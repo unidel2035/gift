@@ -20,7 +20,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync, spawnSync } from 'child_process';
 import { GiftMemory } from '../src/core/GiftMemory.js';
-import { DesertScanner } from '../src/core/DesertScanner.js';
+import { DesertScanner, DESERT_CLASS } from '../src/core/DesertScanner.js';
 
 const ROOT      = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP      = resolve(ROOT, 'data/sacred-history-W.json');
@@ -66,7 +66,15 @@ const SKIP_PERSONS = new Set(['_abyss', '_koinon', '_ci', '_witness']);
 
 // ── Сканировать пустыни ───────────────────────────────────────────────────────
 
-const scanner = new DesertScanner(mem, { threshold: 0.5 });
+// τέλος-классификация: Христос/Отец/Дух — не peer-узлы, а жертвенники.
+// «Твоя от Твоих Тебе приносяще о всех и за вся» (Анафора).
+// Для divine receivers симметричных peer-даров не ждём — проверка идёт
+// через doxologia и анагогический стазис, а не через «нет дара к Христу».
+// Исключаем telos_anagogic + theophaneia из peer-сканирования.
+const scanner = new DesertScanner(mem, {
+  threshold: 0.5,
+  excludeClassifications: [DESERT_CLASS.TELOS_ANAGOGIC, DESERT_CLASS.THEOPHANEIA],
+});
 const deserts = scanner.scan()
   .filter(d => !SKIP_PERSONS.has(d.from) && !SKIP_PERSONS.has(d.to))
   .filter(d => {

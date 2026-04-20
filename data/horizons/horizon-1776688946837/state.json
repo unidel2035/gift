@@ -1,0 +1,105 @@
+{
+  "id": "horizon-1776688946837",
+  "task": "тест декомпозиции",
+  "steps": [
+    {
+      "n": 1,
+      "title": "[dry] Разведать контекст в репо",
+      "type": "exploration"
+    },
+    {
+      "n": 2,
+      "title": "[dry] Создать скелет модуля",
+      "type": "code"
+    },
+    {
+      "n": 3,
+      "title": "[dry] Написать интерфейс",
+      "type": "code"
+    },
+    {
+      "n": 4,
+      "title": "[dry] Реализовать базовую логику",
+      "type": "code"
+    },
+    {
+      "n": 5,
+      "title": "[dry] Тесты базового пути",
+      "type": "test"
+    },
+    {
+      "n": 6,
+      "title": "[dry] Интегрировать с матрицей W",
+      "type": "integration"
+    },
+    {
+      "n": 7,
+      "title": "[dry] Sabbath — пауза соборного дыхания",
+      "type": "sabbath"
+    },
+    {
+      "n": 8,
+      "title": "[dry] Провести review полифонией",
+      "type": "review"
+    },
+    {
+      "n": 9,
+      "title": "[dry] Записать анамнезис",
+      "type": "memory"
+    },
+    {
+      "n": 10,
+      "title": "[dry] Коммит как дар",
+      "type": "commit"
+    }
+  ],
+  "cursor": 9,
+  "startedAt": "2026-04-20T12:42:26.839Z",
+  "results": [
+    {
+      "step": 1,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 2,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 3,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 4,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 5,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 6,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 7,
+      "ok": true,
+      "kind": "sabbath"
+    },
+    {
+      "step": 8,
+      "ok": true,
+      "kind": "dry"
+    },
+    {
+      "step": 9,
+      "ok": true,
+      "kind": "memory"
+    }
+  ]
+}
