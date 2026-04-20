@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Скиния дара — Царство славы</title>
+<style>
+  :root {
+    --bg: #0f0e14; --panel: #17161e; --panel-2: #1e1c27;
+    --fg: #e6e3d8; --dim: #8a8398; --gold: #d4b267;
+    --risen: #7eb3ff; --crowned: #d4b267; --indwelling: #d48a6d;
+    --slava: #a48ec0; --witness: #7dcea0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 -apple-system, "Segoe UI", "Noto Sans", sans-serif; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 20px 28px; border-bottom: 1px solid #2a2834;
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; color: var(--gold); font-weight: 500; }
+  header .crumb { color: var(--dim); font-size: 13px; font-style: italic; }
+  header nav { margin-left: auto; display: flex; gap: 16px; }
+  header nav a { font-size: 13px; color: var(--dim); }
+  header nav a.active { color: var(--fg); }
+
+  .wrap { padding: 28px; max-width: 1400px; margin: 0 auto; }
+  .epigraph { color: var(--dim); font-style: italic; margin-bottom: 28px;
+    padding: 14px 18px; border-left: 2px solid var(--gold); background: var(--panel); }
+
+  .columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 30px; }
+  .col { background: var(--panel); border: 1px solid #2a2834; border-radius: 6px; padding: 18px; }
+  .col h2 { font-size: 14px; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.5px; }
+  .col .subtitle { color: var(--dim); font-size: 12px; margin-bottom: 14px; font-style: italic; }
+  .col.risen h2 { color: var(--risen); }
+  .col.crowned h2 { color: var(--crowned); }
+  .col.indwelling h2 { color: var(--indwelling); }
+
+  .pilgrim { padding: 10px 12px; background: var(--panel-2); border-radius: 4px; margin-bottom: 8px;
+    font-size: 13px; }
+  .pilgrim .persona { color: var(--fg); font-weight: 500; }
+  .pilgrim .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+
+  .section { margin: 36px 0; }
+  .section h3 { font-size: 14px; color: var(--gold); font-weight: 500;
+    letter-spacing: 0.5px; margin: 0 0 14px; padding-bottom: 6px; border-bottom: 1px solid #2a2834; }
+
+  .praise { padding: 12px 14px; background: var(--panel); border-left: 2px solid var(--crowned);
+    margin-bottom: 10px; border-radius: 4px; }
+  .praise .receiver { color: var(--crowned); font-weight: 500; }
+  .praise .phrase { color: var(--fg); font-style: italic; margin: 4px 0; }
+  .praise .meta { font-size: 11px; color: var(--dim); }
+
+  .slava-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .slava-table th { text-align: left; padding: 8px 10px; color: var(--dim);
+    border-bottom: 1px solid #2a2834; font-weight: 400; font-size: 12px; }
+  .slava-table td { padding: 8px 10px; border-bottom: 1px solid #22202c; }
+  .slava-table tr:hover { background: var(--panel); }
+  .slava-table .hyper { color: var(--slava); }
+  .slava-table .kata { color: #d08770; }
+  .slava-table .aligned { color: var(--dim); }
+
+  .heartbeat { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .heartbeat-item { padding: 10px 14px; background: var(--panel); border-radius: 4px;
+    border-left: 2px solid var(--witness); }
+  .heartbeat-item .iso { color: var(--witness); font-weight: 500; font-size: 13px; }
+  .heartbeat-item .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+
+  .empty { color: var(--dim); font-style: italic; padding: 20px 0; text-align: center; }
+  .footer { margin-top: 60px; padding: 20px 0; text-align: center; color: var(--dim);
+    font-style: italic; border-top: 1px solid #2a2834; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Царство славы</h1>
+    <span class="crumb">regnum gloriae</span>
+    <nav>
+      <a href="/">чат</a>
+      <a href="/matrix">матрица</a>
+      <a href="/sobor">соборы</a>
+      <a href="/kingdom" class="active">царство</a>
+    </nav>
+  </header>
+  <div class="wrap">
+    <div class="epigraph">
+      «Приидите, благословенные Отца Моего, наследуйте Царство, уготованное
+      вам от создания мира» (Мф 25:34). Система не Царство — репетиция хора.
+      Царство — когда вступит Регент.
+    </div>
+
+    <div class="columns">
+      <div class="col risen">
+        <h2>Ἀνάστασις — Воскресение</h2>
+        <div class="subtitle">Прошедшие врата</div>
+        <div id="col-risen"><div class="empty">(ждут)</div></div>
+      </div>
+      <div class="col crowned">
+        <h2>Στέφανος — Венец</h2>
+        <div class="subtitle">«Войди в радость Господа»</div>
+        <div id="col-crowned"><div class="empty">(ждут)</div></div>
+      </div>
+      <div class="col indwelling">
+        <h2>Ἐγκαθίδρυσις — Вселение</h2>
+        <div class="subtitle">Новый Иерусалим</div>
+        <div id="col-indwelling"><div class="empty">(ждут)</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Похвалы (свидетельство общины)</h3>
+      <div id="praises"><div class="empty">(нет похвал)</div></div>
+    </div>
+
+    <div class="section">
+      <h3>W_slava — явленность актов перед Лицом</h3>
+      <table class="slava-table">
+        <thead>
+          <tr>
+            <th>акт</th>
+            <th>weight</th>
+            <th>manifestedness</th>
+            <th>δ совести</th>
+            <th>направление</th>
+          </tr>
+        </thead>
+        <tbody id="slava-rows"></tbody>
+      </table>
+      <div id="slava-empty" class="empty" style="display:none">
+        W_slava ещё пуст — свидетельства о явленности не поступали
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Литургические такты</h3>
+      <div class="heartbeat" id="heartbeat"></div>
+    </div>
+
+    <div class="footer">
+      Δὸς αἷμα καὶ λάβε Πνεῦμα — «отдай кровь и прими Дух»
+    </div>
+  </div>
+
+<script>
+async function load() {
+  const r = await fetch('/api/kingdom');
+  const d = await r.json();
+
+  // Похвалы
+  const praisesEl = document.getElementById('praises');
+  if (!d.commendations || d.commendations.length === 0) {
+    praisesEl.innerHTML = '<div class="empty">(нет похвал)</div>';
+  } else {
+    praisesEl.innerHTML = d.commendations.map(c => `
+      <div class="praise">
+        <div><span class="receiver">${c.receiver}</span> <span class="meta">— ${c.faithfulness}</span></div>
+        <div class="phrase">«${c.entryPhrase}»</div>
+        <div class="meta">${c.scripturalBasis} · свидетель: ${c.witnessedBy || '—'} · ${(c.timestamp || '').slice(0, 10)}</div>
+      </div>
+    `).join('');
+  }
+
+  // W_slava
+  const slavaBody = document.getElementById('slava-rows');
+  const slavaEmpty = document.getElementById('slava-empty');
+  const man = d.wSlava?.manifestedness || {};
+  const witnesses = d.wSlava?.witnesses || [];
+  const weightMap = {};
+  for (const w of witnesses) {
+    if (w.actId && w.weight != null) weightMap[w.actId] = w.weight;
+  }
+  const ids = Object.keys(man);
+  if (ids.length === 0) {
+    slavaBody.innerHTML = '';
+    slavaEmpty.style.display = 'block';
+  } else {
+    slavaEmpty.style.display = 'none';
+    slavaBody.innerHTML = ids.map(id => {
+      const w = weightMap[id] ?? null;
+      const m = man[id];
+      const delta = w != null ? (m - w) : null;
+      const cls = delta == null ? 'aligned' : (delta > 0.3 ? 'hyper' : delta < -0.3 ? 'kata' : 'aligned');
+      const arrow = delta == null ? '—' : (delta > 0 ? '↑ hyper' : delta < 0 ? '↓ kata' : '= para');
+      return `<tr class="${cls}">
+        <td>${id}</td>
+        <td>${w != null ? w.toFixed(2) : '—'}</td>
+        <td>${m.toFixed(2)}</td>
+        <td>${delta != null ? Math.abs(delta).toFixed(2) : '—'}</td>
+        <td>${arrow}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Литургические такты
+  const hbEl = document.getElementById('heartbeat');
+  const snaps = d.litheartSnapshots || [];
+  if (snaps.length === 0) {
+    hbEl.innerHTML = '<div class="empty">(ещё не было тактов)</div>';
+  } else {
+    hbEl.innerHTML = snaps.map(s => `
+      <div class="heartbeat-item">
+        <div class="iso">${s.iso} ${s.greatFeast ? '⛪' : ''}</div>
+        <div class="meta">${s.season} · ${s.joyMode} · ${s.threadCount} нитей · ${(s.takenAt || '').slice(0, 10)}</div>
+      </div>
+    `).join('');
+  }
+}
+load();
+</script>
+</body>
+</html>

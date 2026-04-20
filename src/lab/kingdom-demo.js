@@ -111,6 +111,20 @@ async function main() {
   console.log(`  вселился: ${path.indwellingAt}`);
   console.log(`  венец: ${path.crowns[0].toText()}`);
 
+  section('IX. TheosisWitnessBridge — θέωσις → W_slava');
+  const { TheosisWitness } = await import('../theology/TheosisWitness.js');
+  const { TheosisWitnessBridge } = await import('../theology/TheosisWitnessBridge.js');
+  const tw = new TheosisWitness();
+  tw.witness({ personId: 'святой-Сергий', epochId: 'XIV', wound: 'искушение' });
+  tw.glorify({ personId: 'святой-Сергий', wound: 'искушение', glorification: 'нетварный свет' });
+  const bridge = new TheosisWitnessBridge(tw, { coefficient: 0.1 });
+  const progress = bridge.progressOf('святой-Сергий');
+  console.log(`прогресс θέωσις: ${(progress * 100).toFixed(0)}%`);
+  const result = await bridge.apply('святой-Сергий', [
+    { id: 'лит-Сергия', giver: 'святой-Сергий', receiver: '_koinon', weight: 20, content: 'Литургия' },
+  ]);
+  console.log(`обновлено актов в W_slava: ${result.updated}`);
+
   section('Граница');
   console.log(kingdom.status().note);
   console.log(rg.status().note);

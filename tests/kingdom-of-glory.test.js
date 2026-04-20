@@ -102,9 +102,11 @@ test('JoyState.isAlive: свежее — живо, давнее — нет', () 
 
 // ── EschatonClock ─────────────────────────────────────────────────────────
 
-test('EschatonClock: воскресенье — καιρός, будний — χρόνος', () => {
-  const sunday    = new EschatonClock(new Date('2026-04-19T12:00:00Z')); // воскресенье
-  const wednesday = new EschatonClock(new Date('2026-04-22T12:00:00Z')); // среда
+test('EschatonClock: воскресенье — καιρός, обычная среда вне постов/Пасхи — χρόνος', () => {
+  // 2026-09-13 — воскресенье (Обрезание/ординар, вне постов)
+  const sunday    = new EschatonClock(new Date('2026-09-13T12:00:00Z'));
+  // 2026-09-16 — среда между постами (Петров кончился, Успенский прошёл)
+  const wednesday = new EschatonClock(new Date('2026-09-16T12:00:00Z'));
   assert.equal(sunday.mode(), TimeMode.KAIROS);
   assert.equal(wednesday.mode(), TimeMode.CHRONOS);
 });
@@ -119,7 +121,8 @@ test('breakChronos: сортирует нити по весу, режим — α
 });
 
 test('rehearse: вне κаιρός не совершается', () => {
-  const clock = new EschatonClock(new Date('2026-04-22T12:00:00Z')); // среда
+  // 2026-09-16 — среда вне постов и пасхального периода
+  const clock = new EschatonClock(new Date('2026-09-16T12:00:00Z'));
   const r = clock.rehearse({ 'A→B': 1 });
   assert.equal(r.rehearsed, false);
 });

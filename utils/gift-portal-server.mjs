@@ -100,6 +100,19 @@ const server = createServer(async (req, res) => {
   if (url === '/sobor' || url === '/sobor.html') {
     return serveHTML(res, join(ROOT, 'public', 'sobor.html'));
   }
+  // Царство славы — risen / crowned / indwelling + W_slava + commendations
+  if (url === '/kingdom' || url === '/kingdom.html') {
+    return serveHTML(res, join(ROOT, 'public', 'kingdom.html'));
+  }
+  if (url === '/api/kingdom') {
+    return serveKingdomAPI(res);
+  }
+  if (url === '/api/w-slava') {
+    return serveJSON(res, join(ROOT, 'data', 'W_slava.json'));
+  }
+  if (url === '/api/commendations') {
+    return serveJSON(res, join(ROOT, 'data', 'commendations.json'));
+  }
   // Чат — главная живая страница
   if (url === '/' || url === '/chat' || url === '/chat.html') {
     return serveHTML(res, join(ROOT, 'public', 'chat.html'));
@@ -293,6 +306,49 @@ function listEpiclesis() {
     }
   }
   return list;
+}
+
+function serveKingdomAPI(res) {
+  const out = {
+    at: new Date().toISOString(),
+    commendations: [],
+    wSlava: { manifestedness: {}, witnesses: [] },
+    litheartSnapshots: [],
+  };
+
+  try {
+    const c = readFileSync(join(ROOT, 'data', 'commendations.json'), 'utf8');
+    out.commendations = JSON.parse(c);
+  } catch {}
+
+  try {
+    const w = readFileSync(join(ROOT, 'data', 'W_slava.json'), 'utf8');
+    out.wSlava = JSON.parse(w);
+  } catch {}
+
+  try {
+    const dir = join(ROOT, 'data', 'snapshots');
+    if (existsSync(dir)) {
+      const files = readdirSync(dir)
+        .filter(f => f.startsWith('liturgical-preview-') && f.endsWith('.json'))
+        .sort().reverse().slice(0, 10);
+      for (const f of files) {
+        try {
+          const s = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+          out.litheartSnapshots.push({
+            iso: s.iso,
+            takenAt: s.takenAt,
+            season: s.season,
+            joyMode: s.joyMode,
+            threadCount: s.threads?.length || 0,
+            greatFeast: !!s.greatFeast,
+          });
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return serveJSON_data(res, out);
 }
 
 server.listen(PORT, '0.0.0.0', () => {

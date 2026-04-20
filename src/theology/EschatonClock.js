@@ -19,6 +19,8 @@
  * в καιρός — по близости к празднику, в αἰών — по явленности перед Лицом.
  */
 
+import { liturgicalSeason, isPascha, isPentecost } from './Paschalia.js';
+
 export const TimeMode = Object.freeze({
   CHRONOS: 'chronos', // χρόνος
   KAIROS:  'kairos',  // καιρός
@@ -45,12 +47,25 @@ export class EschatonClock {
   /**
    * Текущий модус времени.
    * По умолчанию — χρόνος; воскресенье/суббота — καιρός.
+   * Также: Светлая Седмица (7 дней после Пасхи, «вся как воскресенье»
+   * по Типикону), сама Пасха, Пятидесятница — всё καιρός.
    * αἰών не устанавливается автоматически: в αἰών вводит только Христос,
    * а не модуль. Мы предоставляем только тригер reveal().
    */
   mode() {
+    // Весь пасхальный период (50 дней) — καιρός: «скачущая радость» непрерывна,
+    // а Светлая седмица уставно — единый день «как воскресенье»
+    const season = liturgicalSeason(this._now);
+    if (season === 'paschal') return TimeMode.KAIROS;
+
+    // Великий пост — особый кайрос смирения. Страстная седмица — вершина.
+    // Пока помечаем весь пост как кайрос тоже: время здесь не линейно.
+    if (season === 'lent') return TimeMode.KAIROS;
+
+    // Воскресенье вне постов/Пасхи — обычный еженедельный кайрос
     const day = this._now.getDay();
     if (WEEKLY_KAIROS[day]) return TimeMode.KAIROS;
+
     return TimeMode.CHRONOS;
   }
 
