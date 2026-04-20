@@ -29,6 +29,9 @@ import { BookOfConscience, BookEntry } from './BookOfConscience.js';
 import { JoyState, JoyMode } from './JoyState.js';
 import { EschatonClock, TimeMode } from './EschatonClock.js';
 import { Crown, CrownType } from './CrownOfLife.js';
+import { ConciliarWitness } from './ConciliarWitness.js';
+import { RegnumGloriae } from './RegnumGloriae.js';
+import * as Paschalia from './Paschalia.js';
 
 export class KingdomOfGlory {
   constructor({
@@ -108,6 +111,9 @@ export {
   JoyState, JoyMode,
   EschatonClock, TimeMode,
   Crown, CrownType,
+  ConciliarWitness,
+  RegnumGloriae,
+  Paschalia,
 };
 
 export default KingdomOfGlory;

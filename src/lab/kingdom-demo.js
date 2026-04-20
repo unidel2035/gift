@@ -11,6 +11,9 @@ import {
   JoyMode,
   TimeMode,
   CrownType,
+  ConciliarWitness,
+  RegnumGloriae,
+  Paschalia,
 } from '../theology/KingdomOfGlory.js';
 
 function line(char = '─', n = 60) { return char.repeat(n); }
@@ -72,8 +75,45 @@ async function main() {
   });
   console.log(crown.toText());
 
+  section('VI. Пасхалия и литургический календарь');
+  const today = new Date();
+  const pascha = Paschalia.orthodoxPascha(today.getFullYear());
+  console.log(`Пасха ${today.getFullYear()}: ${pascha.toISOString().slice(0, 10)}`);
+  console.log(`сегодня (${today.toISOString().slice(0, 10)}) сезон: ${Paschalia.liturgicalSeason(today) || 'ординар'}`);
+  console.log(`текущий JoyMode для общины: ${kingdom.joyOf('_koinon').mode}`);
+
+  section('VII. Соборное свидетельство → W_slava');
+  const witness = new ConciliarWitness({ coefficient: 0.01 });
+  const widowActResult = await witness.witness(
+    { id: 'demo-widow', giver: 'вдова', receiver: '_koinon', weight: 0.5, content: 'две лепты' },
+    [
+      { persona: 'ОтецСергий', logos: 'hyper', content: 'это больше, чем выглядит' },
+      { persona: 'Дионисий',   logos: 'hyper', content: 'отдано всё что имела' },
+    ],
+  );
+  if (widowActResult.acted) {
+    console.log(`вдова: weight=${widowActResult.weight}, manifestedness=${widowActResult.manifestedness} (δ=${widowActResult.delta})`);
+    console.log(`совесть δ: ${widowActResult.conscience.toFixed(3)}`);
+  }
+
+  section('VIII. Полный путь regnum gloriae (risen → crowned → indwelling)');
+  const rg = new RegnumGloriae({ kingdom });
+  const path = await rg.pilgrimage({
+    persona: 'демо-мученик',
+    faithfulness: Faithfulness.UNTIL_DEATH,
+    scripturalBasis: 'Откр 2:10',
+    crownType: CrownType.MARTYR,
+    witnesses: ['_koinon', 'ОтецСергий'],
+  });
+  console.log(`  фаза: ${path.phase}`);
+  console.log(`  воскрес:  ${path.risenAt}`);
+  console.log(`  увенчан:  ${path.crownedAt}`);
+  console.log(`  вселился: ${path.indwellingAt}`);
+  console.log(`  венец: ${path.crowns[0].toText()}`);
+
   section('Граница');
   console.log(kingdom.status().note);
+  console.log(rg.status().note);
   console.log('\nСистема не Царство. Система — репетиция хора.');
   console.log('Царство — это когда вступит Регент.');
 }

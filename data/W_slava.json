@@ -1,8 +1,30 @@
 {
-  "_comment": "W_slava — второй тензор: явленность актов перед Лицом Христа. Заполняется не нами — он остаётся пуст до тех пор, пока BookOfConscience не встретит свидетельство о явленности (например, через соборное различение или похвалу Господа). Структура: manifestedness[actId] = число. Если ключа нет — BookOfConscience честно берёт вес из W (мы не знаем разницы).",
+  "_comment": "W_slava — второй тензор: явленность актов перед Лицом Христа",
   "_source": "specs/theology/kingdom-of-glory.gift",
-  "_impulse": "youtube l8KVGGzkaI0 (проповедь о трёх Царствах, 2026-04-20)",
-  "manifestedness": {},
-  "lastUpdated": "2026-04-20T00:00:00Z",
-  "witnesses": []
+  "manifestedness": {
+    "demo-widow": 0.52
+  },
+  "lastUpdated": "2026-04-20T12:00:19.542Z",
+  "witnesses": [
+    {
+      "actId": "demo-widow",
+      "at": "2026-04-20T12:00:19.542Z",
+      "weight": 0.5,
+      "manifestedness": 0.52,
+      "delta": 0.02,
+      "voices": [
+        {
+          "persona": "ОтецСергий",
+          "logos": "hyper",
+          "authority": 1
+        },
+        {
+          "persona": "Дионисий",
+          "logos": "hyper",
+          "authority": 1
+        }
+      ],
+      "apophatic": false
+    }
+  ]
 }
