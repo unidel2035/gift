@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 
 import { PolyphonyOrchestrator, VoiceSource } from './polyphony-orchestrator.mjs';
 import { ConciliarSilence } from '../src/theology/ConciliarSilence.js';
+import { cleanEnv } from './clean-env.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const LOG_DIR = resolve(ROOT, 'data', 'conciliar-swe');
@@ -69,7 +70,7 @@ async function preflightSilence(question) {
 }
 
 // ── Загрузка задачи ────────────────────────────────────────────────────────
-function ghEnv() { return { ...process.env, GITHUB_TOKEN: '' }; }
+function ghEnv() { return cleanEnv({ GITHUB_TOKEN: '' }); }
 
 async function loadTask() {
   if (TASK) return { kind: 'inline', title: TASK.slice(0, 80), body: TASK, number: null };
@@ -160,10 +161,25 @@ async function phasePlan(task) {
   const question = `Задача:\n${task.title}\n\n${task.body || ''}`;
   const o = buildPlanOrchestrator({ task });
   const t0 = Date.now();
-  const poly = await o.ask(question);
+
+  const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+  let n = 0;
+  const total = o.sources.length;
+
+  const poly = await o.ask(question, {
+    onStart({ sources }) {
+      console.log(`⟳ PLAN: ${sources.map(s => s.persona).join(' · ')}`);
+    },
+    onVoice(v) {
+      n++;
+      const el = ((Date.now() - t0) / 1000).toFixed(1);
+      console.log(`\n  [${n}/${total}  ${el}s]  ${logosIcon[v.logos] || '·'} ${v.persona} (${v.logos}):`);
+      console.log(`    ${(v.content || '').slice(0, 500).replace(/\n/g, '\n    ')}`);
+    },
+  });
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`\n── итог PLAN, ${elapsed}s ──`);
   console.log(poly.toText ? poly.toText() : JSON.stringify(poly));
-  console.log(`\n── ${elapsed}s ──`);
   return poly;
 }
 
@@ -193,7 +209,9 @@ async function phaseImplement({ task, plan }) {
 
   const { spawn } = await import('node:child_process');
   const out = await new Promise((res, rej) => {
-    const child = spawn('claude', ['--print'], { stdio: ['pipe', 'pipe', 'pipe'], cwd: ROOT });
+    const child = spawn('claude', ['--print'], {
+      stdio: ['pipe', 'pipe', 'pipe'], cwd: ROOT, env: cleanEnv(),
+    });
     let o = '', e = '';
     child.stdout.on('data', d => o += d);
     child.stderr.on('data', d => e += d);
@@ -213,7 +231,22 @@ async function phaseImplement({ task, plan }) {
 async function phaseReview({ task, diff }) {
   console.log('\n══ REVIEW ══\n');
   const o = buildReviewOrchestrator({ task, diff });
-  const poly = await o.ask(`review diff for ${task.title}`);
+  const t0 = Date.now();
+  const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+  let n = 0;
+  const total = o.sources.length;
+
+  const poly = await o.ask(`review diff for ${task.title}`, {
+    onStart({ sources }) { console.log(`⟳ REVIEW: ${sources.map(s => s.persona).join(' · ')}`); },
+    onVoice(v) {
+      n++;
+      const el = ((Date.now() - t0) / 1000).toFixed(1);
+      console.log(`\n  [${n}/${total}  ${el}s]  ${logosIcon[v.logos] || '·'} ${v.persona} (${v.logos}):`);
+      console.log(`    ${(v.content || '').slice(0, 500).replace(/\n/g, '\n    ')}`);
+    },
+  });
+  const el = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`\n── итог REVIEW, ${el}s ──`);
   console.log(poly.toText ? poly.toText() : JSON.stringify(poly));
   return poly;
 }

@@ -80,9 +80,32 @@ if (useSubagents) {
 }
 
 const t0 = Date.now();
-const result = await orchestrator.ask(question);
+
+// Живой прогресс: показываем что собор собирается, каждый голос — по приходу
+const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+const waiting = new Set();
+let voiceN = 0;
+const total = orchestrator.sources.length;
+
+const result = await orchestrator.ask(question, {
+  onStart({ sources }) {
+    console.log(`⟳ Собор собирается (${sources.length} голосов): ${sources.map(s => s.persona).join(', ')}`);
+    sources.forEach(s => waiting.add(s.persona));
+    process.stdout.write(`  ожидание: ${[...waiting].join(', ')}\n`);
+  },
+  onVoice(v) {
+    voiceN++;
+    waiting.delete(v.persona);
+    const icon = logosIcon[v.logos] || '·';
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(`\n[${voiceN}/${total}  ${elapsed}s]  ${icon} ${v.persona} (${v.logos}):`);
+    console.log(`  ${v.content.slice(0, 400).replace(/\n/g, '\n  ')}${v.content.length > 400 ? '…' : ''}`);
+    if (waiting.size) console.log(`  ожидание: ${[...waiting].join(', ')}`);
+  },
+});
 const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
+console.log(`\n═══ итог собора ═══`);
 console.log(result.toText());
 console.log(`\n── ${elapsed}s ──\n`);
 

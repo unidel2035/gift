@@ -19,6 +19,7 @@
 
 import { execSync } from 'node:child_process';
 import { classify, PERICHORETIC_KIND, HYPOSTATIC_KIND, REAL_DESERT_KIND } from '../src/theology/Perichoresis.js';
+import { cleanEnv } from './clean-env.mjs';
 
 const args = process.argv.slice(2);
 const DO_CLOSE = args.includes('--close');
@@ -33,7 +34,7 @@ function parseTitle(title) {
 }
 
 function gh(cmd) {
-  return execSync(cmd, { encoding: 'utf8', env: { ...process.env, GITHUB_TOKEN: '' } });
+  return execSync(cmd, { encoding: 'utf8', env: cleanEnv({ GITHUB_TOKEN: '' }) });
 }
 
 async function listCandidates() {
@@ -103,7 +104,7 @@ function buildComment({ from, to, classification }) {
           `gh issue comment ${issue.number} --body-file -`,
           {
             input: comment,
-            env: { ...process.env, GITHUB_TOKEN: '' },
+            env: cleanEnv({ GITHUB_TOKEN: '' }),
             stdio: ['pipe', 'pipe', 'pipe'],
           }
         );

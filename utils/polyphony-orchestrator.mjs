@@ -28,6 +28,7 @@
 import { spawn } from 'node:child_process';
 import { ConciliarDissent } from '../src/theology/ConciliarDissent.js';
 import { ConciliarSilence } from '../src/theology/ConciliarSilence.js';
+import { cleanEnv } from './clean-env.mjs';
 
 // ─────────────────────────────────────────────────────
 // Источники голосов
@@ -100,7 +101,10 @@ function runClaudePrint(prompt, { agentType, timeout }) {
   return new Promise((resolve, reject) => {
     const args = ['--print'];
     if (agentType) args.push('--agent', agentType);
-    const child = spawn('claude', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('claude', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv(),
+    });
 
     let stdout = '', stderr = '';
     child.stdout.on('data', d => stdout += d);
@@ -141,9 +145,14 @@ export class PolyphonyOrchestrator {
 
   /**
    * Задать вопрос собору. Собирает голоса, проверяет молчание, строит Polyphony.
+   *
+   * @param {Object} opts
+   * @param {number} [opts.quorum]
+   * @param {boolean} [opts.sabbath]
+   * @param {Function} [opts.onVoice]    — callback(voice) при приходе каждого голоса
+   * @param {Function} [opts.onStart]    — callback({sources}) при старте сбора
    */
-  async ask(question, { quorum, sabbath } = {}) {
-    // Сначала проверяем: вообще можем говорить?
+  async ask(question, { quorum, sabbath, onVoice, onStart } = {}) {
     const check = await this.silence.examine({
       voices: this.sources.map(s => s.persona),
       question,
@@ -160,19 +169,27 @@ export class PolyphonyOrchestrator {
       };
     }
 
-    // Собираем голоса
-    const voices = this.parallel
-      ? await Promise.all(this.sources.map(s => s.collect(question)))
-      : await this._collectSequential(question);
+    if (onStart) onStart({ sources: this.sources.map(s => ({ persona: s.persona, logos: s.logos })) });
 
-    // Строим Polyphony
+    const voices = this.parallel
+      ? await Promise.all(this.sources.map(async s => {
+          const v = await s.collect(question);
+          if (onVoice) onVoice(v);
+          return v;
+        }))
+      : await this._collectSequential(question, onVoice);
+
     const polyphony = await this.dissent.assemble(voices);
     return polyphony;
   }
 
-  async _collectSequential(question) {
+  async _collectSequential(question, onVoice) {
     const out = [];
-    for (const s of this.sources) out.push(await s.collect(question));
+    for (const s of this.sources) {
+      const v = await s.collect(question);
+      if (onVoice) onVoice(v);
+      out.push(v);
+    }
     return out;
   }
 }
