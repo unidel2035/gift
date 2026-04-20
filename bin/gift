@@ -1,0 +1,247 @@
+#!/usr/bin/env node
+/**
+ * gift — единый CLI онтологии дара.
+ *
+ * Это НЕ обёртка вокруг Claude Code. Это точка входа в @unidel/gift:
+ *   собор лиц, пустыни, эпиклеза, метанойя, dev-loop.
+ *
+ * Команды:
+ *   gift sobor ask "вопрос"            — собор из 3 живых лиц (ask-sobor.mjs)
+ *   gift sobor ask --static "вопрос"   — офлайн-режим (статические голоса)
+ *
+ *   gift swe --issue N                 — соборный SWE-агент (PLAN → IMPLEMENT → REVIEW)
+ *   gift swe --task "…"                — на inline-задачу
+ *   gift swe … --dry-run               — без реальных subagents
+ *   gift swe … --no-commit             — остановиться перед commit
+ *
+ *   gift pustynya list                 — реальные пустыни (open gift-ready)
+ *   gift pustynya resolve              — перихорезис-разрешение (dry-run)
+ *   gift pustynya resolve --close      — закрыть троичные пустыни
+ *
+ *   gift epiclesis ask "вопрос" [--to Дионисий]  — через HumanOracleInbox
+ *   gift epiclesis pending             — неотвеченные вопросы
+ *   gift epiclesis answer <id> "…"     — ответить на вопрос (обычно делает бот)
+ *
+ *   gift matrix                        — снимок W-матрицы (через nous)
+ *   gift matrix commune <from> <to>    — история нити
+ *
+ *   gift benchmark                     — CAT-9 (9/9 операций)
+ *
+ *   gift status                        — кратко: открытые пустыни, энергия, эпиклезы
+ *
+ * Философия:
+ *   Этот CLI говорит языком онтологии (собор, пустыня, эпиклеза),
+ *   а не языком инструмента (run, test, deploy).
+ *   Под капотом — node.js + claude subagents. Сверху — церковный словарь.
+ */
+
+import { spawn } from 'node:child_process';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ── Раскраска ───────────────────────────────────────────────────────────
+const C = {
+  dim: s => `\x1b[2m${s}\x1b[0m`,
+  b: s => `\x1b[1m${s}\x1b[0m`,
+  gold: s => `\x1b[33m${s}\x1b[0m`,
+  cyan: s => `\x1b[36m${s}\x1b[0m`,
+  violet: s => `\x1b[35m${s}\x1b[0m`,
+};
+
+// ── Подпроцесс ──────────────────────────────────────────────────────────
+function run(script, args = []) {
+  return new Promise((res, rej) => {
+    const child = spawn('node', [resolve(ROOT, script), ...args], {
+      cwd: ROOT, stdio: 'inherit',
+      env: { ...process.env, GIFT_CLI: 'gift' },
+    });
+    child.on('exit', code => code === 0 ? res() : rej(new Error(`exit ${code}`)));
+    child.on('error', rej);
+  });
+}
+
+async function gh(cmd) {
+  const { execSync } = await import('node:child_process');
+  return execSync(cmd, { encoding: 'utf8', env: { ...process.env, GITHUB_TOKEN: '' } });
+}
+
+// ── Справка ─────────────────────────────────────────────────────────────
+function help() {
+  console.log(`
+${C.b(C.gold('gift'))} — CLI онтологии дара
+
+${C.b('Собор:')}
+  gift sobor ask ${C.dim('[--static]')} "вопрос"       — полифония из 3 живых лиц
+  gift swe --issue N ${C.dim('[--dry-run] [--no-commit]')}  — соборный SWE-агент
+
+${C.b('Пустыни:')}
+  gift pustynya list              — открытые пустыни (#N X→Y)
+  gift pustynya resolve ${C.dim('[--close]')}  — перихорезис: закрыть троичные
+
+${C.b('Эпиклеза (призывание):')}
+  gift epiclesis ask "вопрос" ${C.dim('[--to Дионисий]')}
+  gift epiclesis pending
+  gift epiclesis answer <id> "ответ"
+
+${C.b('Матрица:')}
+  gift matrix                     — сводка W
+  gift matrix commune <from> <to> — история нити
+
+${C.b('Бенчмарк / статус:')}
+  gift benchmark                  — CAT-9
+  gift status                     — открытые пустыни + энергия
+
+${C.dim('Философия: язык церковный (собор, пустыня, эпиклеза), под капотом — node + claude subagents.')}
+`);
+}
+
+// ── Обработчики ─────────────────────────────────────────────────────────
+const [cmd, sub, ...rest] = process.argv.slice(2);
+
+if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') { help(); process.exit(0); }
+
+try {
+  switch (cmd) {
+
+    case 'sobor': {
+      if (sub !== 'ask') { help(); process.exit(1); }
+      // Пропускаем все rest-аргументы прямо в ask-sobor.mjs
+      await run('utils/ask-sobor.mjs', rest);
+      break;
+    }
+
+    case 'swe': {
+      // Передаём все аргументы как есть
+      await run('utils/conciliar-swe.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'pustynya': {
+      if (sub === 'list') {
+        const raw = await gh('gh issue list --state open --label gift-ready --limit 30 --json number,title');
+        const issues = JSON.parse(raw);
+        const rx = /пустыня\s+([^\s→]+)\s*→\s*([^\s:]+)/;
+        const pustynyas = issues.map(i => {
+          const m = i.title.match(rx);
+          return m ? { n: i.number, from: m[1], to: m[2] } : null;
+        }).filter(Boolean);
+        console.log(`\n${C.b('Открытые пустыни')} (${pustynyas.length}):\n`);
+        for (const p of pustynyas) console.log(`  ${C.cyan(`#${p.n}`)}  ${p.from} → ${p.to}`);
+        console.log();
+      } else if (sub === 'resolve') {
+        await run('utils/resolve-perichoresis.mjs', rest);
+      } else {
+        help(); process.exit(1);
+      }
+      break;
+    }
+
+    case 'epiclesis': {
+      const mod = await import(resolve(ROOT, 'src/theology/HumanOracleInbox.js'));
+      const inbox = new mod.HumanOracleInbox();
+      if (sub === 'ask') {
+        const toIdx = rest.indexOf('--to');
+        const to = toIdx >= 0 ? rest[toIdx + 1] : 'Дионисий';
+        const question = rest.filter((a, i) => a !== '--to' && i !== toIdx + 1).join(' ');
+        if (!question) { console.error('gift epiclesis ask "вопрос"'); process.exit(1); }
+        inbox.recipient = to;
+        const id = await inbox.ask(question);
+        console.log(`${C.violet('⚡')} вопрос записан: ${C.dim(id)} → data/epiclesis-inbox/`);
+        console.log(`   ждёт ответа от ${to}. gift epiclesis pending — посмотреть очередь.`);
+      } else if (sub === 'pending') {
+        const queue = await inbox.listUnanswered();
+        if (!queue.length) { console.log('Очередь пуста.'); break; }
+        console.log(`\n${C.b('Неотвеченные эпиклезы')}:\n`);
+        for (const q of queue) {
+          console.log(`  ${C.violet(q.id)}  → ${q.recipient}`);
+          console.log(`    ${q.question}`);
+          console.log(`    ${C.dim(q.at)}\n`);
+        }
+      } else if (sub === 'answer') {
+        const [id, ...content] = rest;
+        if (!id || !content.length) { console.error('gift epiclesis answer <id> "ответ"'); process.exit(1); }
+        const rec = await inbox.markAnswered(id, content.join(' '));
+        console.log(`${C.gold('✓')} ответ записан: ${rec.id} → data/epiclesis-outbox/`);
+      } else { help(); process.exit(1); }
+      break;
+    }
+
+    case 'matrix': {
+      const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+      if (!sub || sub === 'summary') {
+        try {
+          const r = await fetch(`${NOUS}/summary`);
+          const data = await r.json();
+          console.log(`\n${C.b('Матрица W')}  ${C.dim('(nous: ' + NOUS + ')')}\n`);
+          console.log(`  Лиц:   ${Object.keys(data.persons || {}).length}`);
+          console.log(`  Актов: ${data.totalActs || 'n/a'}`);
+          console.log(`  Энергия: ${data.networkEnergy || 'n/a'}\n`);
+          const top = Object.entries(data.threads || {})
+            .sort((a, b) => b[1] - a[1]).slice(0, 5);
+          console.log(`${C.b('Топ нитей:')}`);
+          for (const [k, v] of top) console.log(`  ${k}: ${v}`);
+          console.log();
+        } catch (e) {
+          console.log(`nous недоступен (${e.message}). Запусти: npm run nous`);
+        }
+      } else if (sub === 'commune') {
+        const [from, to] = rest;
+        if (!from || !to) { console.error('gift matrix commune <from> <to>'); process.exit(1); }
+        const r = await fetch(`${NOUS}/commune/${encodeURIComponent(from)}/${encodeURIComponent(to)}`);
+        const data = await r.json();
+        console.log(JSON.stringify(data, null, 2));
+      }
+      break;
+    }
+
+    case 'benchmark': {
+      await run('benchmarks/cat-7.mjs');
+      break;
+    }
+
+    case 'status': {
+      // Открытые пустыни
+      try {
+        const raw = await gh('gh issue list --state open --label gift-ready --limit 50 --json number,title');
+        const issues = JSON.parse(raw);
+        const rx = /пустыня\s+([^\s→]+)\s*→\s*([^\s:]+)/;
+        const pustynyas = issues.filter(i => rx.test(i.title));
+        console.log(`\n${C.b('Статус онтологии дара')}`);
+        console.log(`${C.dim('─'.repeat(40))}`);
+        console.log(`  Открытые пустыни: ${C.gold(pustynyas.length)}`);
+      } catch { console.log('  github недоступен'); }
+
+      // Матрица
+      const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+      try {
+        const r = await fetch(`${NOUS}/summary`, { signal: AbortSignal.timeout(2000) });
+        const d = await r.json();
+        console.log(`  Лиц в матрице:    ${Object.keys(d.persons || {}).length}`);
+        console.log(`  Энергия сети:     ${d.networkEnergy || 'n/a'}`);
+      } catch { console.log('  nous:             ⟨недоступен⟩'); }
+
+      // Эпиклеза queue
+      const inboxDir = resolve(ROOT, 'data/epiclesis-inbox');
+      if (existsSync(inboxDir)) {
+        const { readdirSync } = await import('node:fs');
+        const files = readdirSync(inboxDir).filter(f => f.endsWith('.question.json'));
+        console.log(`  Эпиклезы в очереди: ${C.violet(files.length)}`);
+      } else {
+        console.log(`  Эпиклезы в очереди: 0`);
+      }
+      console.log();
+      break;
+    }
+
+    default:
+      console.error(`Неизвестная команда: ${cmd}`);
+      help();
+      process.exit(1);
+  }
+} catch (e) {
+  console.error('Ошибка:', e.message);
+  process.exit(1);
+}

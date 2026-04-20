@@ -4,6 +4,9 @@
   "description": "Gift Ontology — онтология дара. Не тень, а источник.",
   "type": "module",
   "main": "src/index.js",
+  "bin": {
+    "gift": "bin/gift"
+  },
   "exports": {
     ".": "./src/index.js",
     "./core": "./src/core/index.js",
