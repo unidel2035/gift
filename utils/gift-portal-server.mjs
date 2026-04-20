@@ -13,9 +13,10 @@
  */
 
 import { createServer }          from 'node:http';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join }         from 'node:path';
 import { fileURLToPath }         from 'node:url';
+import { URL as NodeURL }        from 'node:url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT  = join(__dir, '..');
@@ -55,8 +56,8 @@ async function proxyAnamnesis(res, subpath) {
 const server = createServer(async (req, res) => {
   const url = req.url.split('?')[0];
 
-  if (url === '/' || url === '/gift-portal.html') {
-    // Инжектировать данные прямо в HTML — нет сетевых запросов от браузера
+  // Главная = чат. Старая матрица доступна по /matrix.
+  if (url === '/gift-portal.html') {
     try {
       let html   = readFileSync(join(ROOT, 'public', 'gift-portal.html'), 'utf8');
       const matrix = readFileSync(join(ROOT, 'data', 'sacred-history-W.json'), 'utf8');
@@ -99,6 +100,28 @@ const server = createServer(async (req, res) => {
   if (url === '/sobor' || url === '/sobor.html') {
     return serveHTML(res, join(ROOT, 'public', 'sobor.html'));
   }
+  // Чат — главная живая страница
+  if (url === '/' || url === '/chat' || url === '/chat.html') {
+    return serveHTML(res, join(ROOT, 'public', 'chat.html'));
+  }
+  // Матрица (старая главная) — по отдельному пути
+  if (url === '/matrix' || url === '/matrix.html') {
+    try {
+      let html   = readFileSync(join(ROOT, 'public', 'gift-portal.html'), 'utf8');
+      const matrix = readFileSync(join(ROOT, 'data', 'sacred-history-W.json'), 'utf8');
+      const acts   = readFileSync(join(ROOT, 'data', 'act-index.json'), 'utf8');
+      const inject = `<script>window.__GIFT_MATRIX__=${matrix};window.__GIFT_ACTS__=${acts};</script>`;
+      html = html.replace('</head>', inject + '\n</head>');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(html);
+    } catch {
+      return serveHTML(res, join(ROOT, 'public', 'gift-portal.html'));
+    }
+  }
+  // SSE-стрим для чата
+  if (url.startsWith('/api/chat/stream')) {
+    return streamChat(req, res);
+  }
   // FPGA visualizers
   if (url === '/field-toroid.html') {
     return serveHTML(res, join(ROOT, '../fpga/simulator/field-toroid.html'));
@@ -117,6 +140,98 @@ const server = createServer(async (req, res) => {
 
   res.writeHead(404); res.end('Not found');
 });
+
+// ── Чат-стрим (SSE) ───────────────────────────────────────────────
+async function streamChat(req, res) {
+  const u = new NodeURL(req.url, `http://${req.headers.host}`);
+  const question = u.searchParams.get('q') || '';
+  const mode     = u.searchParams.get('mode') || 'live';   // live | static
+  if (!question.trim()) { res.writeHead(400); return res.end('q required'); }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { PolyphonyOrchestrator, VoiceSource } = await import('./polyphony-orchestrator.mjs');
+    const o = new PolyphonyOrchestrator({ parallel: true });
+
+    if (mode === 'static') {
+      o.addSource(VoiceSource.static({ persona: 'Разведчик', logos: 'para',
+        content: '[static] различим слои вопроса прежде ответа.' }));
+      o.addSource(VoiceSource.static({ persona: 'Критик', logos: 'kata',
+        content: '[static] это вопрос или уже скрытое утверждение?' }));
+      o.addSource(VoiceSource.static({ persona: 'Старший', logos: 'hyper',
+        content: '[static] техническое или богословское — ответ зависит от уровня.' }));
+    } else {
+      o.addSource(VoiceSource.claudeSubagent('Explore', {
+        persona: 'Разведчик', logos: 'para', timeout: 120_000,
+        promptWrap: q => `Ты — Разведчик. Logos para. Вопрос: ${q}\nОтвет 2-4 предложения, исследуй контекст.`,
+      }));
+      o.addSource(VoiceSource.claudeSubagent('code-reviewer', {
+        persona: 'Критик', logos: 'kata', timeout: 120_000,
+        promptWrap: q => `Ты — Критик. Logos kata. Вопрос: ${q}\nОспорь очевидное. 2-4 предложения.`,
+      }));
+      o.addSource(VoiceSource.claudeSubagent('Plan', {
+        persona: 'Старший', logos: 'hyper', timeout: 120_000,
+        promptWrap: q => `Ты — Старший. Logos hyper. Вопрос: ${q}\nРазличи суть. 2-4 предложения.`,
+      }));
+    }
+
+    const t0 = Date.now();
+    send('start', {
+      question, mode,
+      sources: o.sources.map(s => ({ persona: s.persona, logos: s.logos })),
+    });
+
+    const poly = await o.ask(question, {
+      onVoice(v) {
+        send('voice', {
+          persona: v.persona, logos: v.logos, content: v.content,
+          elapsedSec: parseFloat(((Date.now() - t0) / 1000).toFixed(1)),
+        });
+      },
+    });
+    const elapsed = parseFloat(((Date.now() - t0) / 1000).toFixed(1));
+
+    send('done', {
+      dominant: poly.dominant ? { persona: poly.dominant.persona, logos: poly.dominant.logos } : null,
+      apophatic: !!poly.apophatic,
+      silent: !!poly.silent,
+      silenceReason: poly.silenceReason || null,
+      elapsedSec: elapsed,
+    });
+
+    // Персист: тот же формат что ask-sobor.mjs
+    try {
+      const dir = join(ROOT, 'data/conciliar-swe');
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const id = `sobor-${Date.now()}`;
+      writeFileSync(join(dir, `${id}.json`), JSON.stringify({
+        id, kind: 'sobor', question, mode, at: new Date().toISOString(),
+        elapsedSec: elapsed,
+        voices: (poly.voices || []).map(v => ({
+          persona: v.persona, logos: v.logos, authority: v.authority, content: v.content,
+        })),
+        dominant: poly.dominant ? { persona: poly.dominant.persona, logos: poly.dominant.logos } : null,
+        apophatic: !!poly.apophatic,
+        silent: !!poly.silent,
+        via: 'chat',
+      }, null, 2));
+    } catch {}
+
+    res.end();
+  } catch (e) {
+    send('error', { message: e.message });
+    res.end();
+  }
+}
 
 function serveJSON_data(res, data) {
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
