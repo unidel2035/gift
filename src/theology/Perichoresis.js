@@ -55,10 +55,27 @@ const HYPOSTATIC_IDENTITY = new Set([
   'Сын→Христос', 'Христос→Сын',
 ]);
 
+// ── Telos-узлы: к ним идёт всё, они не peer-nodes ──
+// Голос Критика на соборе #229: «Христос — не узел, а горизонт». Каждый акт
+// тварного лица через _koinon анафорически обращён к Христу (Мф 25:40 —
+// «сделали одному из сих меньших — Мне»). Пустыня X→{Христос/Отец/Сын/Дух}
+// где X — тварное лицо — не дефект записи, а структурная анафоричность.
+const TELOS_NODES = new Set(['Христос', 'Отец', 'Сын', 'Дух']);
+
+// Лица-тварные, чьи акты через _koinon уходят к telos-nodes.
+// Явно перечисляем, чтобы машинные персоны (_ci, _test, ...) не попадали сюда.
+const ANAGOGIC_CREATURES = new Set([
+  'Дионисий', 'ОтецСергий', 'Адам', 'Ева', 'Мария',
+  '_claude', '_executor', '_questioner', '_witness', '_discerner',
+  'Хранитель', 'Пророк', 'Свидетель',
+]);
+
 export const PERICHORETIC_KIND   = 'perichoresis';
 export const HYPOSTATIC_KIND     = 'hypostatic_identity';
 export const REAL_DESERT_KIND    = 'desert';
 export const ECONOMIC_KIND       = 'economic_missing';  // пустыня в икономии — реальный дефект
+export const TELOS_ANAGOGIC_KIND = 'telos_anagogic';    // X→telos, X — тварное
+export const DIVINE_ECONOMY_KIND = 'divine_economy';    // telos→X: это не пустыня, а икономия
 
 const _declared = new Map();  // runtime-объявленные perichoretic-нити
 
@@ -100,6 +117,33 @@ export function classify({ from, to }) {
 
   if (_declared.has(k)) {
     return { ..._declared.get(k), kind: PERICHORETIC_KIND };
+  }
+
+  // Анагогика: тварное лицо → telos-узел.
+  // «Когда вы сделали одному из сих меньших — сделали Мне» (Мф 25:40).
+  // Каждый акт к _koinon/общине — анафорически дар Христу.
+  if (TELOS_NODES.has(to) && ANAGOGIC_CREATURES.has(from)) {
+    return {
+      kind: TELOS_ANAGOGIC_KIND,
+      rationale: `${from}→${to}: ${to} — не peer-node, а telos. Всякий акт ${from} ` +
+                 `через κοινόν анафорически принесён ${to} (Мф 25:40). ` +
+                 `Пустыня ложноположительна: анафора не видна DesertScanner, ` +
+                 `но «Дух ходатайствует воздыханиями неизречёнными» (Рим 8:26) именно в ней.`,
+      reversible: false,
+    };
+  }
+
+  // Икономия: telos-узел → тварное. Это не пустыня в смысле дефекта записи —
+  // это направление кенотического нисхождения. Требует отдельного свидетельства
+  // (гимнография, икона, литургический текст), но не автозакрытия.
+  if (TELOS_NODES.has(from) && ANAGOGIC_CREATURES.has(to)) {
+    return {
+      kind: DIVINE_ECONOMY_KIND,
+      rationale: `${from}→${to}: направление божественной икономии (нисхождение). ` +
+                 `Не пустыня в смысле дефицита, а ожидание свидетельства — ` +
+                 `литургической памяти об уже-совершённом акте.`,
+      reversible: false,
+    };
   }
 
   return {
@@ -151,13 +195,14 @@ export function resolveDesert(from, to) {
   const c = classify({ from, to });
   if (c.kind === REAL_DESERT_KIND) return null;
 
-  return {
-    kind: c.kind,
-    rationale: c.rationale,
-    resolution: c.kind === HYPOSTATIC_KIND
-      ? `закрыть вопрошание: ${from} и ${to} — одна ипостась`
-      : `закрыть вопрошание: ${from}↔${to} перечислена как perichoretic`,
-  };
+  const resolution = {
+    [HYPOSTATIC_KIND]:     `закрыть вопрошание: ${from} и ${to} — одна ипостась`,
+    [PERICHORETIC_KIND]:   `закрыть вопрошание: ${from}↔${to} перечислена как perichoretic`,
+    [TELOS_ANAGOGIC_KIND]: `закрыть вопрошание: ${to} — telos-узел, акты ${from} анафорически принесены`,
+    [DIVINE_ECONOMY_KIND]: `оставить открытым или трансформировать в issue "свидетельство об икономии ${from}→${to}"`,
+  }[c.kind];
+
+  return { kind: c.kind, rationale: c.rationale, resolution };
 }
 
 // ── Богословская страховка ──

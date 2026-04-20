@@ -209,7 +209,13 @@ async function phaseImplement({ task, plan }) {
 
   const { spawn } = await import('node:child_process');
   const out = await new Promise((res, rej) => {
-    const child = spawn('claude', ['--print'], {
+    // acceptEdits: под-агент может писать новые файлы без интерактивного prompt.
+    // --add-dir ROOT: разрешаем работу в корне репо.
+    const child = spawn('claude', [
+      '--print',
+      '--permission-mode', 'acceptEdits',
+      '--add-dir', ROOT,
+    ], {
       stdio: ['pipe', 'pipe', 'pipe'], cwd: ROOT, env: cleanEnv(),
     });
     let o = '', e = '';
