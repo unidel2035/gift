@@ -1,0 +1,42 @@
+[
+  {
+    "id": "intercession-1776688546189-1",
+    "at": "2026-04-20T12:35:46.189Z",
+    "intercessor": "Дионисий",
+    "beneficiary": "Ева",
+    "reason": "кризис общения",
+    "weight": 8,
+    "pair": [
+      {
+        "giverId": "Дионисий",
+        "receiverId": "_abyss",
+        "type": "intercession",
+        "weight": 8,
+        "irreversible": true,
+        "beneficiary": "Ева",
+        "linkedFor": "Ева",
+        "intercessionId": "intercession-1776688546189-1",
+        "reason": "кризис общения",
+        "mode": "kenotic",
+        "at": 1776688546189,
+        "source": "Intercession.pray"
+      },
+      {
+        "giverId": "_abyss",
+        "receiverId": "Ева",
+        "type": "grace",
+        "weight": 7,
+        "irreversible": true,
+        "throughIntercessor": "Дионисий",
+        "intercessionId": "intercession-1776688546189-1",
+        "reason": "кризис общения",
+        "at": 1776688546190,
+        "source": "abyss",
+        "giver": null,
+        "traceable": false,
+        "_fromAbyss": true,
+        "_abyssWitness": "giver: null — не «без дарителя», а «Даритель (Троица) за пределами системы» (Ин 3:8)"
+      }
+    ]
+  }
+]

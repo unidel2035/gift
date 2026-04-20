@@ -69,6 +69,15 @@
   .sobor-result.dominant { color: var(--gold); }
   .sobor-result.apophatic { color: var(--violet); }
 
+  .action {
+    background: var(--panel-2); padding: 10px 14px; margin-bottom: 8px;
+    border-radius: 6px; font-size: 13px; font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    white-space: pre-wrap; line-height: 1.5; border-left: 2px solid var(--gold);
+  }
+  .action.stderr { color: var(--kata); border-left-color: var(--kata); }
+  .action.file { color: var(--para); border-left-color: var(--para); font-size: 12px; max-height: 400px; overflow: auto; }
+  .action.text { color: var(--fg); border-left-color: var(--hyper); font-family: inherit; }
+
   .compose {
     border-top: 1px solid #2a2834; padding: 14px 20px; background: var(--panel);
     display: flex; gap: 10px; max-width: 860px; margin: 0 auto; width: 100%;
@@ -109,7 +118,9 @@
     <div class="hint">
       Напиши вопрос — соберётся собор из трёх лиц:<br>
       <code>Разведчик</code> (para) · <code>Критик</code> (kata) · <code>Старший</code> (hyper)<br><br>
-      Живой режим — 30–60 сек, голоса приходят по одному.
+      Команды (собор действует):<br>
+      <code>/help</code> · <code>/act &lt;задача&gt;</code> · <code>/swe 229</code> · <code>/intercede Дионисий за Ева (причина)</code><br>
+      <code>/read path</code> · <code>/search pattern</code> · <code>/git status</code> · <code>/run echo hi</code>
     </div>
   </div>
 
@@ -175,14 +186,30 @@ async function ask(ev) {
 
   es.addEventListener('start', (e) => {
     const d = JSON.parse(e.data);
-    $(headId).innerHTML = `⟳ Собор собирается <span class="tick">· ${d.sources.map(s => s.persona).join(' · ')}</span>`;
-    for (const s of d.sources) {
-      const slot = document.createElement('div');
-      slot.className = 'voice-pending';
-      slot.innerHTML = `<span class="dot"></span> ${esc(s.persona)} <span class="logos" style="color:var(--dim);font-size:11px">(${s.logos}) думает...</span>`;
-      pendingBox.appendChild(slot);
-      waitingSlots[s.persona] = slot;
+    if (d.kind === 'command') {
+      $(headId).innerHTML = `▶ /${d.cmd} <span class="tick">${esc(d.args || '')}</span>`;
+    } else {
+      $(headId).innerHTML = `⟳ Собор собирается <span class="tick">· ${d.sources.map(s => s.persona).join(' · ')}</span>`;
+      for (const s of d.sources) {
+        const slot = document.createElement('div');
+        slot.className = 'voice-pending';
+        slot.innerHTML = `<span class="dot"></span> ${esc(s.persona)} <span class="logos" style="color:var(--dim);font-size:11px">(${s.logos}) думает...</span>`;
+        pendingBox.appendChild(slot);
+        waitingSlots[s.persona] = slot;
+      }
     }
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('action', (e) => {
+    const a = JSON.parse(e.data);
+    const cls = a.kind === 'stderr' ? 'stderr' : a.kind === 'file' ? 'file' : a.kind === 'text' ? 'text' : '';
+    const header = a.path ? `<div style="opacity:0.7;margin-bottom:6px">${esc(a.path)}</div>` : '';
+    const body = esc(a.text || a.content || '');
+    const el = document.createElement('div');
+    el.className = `action ${cls}`;
+    el.innerHTML = header + body;
+    pendingBox.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
   });
 
@@ -208,9 +235,14 @@ async function ask(ev) {
 
   es.addEventListener('done', (e) => {
     const d = JSON.parse(e.data);
-    // remove any remaining pending slots
     for (const slot of Object.values(waitingSlots)) slot.remove();
-    $(headId).innerHTML = `✓ Собор завершён <span class="tick">· ${d.elapsedSec}s</span>`;
+    const head = $(headId);
+    const current = head.textContent || '';
+    if (current.startsWith('▶')) {
+      head.innerHTML = `✓ завершено${d.exitCode != null ? ` (код ${d.exitCode})` : ''}`;
+    } else {
+      head.innerHTML = `✓ Собор завершён <span class="tick">· ${d.elapsedSec}s</span>`;
+    }
 
     let resultCls = '', resultText = '';
     if (d.dominant) {

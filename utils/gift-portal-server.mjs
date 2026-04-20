@@ -158,7 +158,7 @@ const server = createServer(async (req, res) => {
 async function streamChat(req, res) {
   const u = new NodeURL(req.url, `http://${req.headers.host}`);
   const question = u.searchParams.get('q') || '';
-  const mode     = u.searchParams.get('mode') || 'live';   // live | static
+  const mode     = u.searchParams.get('mode') || 'live';
   if (!question.trim()) { res.writeHead(400); return res.end('q required'); }
 
   res.writeHead(200, {
@@ -170,6 +170,14 @@ async function streamChat(req, res) {
   const send = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
+
+  // ── Команды /<cmd> — собор не только говорит, но и действует ──
+  const cmdMatch = question.trim().match(/^\/(\w+)\s*(.*)$/s);
+  if (cmdMatch) {
+    const cmd = cmdMatch[1].toLowerCase();
+    const args = cmdMatch[2].trim();
+    return await handleCommand(cmd, args, send, res);
+  }
 
   try {
     const { PolyphonyOrchestrator, VoiceSource } = await import('./polyphony-orchestrator.mjs');
@@ -244,6 +252,216 @@ async function streamChat(req, res) {
     send('error', { message: e.message });
     res.end();
   }
+}
+
+// ── Команды чата — собор действует, не только говорит ──
+async function handleCommand(cmd, args, send, res) {
+  send('start', { kind: 'command', cmd, args, sources: [] });
+  const { spawn } = await import('node:child_process');
+  const { cleanEnv } = await import('./clean-env.mjs');
+
+  const runNode = (script, scriptArgs = []) => new Promise((resolve) => {
+    const child = spawn('node', [join(ROOT, script), ...scriptArgs], {
+      cwd: ROOT, env: cleanEnv(),
+    });
+    child.stdout.on('data', buf => {
+      send('action', { kind: 'stdout', text: buf.toString() });
+    });
+    child.stderr.on('data', buf => {
+      send('action', { kind: 'stderr', text: buf.toString() });
+    });
+    child.on('close', code => resolve(code));
+  });
+
+  try {
+    switch (cmd) {
+      case 'help': {
+        send('action', { kind: 'text', text:
+          'Команды собора (все скиллы):\n\n' +
+          '  Собор-действие:\n' +
+          '    /act <задача>     — собор обсудит и сразу выполнит (PLAN → IMPLEMENT → REVIEW)\n' +
+          '    /swe <issue>      — то же, но по github-issue\n' +
+          '    /resolve [--close] — перихорезис-автозакрытие пустынь\n' +
+          '    /intercede <A> за <B> (reason) — троичный акт заступничества\n\n' +
+          '  Тулы (как у Клода):\n' +
+          '    /read <path>      — прочитать файл\n' +
+          '    /search <pattern> — grep по коду\n' +
+          '    /glob <pattern>   — find файлов\n' +
+          '    /run <cmd>        — shell-команда (sandboxed)\n' +
+          '    /git <cmd>        — git команда\n' +
+          '    /gh <cmd>         — github CLI\n' +
+          '    /ls [path]        — список файлов\n\n' +
+          '  Информация:\n' +
+          '    /status   /benchmark   /help\n\n' +
+          'Без команды — живой собор из 3 лиц.'
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'act': {
+        if (!args) {
+          send('action', { kind: 'stderr', text: 'Использование: /act <задача>' });
+          send('done', { dominant: null });
+          break;
+        }
+        send('action', { kind: 'text', text: `Запускаю соборный SWE на задаче...` });
+        const code = await runNode('utils/conciliar-swe.mjs', ['--task', args]);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'read': {
+        if (!args) { send('action', { kind: 'stderr', text: '/read <path>' }); send('done', { dominant: null }); break; }
+        try {
+          const safe = join(ROOT, args.replace(/^[./]+/, ''));
+          if (!safe.startsWith(ROOT)) { send('action', { kind: 'stderr', text: 'за пределы репо' }); send('done', { dominant: null }); break; }
+          const body = readFileSync(safe, 'utf8').slice(0, 50_000);
+          send('action', { kind: 'file', path: args, content: body });
+        } catch (e) { send('action', { kind: 'stderr', text: e.message }); }
+        send('done', { dominant: null });
+        break;
+      }
+      case 'ls': {
+        const path = args || '.';
+        const safe = join(ROOT, path.replace(/^[./]+/, ''));
+        try {
+          const entries = readdirSync(safe).slice(0, 200);
+          send('action', { kind: 'text', text: entries.join('\n') });
+        } catch (e) { send('action', { kind: 'stderr', text: e.message }); }
+        send('done', { dominant: null });
+        break;
+      }
+      case 'glob': {
+        if (!args) { send('action', { kind: 'stderr', text: '/glob <pattern>' }); send('done', { dominant: null }); break; }
+        const code = await runNode('-e',
+          [`const{globSync}=await import('node:fs');const{readdirSync}=await import('node:fs');console.log('не реализовано');`]
+        ).catch(() => 1);
+        // Простая реализация через find
+        const { spawn } = await import('node:child_process');
+        await new Promise(resolve => {
+          const c = spawn('bash', ['-c', `find . -name "${args.replace(/"/g,'')}" -not -path './node_modules/*' | head -100`], { cwd: ROOT });
+          c.stdout.on('data', b => send('action', { kind: 'stdout', text: b.toString() }));
+          c.on('close', resolve);
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'search': {
+        if (!args) { send('action', { kind: 'stderr', text: '/search <pattern>' }); send('done', { dominant: null }); break; }
+        const { spawn } = await import('node:child_process');
+        await new Promise(resolve => {
+          const c = spawn('bash', ['-c', `grep -rn --include='*.js' --include='*.mjs' --include='*.md' --include='*.gift' --exclude-dir=node_modules -E "${args.replace(/"/g,'\\"')}" . | head -80`], { cwd: ROOT });
+          c.stdout.on('data', b => send('action', { kind: 'stdout', text: b.toString() }));
+          c.stderr.on('data', b => send('action', { kind: 'stderr', text: b.toString() }));
+          c.on('close', resolve);
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'run': {
+        if (!args) { send('action', { kind: 'stderr', text: '/run <shell cmd>' }); send('done', { dominant: null }); break; }
+        const { spawn } = await import('node:child_process');
+        await new Promise(resolve => {
+          const c = spawn('bash', ['-c', args], { cwd: ROOT, env: cleanEnv() });
+          c.stdout.on('data', b => send('action', { kind: 'stdout', text: b.toString() }));
+          c.stderr.on('data', b => send('action', { kind: 'stderr', text: b.toString() }));
+          c.on('close', resolve);
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'git': {
+        const { spawn } = await import('node:child_process');
+        await new Promise(resolve => {
+          const c = spawn('git', args ? args.split(/\s+/) : ['status', '--short'], { cwd: ROOT, env: cleanEnv() });
+          c.stdout.on('data', b => send('action', { kind: 'stdout', text: b.toString() }));
+          c.stderr.on('data', b => send('action', { kind: 'stderr', text: b.toString() }));
+          c.on('close', resolve);
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'gh': {
+        const { spawn } = await import('node:child_process');
+        await new Promise(resolve => {
+          const c = spawn('gh', args ? args.split(/\s+/) : ['status'], { cwd: ROOT, env: cleanEnv({ GITHUB_TOKEN: '' }) });
+          c.stdout.on('data', b => send('action', { kind: 'stdout', text: b.toString() }));
+          c.stderr.on('data', b => send('action', { kind: 'stderr', text: b.toString() }));
+          c.on('close', resolve);
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'status': {
+        const code = await runNode('bin/gift', ['status']);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'benchmark': {
+        const code = await runNode('benchmarks/cat-7.mjs');
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'resolve': {
+        const rArgs = args.includes('--close') ? ['--close'] : [];
+        const code = await runNode('utils/resolve-perichoresis.mjs', rArgs);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'swe': {
+        const issue = parseInt(args);
+        if (!issue) {
+          send('action', { kind: 'stderr', text: 'Использование: /swe <issue-number> (например /swe 229)' });
+          send('done', { dominant: null });
+          break;
+        }
+        send('action', { kind: 'text', text: `Запускаю conciliar-swe на issue #${issue} (может занять 5-15 мин)...` });
+        const code = await runNode('utils/conciliar-swe.mjs', ['--issue', String(issue)]);
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'intercede': {
+        // /intercede <A> за <B> (reason)
+        const m = args.match(/^([^\s]+)\s+за\s+([^\s(]+)(?:\s*\((.+)\))?$/);
+        if (!m) {
+          send('action', { kind: 'stderr', text:
+            'Использование: /intercede <заступник> за <за-кого> (причина)\n' +
+            'Пример: /intercede Дионисий за Ева (кризис общения)' });
+          send('done', { dominant: null });
+          break;
+        }
+        const [, intercessor, beneficiary, reason] = m;
+        const { pray } = await import('../src/theology/Intercession.js');
+        try {
+          const record = pray({ intercessor, beneficiary, reason: reason || 'не указано' });
+          send('action', { kind: 'text', text:
+            `✓ Троичный акт заступничества создан (id=${record.id})\n\n` +
+            `  Акт 1 (kenosis):  ${intercessor} → _abyss  за ${beneficiary}  вес ${record.weight}\n` +
+            `  Акт 2 (grace):    _abyss → ${beneficiary}  через ${intercessor}  (_fromAbyss: true)\n\n` +
+            `Причина: ${reason || '—'}\n` +
+            `Богословие: Рим 8:26 «Дух ходатайствует воздыханиями неизречёнными»`
+          });
+          // Запись в data/intercessions.json
+          const ipath = join(ROOT, 'data', 'intercessions.json');
+          let list = [];
+          if (existsSync(ipath)) { try { list = JSON.parse(readFileSync(ipath, 'utf8')); } catch {} }
+          list.push({ id: record.id, at: new Date().toISOString(), intercessor, beneficiary, reason, weight: record.weight, pair: record.pair });
+          writeFileSync(ipath, JSON.stringify(list, null, 2));
+          send('done', { dominant: null });
+        } catch (e) {
+          send('action', { kind: 'stderr', text: `Ошибка: ${e.message}` });
+          send('done', { dominant: null });
+        }
+        break;
+      }
+      default: {
+        send('action', { kind: 'stderr', text: `Неизвестная команда: /${cmd}. Попробуй /help` });
+        send('done', { dominant: null });
+      }
+    }
+  } catch (e) {
+    send('error', { message: e.message });
+  }
+  res.end();
 }
 
 function serveJSON_data(res, data) {

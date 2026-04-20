@@ -25,7 +25,8 @@
         "money",       "code",        "hope",        "kenosis",
         "incarnation", "gift",        "witness",     "sacrifice",
         "resurrection","grace",       "question",    "covenant",
-        "offering",    "labour",      "prayer",      "anamnesis"
+        "offering",    "labour",      "prayer",      "anamnesis",
+        "intercession"
       ],
       "description": "Тип дара — богословская категория"
     },
