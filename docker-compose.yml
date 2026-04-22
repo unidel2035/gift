@@ -1,0 +1,44 @@
+# docker-compose.yml — полный стек онтологии дара.
+# Запуск:     docker compose up -d
+# Логи:       docker compose logs -f gift
+# Остановка:  docker compose down
+#
+# Службы:
+#   gift-portal  — SSE-чат + dashboard (http://localhost:3700)
+#   gift-nous    — Nous-сервер памяти  (http://localhost:8089)
+#
+# Nous fallback: если не поднят — portal продолжает работать на локальных
+# файлах (data/sacred-history-W.json, data/conciliar-swe/).
+
+services:
+  gift-nous:
+    build: .
+    container_name: gift-nous
+    command: node utils/nous-server.mjs
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8089
+    restart: unless-stopped
+
+  gift-portal:
+    build: .
+    container_name: gift-portal
+    command: node utils/gift-portal-server.mjs
+    ports:
+      - "3700:3700"
+    volumes:
+      - ./data:/app/data
+      - ./specs:/app/specs:ro
+    environment:
+      - PORT=3700
+      - NOUS_URL=http://gift-nous:8089
+    depends_on:
+      - gift-nous
+    restart: unless-stopped
+
+# Замечание: /api/chat/stream внутри контейнера не сможет запускать
+# claude --print (CLI не в образе). Для живого собора нужен local-mode
+# или установка Claude CLI в образ (см. deploy/README.md).

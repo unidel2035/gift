@@ -335,7 +335,7 @@ async function handleCommand(cmd, args, send, res) {
           '    /gh <cmd>         — github CLI\n' +
           '    /ls [path]        — список файлов\n\n' +
           '  Информация:\n' +
-          '    /status   /benchmark   /help\n\n' +
+          '    /status   /benchmark   /bench [--n 5]   /help\n\n' +
           'Без команды — живой собор из 3 лиц.'
         });
         send('done', { dominant: null });
@@ -441,6 +441,15 @@ async function handleCommand(cmd, args, send, res) {
       }
       case 'benchmark': {
         const code = await runNode('benchmarks/cat-7.mjs');
+        send('done', { dominant: null, exitCode: code });
+        break;
+      }
+      case 'bench': {
+        // /bench — gift-bench (SWE-bench-like). По умолчанию dry n=5.
+        const parts = args.split(/\s+/).filter(Boolean);
+        const bArgs = parts.length ? parts : ['--mode', 'dry', '--n', '5'];
+        send('action', { kind: 'text', text: `▶ gift-bench ${bArgs.join(' ')}` });
+        const code = await runNode('utils/gift-bench.mjs', bArgs);
         send('done', { dominant: null, exitCode: code });
         break;
       }
