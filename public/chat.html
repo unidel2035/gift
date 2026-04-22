@@ -76,7 +76,23 @@
   .voice .logos { color: var(--dim); font-size: 11px; }
   .voice .elapsed { color: var(--dim); font-size: 11px; margin-left: auto; }
   .voice .dom-mark { color: var(--gold); font-size: 11px; }
-  .voice .body { font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: var(--fg); }
+  .voice .body { font-size: 14px; line-height: 1.6; color: var(--fg); }
+  .voice .body p { margin: 0 0 8px; }
+  .voice .body p:last-child { margin-bottom: 0; }
+  .voice .body h1, .voice .body h2, .voice .body h3 { margin: 10px 0 4px; color: var(--gold); font-weight: 500; }
+  .voice .body h1 { font-size: 15px; }
+  .voice .body h2 { font-size: 14px; }
+  .voice .body h3 { font-size: 13px; }
+  .voice .body ul, .voice .body ol { margin: 4px 0 8px; padding-left: 20px; }
+  .voice .body li { margin-bottom: 2px; }
+  .voice .body code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: "JetBrains Mono", Consolas, monospace; }
+  .voice .body pre { background: var(--panel-2); padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+  .voice .body pre code { background: transparent; padding: 0; }
+  .voice .body blockquote { border-left: 2px solid var(--dim); padding-left: 10px; margin: 6px 0; color: var(--dim); font-style: italic; }
+  .voice .body strong { color: var(--fg); font-weight: 500; }
+  .voice .body em { color: var(--para); font-style: italic; }
+  .voice .body a { color: var(--gold); text-decoration: underline; }
+  .voice .body hr { border: none; border-top: 1px solid #2a2834; margin: 8px 0; }
 
   .sobor-result {
     margin-top: 8px; padding: 8px 14px; font-size: 12px; color: var(--dim);
@@ -221,7 +237,7 @@ async function openSession(id) {
         msgs.insertAdjacentHTML('beforeend',
           `<div class="voice ${v.logos}">
             <div class="head"><span class="persona">${icon} ${esc(v.persona)}</span><span class="logos">${v.logos}</span></div>
-            <div class="body">${esc(v.content || '')}</div>
+            <div class="body">${md(v.content || '')}</div>
           </div>`);
       }
     }
@@ -245,6 +261,56 @@ function addEl(html) {
 
 function esc(s) {
   return (s || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+// Минимальный markdown-рендерер (без зависимостей):
+// заголовки ##/###, списки -/*/1., **bold**, *italic*, `code`, ```fenced```,
+// > blockquote, --- hr, [text](url), абзацы по пустым строкам.
+function md(s) {
+  if (!s) return '';
+  let text = esc(s);
+
+  // Fenced code blocks (до всего остального — чтобы не ломать внутреннее)
+  text = text.replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`);
+
+  // Заголовки
+  text = text.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+             .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+             .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+
+  // Blockquote (строки, начинающиеся с >)
+  text = text.replace(/^(?:&gt;\s.+\n?)+/gm, m =>
+    '<blockquote>' + m.replace(/^&gt;\s?/gm, '').trim() + '</blockquote>');
+
+  // Горизонтальная линия
+  text = text.replace(/^---+$/gm, '<hr>');
+
+  // Inline: **bold**, *italic*, `code`, [text](url)
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+             .replace(/(^|\W)\*([^*\n]+)\*(\W|$)/g, '$1<em>$2</em>$3')
+             .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+             .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Списки: unordered
+  text = text.replace(/^(?:[-*]\s+.+\n?)+/gm, m => {
+    const items = m.trim().split('\n').map(l => l.replace(/^[-*]\s+/, ''));
+    return '<ul>' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  });
+  // Numbered
+  text = text.replace(/^(?:\d+\.\s+.+\n?)+/gm, m => {
+    const items = m.trim().split('\n').map(l => l.replace(/^\d+\.\s+/, ''));
+    return '<ol>' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  });
+
+  // Абзацы: двойные переводы строк → <p>
+  const paragraphs = text.split(/\n\n+/).map(p => {
+    const t = p.trim();
+    if (!t) return '';
+    // Не оборачивать в <p> если уже block-уровень
+    if (/^<(h[1-6]|ul|ol|pre|blockquote|hr)/.test(t)) return t;
+    return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+  });
+  return paragraphs.join('');
 }
 
 function clearHint() {
@@ -360,7 +426,7 @@ async function ask(ev) {
         <span class="logos">${v.logos}</span>
         <span class="elapsed">${v.elapsedSec}s</span>
       </div>
-      <div class="body">${esc(v.content)}</div>
+      <div class="body">${md(v.content)}</div>
     </div>`;
     const wrap = document.createElement('div');
     wrap.innerHTML = html;

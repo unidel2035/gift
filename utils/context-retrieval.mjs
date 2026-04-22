@@ -18,12 +18,66 @@
 
 'use strict';
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+const OLLAMA = process.env.OLLAMA_URL || 'http://localhost:11434';
+const EMBED_MODEL = process.env.EMBED_MODEL || 'nomic-embed-text';
+const EMB_CACHE_DIR = join(ROOT, 'data', 'embeddings-cache');
+if (!existsSync(EMB_CACHE_DIR)) mkdirSync(EMB_CACHE_DIR, { recursive: true });
+
+// ── Semantic embedding через Ollama ──────────────────────────────
+let _ollamaAvailable = null;
+async function checkOllama() {
+  if (_ollamaAvailable !== null) return _ollamaAvailable;
+  try {
+    const r = await fetch(`${OLLAMA}/api/tags`, { signal: AbortSignal.timeout(1500) });
+    _ollamaAvailable = r.ok;
+  } catch { _ollamaAvailable = false; }
+  return _ollamaAvailable;
+}
+
+async function embed(text) {
+  if (!(await checkOllama())) return null;
+  try {
+    const r = await fetch(`${OLLAMA}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: EMBED_MODEL, prompt: text.slice(0, 8000) }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.embedding || null;
+  } catch { return null; }
+}
+
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  return dot / (Math.sqrt(na)*Math.sqrt(nb) + 1e-9);
+}
+
+// Embedding cache: {sha256(text): embedding}
+// Простой hash-подход: sha256 первых 300 символов текста.
+async function sha(text) {
+  const { createHash } = await import('node:crypto');
+  return createHash('sha256').update(text.slice(0, 300)).digest('hex').slice(0, 16);
+}
+async function embedCached(text) {
+  const key = await sha(text);
+  const file = join(EMB_CACHE_DIR, `${key}.json`);
+  if (existsSync(file)) {
+    try { return JSON.parse(readFileSync(file, 'utf8')); } catch {}
+  }
+  const e = await embed(text);
+  if (e) { try { writeFileSync(file, JSON.stringify(e)); } catch {} }
+  return e;
+}
 
 // ── Токенизация для наивного relevance ────────────────────────────
 function tokens(s) {
@@ -43,10 +97,14 @@ function score(query, text) {
 }
 
 // ── Прошлые соборы из журнала ─────────────────────────────────────
-function retrieveSobors(query, limit = 3) {
+async function retrieveSobors(query, limit = 3) {
   const dir = join(ROOT, 'data', 'conciliar-swe');
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+
+  const queryEmb = await embedCached(query);
+  const useSemantic = !!queryEmb;
+
   const scored = [];
   for (const f of files) {
     try {
@@ -55,12 +113,20 @@ function retrieveSobors(query, limit = 3) {
         r.question || r.task?.title || '',
         ...(r.voices || []).map(v => v.content).filter(Boolean),
       ].join(' ');
-      const s = score(query, text);
-      if (s > 0.02) scored.push({ file: f, score: s, record: r });
+
+      let s;
+      if (useSemantic) {
+        const emb = await embedCached(text.slice(0, 2000));
+        s = emb ? cosine(queryEmb, emb) : score(query, text);
+      } else {
+        s = score(query, text);
+      }
+      const threshold = useSemantic ? 0.55 : 0.02;
+      if (s > threshold) scored.push({ file: f, score: s, record: r, _semantic: useSemantic });
     } catch {}
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map(({ record, score }) => ({
+  return scored.slice(0, limit).map(({ record, score, _semantic }) => ({
     id: record.id,
     at: record.at,
     question: record.question || record.task?.title,
@@ -72,6 +138,7 @@ function retrieveSobors(query, limit = 3) {
       hint: (v.content || '').slice(0, 200),
     })),
     _score: parseFloat(score.toFixed(3)),
+    _method: _semantic ? 'semantic' : 'lexical',
   }));
 }
 
@@ -137,11 +204,12 @@ async function retrieveFromNous(query) {
 
 // ── Главная функция ───────────────────────────────────────────────
 export async function retrieveContext(question) {
-  const [sobors, acts, threads, nous] = await Promise.all([
-    Promise.resolve(retrieveSobors(question)),
+  const [sobors, acts, threads, nous, ollamaOn] = await Promise.all([
+    retrieveSobors(question),
     Promise.resolve(retrieveActs(question)),
     Promise.resolve(retrieveMatrixHints(question)),
     retrieveFromNous(question),
+    checkOllama(),
   ]);
 
   return {
@@ -154,6 +222,8 @@ export async function retrieveContext(question) {
       relevantActCount: acts.length,
       relevantThreadCount: threads.length,
       nousAvailable: !!nous,
+      semantic: ollamaOn,
+      method: ollamaOn ? 'embedding-cosine' : 'lexical-tfidf',
     },
   };
 }
