@@ -181,6 +181,20 @@ async function streamChat(req, res) {
 
   try {
     const { PolyphonyOrchestrator, VoiceSource } = await import('./polyphony-orchestrator.mjs');
+    const { retrieveContext, contextAsPrompt } = await import('./context-retrieval.mjs');
+
+    // Анамнезис: retrieval до собора. Собор отвечает, помня общину.
+    const ctx = await retrieveContext(question);
+    send('context', {
+      summary: ctx.summary,
+      sobors: ctx.sobors,
+      threads: ctx.threads,
+      acts: ctx.acts,
+    });
+    const contextPrompt = contextAsPrompt(ctx);
+    const groundedWrap = (wrap) => (q) =>
+      (contextPrompt ? `КОНТЕКСТ ОБЩИНЫ (анамнезис):\n${contextPrompt}\n\n---\n\n` : '') + wrap(q);
+
     const o = new PolyphonyOrchestrator({ parallel: true });
 
     if (mode === 'static') {
@@ -193,15 +207,15 @@ async function streamChat(req, res) {
     } else {
       o.addSource(VoiceSource.claudeSubagent('Explore', {
         persona: 'Разведчик', logos: 'para', timeout: 120_000,
-        promptWrap: q => `Ты — Разведчик. Logos para. Вопрос: ${q}\nОтвет 2-4 предложения, исследуй контекст.`,
+        promptWrap: groundedWrap(q => `Ты — Разведчик. Logos para. Вопрос: ${q}\nОтвет 2-4 предложения, используй контекст общины, если релевантен.`),
       }));
       o.addSource(VoiceSource.claudeSubagent('code-reviewer', {
         persona: 'Критик', logos: 'kata', timeout: 120_000,
-        promptWrap: q => `Ты — Критик. Logos kata. Вопрос: ${q}\nОспорь очевидное. 2-4 предложения.`,
+        promptWrap: groundedWrap(q => `Ты — Критик. Logos kata. Вопрос: ${q}\nОспорь очевидное, опираясь на прошлые решения общины. 2-4 предложения.`),
       }));
       o.addSource(VoiceSource.claudeSubagent('Plan', {
         persona: 'Старший', logos: 'hyper', timeout: 120_000,
-        promptWrap: q => `Ты — Старший. Logos hyper. Вопрос: ${q}\nРазличи суть. 2-4 предложения.`,
+        promptWrap: groundedWrap(q => `Ты — Старший. Logos hyper. Вопрос: ${q}\nРазличи, соотнеси с контекстом общины. 2-4 предложения.`),
       }));
     }
 

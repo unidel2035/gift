@@ -69,6 +69,15 @@
   .sobor-result.dominant { color: var(--gold); }
   .sobor-result.apophatic { color: var(--violet); }
 
+  .context-block {
+    background: transparent; padding: 8px 12px 10px 16px; margin-bottom: 10px;
+    border-left: 2px dashed var(--dim); font-size: 12px; color: var(--dim); line-height: 1.5;
+  }
+  .context-block .heading { color: var(--gold); margin-bottom: 4px; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .context-block ul { margin: 4px 0 6px; padding-left: 16px; }
+  .context-block li { margin-bottom: 3px; }
+  .context-block .empty-ctx { color: var(--dim); font-style: italic; }
+
   .action {
     background: var(--panel-2); padding: 10px 14px; margin-bottom: 8px;
     border-radius: 6px; font-size: 13px; font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
@@ -198,6 +207,44 @@ async function ask(ev) {
         waitingSlots[s.persona] = slot;
       }
     }
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('context', (e) => {
+    const c = JSON.parse(e.data);
+    const hasAny = (c.sobors?.length || c.acts?.length || c.threads?.length);
+    if (!hasAny) {
+      pendingBox.appendChild(Object.assign(document.createElement('div'), {
+        className: 'context-block',
+        innerHTML: '<div class="heading">анамнезис</div><div class="empty-ctx">⟨пусто⟩ — этот вопрос ещё не звучал в общине</div>',
+      }));
+      msgs.scrollTop = msgs.scrollHeight;
+      return;
+    }
+    const block = document.createElement('div');
+    block.className = 'context-block';
+    let html = '<div class="heading">анамнезис — что община уже помнит</div>';
+    if (c.sobors?.length) {
+      html += '<div>Прошлые соборы:</div><ul>';
+      for (const s of c.sobors) {
+        const when = s.at ? new Date(s.at).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }) : '';
+        const dom = s.dominant || (s.apophatic ? 'apophatic' : '⟨silent⟩');
+        html += `<li>(${when}) «${esc((s.question || '').slice(0, 70))}» → ${esc(dom)}</li>`;
+      }
+      html += '</ul>';
+    }
+    if (c.threads?.length) {
+      html += '<div>Нити матрицы:</div><ul>';
+      for (const t of c.threads) html += `<li>${esc(t.from)} → ${esc(t.to)}: вес ${t.weight}</li>`;
+      html += '</ul>';
+    }
+    if (c.acts?.length) {
+      html += '<div>Акты:</div><ul>';
+      for (const a of c.acts) html += `<li>${esc(a.from)} → ${esc(a.to)} [${esc(a.type)}]: ${esc(a.hint)}</li>`;
+      html += '</ul>';
+    }
+    block.innerHTML = html;
+    pendingBox.appendChild(block);
     msgs.scrollTop = msgs.scrollHeight;
   });
 
