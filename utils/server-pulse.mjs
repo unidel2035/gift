@@ -21,6 +21,7 @@ import { fileURLToPath } from 'url';
 import { execSync, spawnSync } from 'child_process';
 import { GiftMemory } from '../src/core/GiftMemory.js';
 import { DesertScanner, DESERT_CLASS } from '../src/core/DesertScanner.js';
+import { classify as classifyPair, REAL_DESERT_KIND } from '../src/theology/Perichoresis.js';
 
 const ROOT      = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP      = resolve(ROOT, 'data/sacred-history-W.json');
@@ -77,6 +78,14 @@ const scanner = new DesertScanner(mem, {
 });
 const deserts = scanner.scan()
   .filter(d => !SKIP_PERSONS.has(d.from) && !SKIP_PERSONS.has(d.to))
+  .filter(d => {
+    // Двойная страховка: Perichoresis.classify — не плодить троичные.
+    // Pre-commit: perichoresis / hypostatic_identity / telos_anagogic /
+    // divine_economy → НЕ создаём issue (это не пустыня).
+    const cls = classifyPair({ from: d.from, to: d.to });
+    if (cls.kind !== REAL_DESERT_KIND) return false;
+    return true;
+  })
   .filter(d => {
     // Пропустить если уже есть issue с этой парой
     const titleKey = `${d.from}→${d.to}`;

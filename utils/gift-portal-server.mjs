@@ -96,6 +96,16 @@ const server = createServer(async (req, res) => {
   if (url === '/api/epiclesis') {
     return serveJSON_data(res, listEpiclesis());
   }
+  // Чат-сессии (multi-turn истории)
+  if (url === '/api/chat-sessions') {
+    return serveJSON_data(res, listChatSessions());
+  }
+  if (url.startsWith('/api/chat-session/')) {
+    const id = decodeURIComponent(url.slice('/api/chat-session/'.length));
+    const sess = readChatSession(id);
+    if (!sess) { res.writeHead(404); return res.end('Session not found'); }
+    return serveJSON_data(res, sess);
+  }
   // Соборная страница-дашборд
   if (url === '/sobor' || url === '/sobor.html') {
     return serveHTML(res, join(ROOT, 'public', 'sobor.html'));
@@ -159,6 +169,7 @@ async function streamChat(req, res) {
   const u = new NodeURL(req.url, `http://${req.headers.host}`);
   const question = u.searchParams.get('q') || '';
   const mode     = u.searchParams.get('mode') || 'live';
+  const sessionId = u.searchParams.get('session') || null;
   if (!question.trim()) { res.writeHead(400); return res.end('q required'); }
 
   res.writeHead(200, {
@@ -242,6 +253,22 @@ async function streamChat(req, res) {
       silenceReason: poly.silenceReason || null,
       elapsedSec: elapsed,
     });
+
+    // Multi-turn persist: если есть sessionId, добавить ход в историю
+    if (sessionId) {
+      appendChatTurn(sessionId, {
+        at: new Date().toISOString(),
+        user: question,
+        mode,
+        voices: (poly.voices || []).map(v => ({
+          persona: v.persona, logos: v.logos, content: v.content, authority: v.authority,
+        })),
+        dominant: poly.dominant ? { persona: poly.dominant.persona, logos: poly.dominant.logos } : null,
+        apophatic: !!poly.apophatic,
+        silent: !!poly.silent,
+        elapsedSec: elapsed,
+      });
+    }
 
     // Персист: тот же формат что ask-sobor.mjs
     try {
@@ -547,6 +574,54 @@ function readSession(id) {
   }
   return null;
 }
+// ── Чат-сессии (многоходовой диалог) ──────────────────────────
+function chatSessionsDir() {
+  const d = join(ROOT, 'data', 'chat-sessions');
+  if (!existsSync(d)) mkdirSync(d, { recursive: true });
+  return d;
+}
+function listChatSessions() {
+  const dir = chatSessionsDir();
+  const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort().reverse();
+  const out = [];
+  for (const f of files.slice(0, 50)) {
+    try {
+      const s = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      const last = s.turns?.[s.turns.length - 1];
+      out.push({
+        id: s.id, at: s.updatedAt || s.createdAt,
+        title: s.title || (s.turns?.[0]?.user || '').slice(0, 60),
+        turnCount: s.turns?.length || 0,
+        lastAt: last?.at || null,
+      });
+    } catch {}
+  }
+  return { sessions: out };
+}
+function readChatSession(id) {
+  const f = join(chatSessionsDir(), `${id}.json`);
+  if (!existsSync(f)) return null;
+  try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return null; }
+}
+function writeChatSession(s) {
+  s.updatedAt = new Date().toISOString();
+  writeFileSync(join(chatSessionsDir(), `${s.id}.json`), JSON.stringify(s, null, 2));
+}
+function appendChatTurn(sessionId, turn) {
+  let s = readChatSession(sessionId);
+  if (!s) {
+    s = {
+      id: sessionId,
+      createdAt: new Date().toISOString(),
+      title: (turn.user || '').slice(0, 60),
+      turns: [],
+    };
+  }
+  s.turns = s.turns || [];
+  s.turns.push(turn);
+  writeChatSession(s);
+}
+
 function listEpiclesis() {
   const inbox  = join(ROOT, 'data', 'epiclesis-inbox');
   const outbox = join(ROOT, 'data', 'epiclesis-outbox');
