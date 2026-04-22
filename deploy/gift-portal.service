@@ -1,0 +1,28 @@
+[Unit]
+Description=Gift Portal — conciliar chat + dashboard
+Documentation=https://github.com/unidel2035/gift
+After=network.target gift-nous.service
+Wants=gift-nous.service
+
+[Service]
+Type=simple
+User=hive
+Group=hive
+WorkingDirectory=/home/hive/gift
+ExecStart=/usr/bin/node /home/hive/gift/utils/gift-portal-server.mjs
+Restart=on-failure
+RestartSec=5s
+Environment=PORT=3700
+Environment=NOUS_URL=http://localhost:8089
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/hive/gift/data
+
+[Install]
+WantedBy=multi-user.target
