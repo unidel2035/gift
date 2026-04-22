@@ -12,7 +12,7 @@ WorkingDirectory=/home/hive/gift
 ExecStart=/usr/bin/node /home/hive/gift/utils/gift-portal-server.mjs
 Restart=on-failure
 RestartSec=5s
-Environment=PORT=3700
+Environment=PORT=3701
 Environment=NOUS_URL=http://localhost:8089
 Environment=NODE_ENV=production
 StandardOutput=journal
