@@ -96,6 +96,23 @@ const server = createServer(async (req, res) => {
   if (url === '/api/epiclesis') {
     return serveJSON_data(res, listEpiclesis());
   }
+  // Prometheus metrics — observability
+  if (url === '/metrics') {
+    return servePrometheus(res);
+  }
+  // Federation — peer protocol (koinon-federation/1.0)
+  if (url === '/federation/descriptor') {
+    return serveJSON_data(res, federationDescriptor());
+  }
+  if (url === '/federation/matrix') {
+    return serveJSON_data(res, federationMatrixSnap());
+  }
+  if (url === '/federation/connect' && req.method === 'POST') {
+    return handleFederationConnect(req, res);
+  }
+  if (url === '/api/federation/peers') {
+    return serveJSON_data(res, loadPeers());
+  }
   // Чат-сессии (multi-turn истории)
   if (url === '/api/chat-sessions') {
     return serveJSON_data(res, listChatSessions());
@@ -325,7 +342,11 @@ async function handleCommand(cmd, args, send, res) {
           '    /horizon <задача>    — долгогоризонтный декомпозер (10-16 шагов)\n' +
           '    /audit <file>        — соборный security reviewer\n' +
           '    /resolve [--close]   — перихорезис-автозакрытие пустынь\n' +
-          '    /intercede A за B (reason) — троичный акт заступничества\n\n' +
+          '    /intercede A за B (reason) — троичный акт заступничества\n' +
+          '    /offer A → B [type] [вес] текст  — приношение (PENDING)\n' +
+          '    /consent <act-id>    — получатель принимает (→ RECEIVED)\n' +
+          '    /decline <act-id> причина — получатель отказывает\n' +
+          '    /federation list|whoami|connect <url>  — peer-общины\n\n' +
           '  Тулы (как у Клода):\n' +
           '    /read <path>      — прочитать файл\n' +
           '    /search <pattern> — grep по коду\n' +
@@ -444,6 +465,143 @@ async function handleCommand(cmd, args, send, res) {
         send('done', { dominant: null, exitCode: code });
         break;
       }
+      case 'offer': {
+        // /offer Дионисий → Ева [type] [weight] content
+        const m = args.match(/^([^\s→]+)\s*→\s*([^\s]+)(?:\s+(\w+))?(?:\s+(\d+))?\s+(.+)$/);
+        if (!m) { send('action', { kind: 'stderr', text: '/offer A → B [type] [weight] содержание' }); send('done', { dominant: null }); break; }
+        const [, giver, receiver, type, weight, content] = m;
+        const { offer, THEOLOGICAL_DIFF } = await import('../src/theology/AnamneticConsent.js');
+        try {
+          const act = offer({ giver, receiver, type: type || 'gift', weight: weight ? parseInt(weight) : 5, content });
+          // persist
+          const path = join(ROOT, 'data', 'pending-consents.json');
+          let list = [];
+          if (existsSync(path)) { try { list = JSON.parse(readFileSync(path, 'utf8')); } catch {} }
+          list.push(act);
+          writeFileSync(path, JSON.stringify(list, null, 2));
+          send('action', { kind: 'text', text:
+            `⏳ Приношение создано — **фаза: PENDING**\n\n` +
+            `  **id:** \`${act.id}\`\n  ${giver} → ${receiver}  [${act.type}, вес ${act.weight}]\n  «${content.slice(0, 200)}»\n\n` +
+            `*Дар станет необратимым только после ${receiver} даст согласие:*\n` +
+            `  \`/consent ${act.id}\` — принять\n` +
+            `  \`/decline ${act.id} причина\` — отклонить (требует причину)`
+          });
+          send('done', { dominant: null });
+        } catch (e) { send('action', { kind: 'stderr', text: e.message }); send('done', { dominant: null }); }
+        break;
+      }
+      case 'consent': {
+        const parts = args.split(/\s+/).filter(Boolean);
+        const [actId, by] = parts;
+        if (!actId) { send('action', { kind: 'stderr', text: '/consent <act-id> [by=Дионисий]' }); send('done', { dominant: null }); break; }
+        const { consent } = await import('../src/theology/AnamneticConsent.js');
+        // Загружаем из persistence
+        const path = join(ROOT, 'data', 'pending-consents.json');
+        if (!existsSync(path)) { send('action', { kind: 'stderr', text: 'pending-consents.json не найден' }); send('done', { dominant: null }); break; }
+        const list = JSON.parse(readFileSync(path, 'utf8'));
+        const act = list.find(a => a.id === actId);
+        if (!act) { send('action', { kind: 'stderr', text: `акт ${actId} не найден в pending` }); send('done', { dominant: null }); break; }
+        try {
+          // Поскольку offer() создаёт runtime-state, воссоздаём вручную
+          const received = Object.freeze({
+            ...act, phase: 'received', reception: 'accepted',
+            receivedAt: Date.now(), consentBy: by || act.receiverId, irreversible: true,
+          });
+          // Перемещаем в received
+          const remainingList = list.filter(a => a.id !== actId);
+          writeFileSync(path, JSON.stringify(remainingList, null, 2));
+          const recFile = join(ROOT, 'data', 'received-acts.json');
+          let recList = [];
+          if (existsSync(recFile)) { try { recList = JSON.parse(readFileSync(recFile, 'utf8')); } catch {} }
+          recList.push(received);
+          writeFileSync(recFile, JSON.stringify(recList, null, 2));
+          send('action', { kind: 'text', text:
+            `✓ **Συνέργεια** — акт ${actId} принят ${received.consentBy}\n\n` +
+            `  Фаза: OFFERED → **RECEIVED**\n` +
+            `  Reception: accepted\n  Irreversible: true\n\n` +
+            `*«Бог делает всё, но не без нас» (Максим Исповедник).*\n` +
+            `*Дар стал даром в полном смысле — получатель сказал «да».*`
+          });
+          send('done', { dominant: null });
+        } catch (e) { send('action', { kind: 'stderr', text: e.message }); send('done', { dominant: null }); }
+        break;
+      }
+      case 'decline': {
+        const parts = args.split(/\s+/).filter(Boolean);
+        const actId = parts[0];
+        const reason = parts.slice(1).join(' ');
+        if (!actId || !reason) { send('action', { kind: 'stderr', text: '/decline <act-id> причина (требуется)' }); send('done', { dominant: null }); break; }
+        const path = join(ROOT, 'data', 'pending-consents.json');
+        if (!existsSync(path)) { send('action', { kind: 'stderr', text: 'нечего отклонять' }); send('done', { dominant: null }); break; }
+        const list = JSON.parse(readFileSync(path, 'utf8'));
+        const act = list.find(a => a.id === actId);
+        if (!act) { send('action', { kind: 'stderr', text: `акт ${actId} не найден` }); send('done', { dominant: null }); break; }
+        const declined = Object.freeze({ ...act, phase: 'declined', reception: 'declined', declinedAt: Date.now(), declineReason: reason });
+        writeFileSync(path, JSON.stringify(list.filter(a => a.id !== actId), null, 2));
+        const dfile = join(ROOT, 'data', 'declined-acts.json');
+        let dlist = [];
+        if (existsSync(dfile)) { try { dlist = JSON.parse(readFileSync(dfile, 'utf8')); } catch {} }
+        dlist.push(declined);
+        writeFileSync(dfile, JSON.stringify(dlist, null, 2));
+        send('action', { kind: 'text', text:
+          `✗ Отклонено: акт ${actId}\n\n  причина: «${reason}»\n  фаза: DECLINED\n\n` +
+          `*Отказ с причиной — не разрыв, а призыв к μετάνοια дарителя.*`
+        });
+        send('done', { dominant: null });
+        break;
+      }
+      case 'federation': {
+        const [sub, ...rest] = args.split(/\s+/).filter(Boolean);
+        if (!sub || sub === 'list') {
+          const { peers } = loadPeers();
+          send('action', { kind: 'text', text: peers.length
+            ? `Связанные общины (${peers.length}):\n\n` + peers.map(p => `- **${p.id}** · ${p.name || ''} · ${p.url} · с ${p.connectedAt?.slice(0, 10) || '?'}`).join('\n')
+            : 'Пока нет связанных общин.\n\n' +
+              'Подключить peer:\n  `/federation connect <peer-url>`\n\n' +
+              '_Это распределённая альтернатива Project Glasswing — открытая, не restricted._'
+          });
+        } else if (sub === 'whoami') {
+          send('action', { kind: 'text', text: '```\n' + JSON.stringify(federationDescriptor(), null, 2) + '\n```' });
+        } else if (sub === 'connect' && rest.length) {
+          const peerUrl = rest[0].replace(/\/$/, '');
+          try {
+            const r = await fetch(`${peerUrl}/federation/connect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(federationDescriptor()),
+              signal: AbortSignal.timeout(10_000),
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+            // Сохраняем peer'а у себя
+            const store = loadPeers();
+            store.peers = store.peers || [];
+            const peerDesc = data.self || { id: 'unknown', url: peerUrl };
+            const idx = store.peers.findIndex(p => p.id === peerDesc.id);
+            const rec = { ...peerDesc, connectedAt: new Date().toISOString() };
+            if (idx >= 0) store.peers[idx] = rec; else store.peers.push(rec);
+            savePeers(store);
+            send('action', { kind: 'text', text:
+              `✓ Соединение установлено\n\n` +
+              `  **peer id:** \`${peerDesc.id}\`\n  **name:** ${peerDesc.name || ''}\n  **url:** ${peerDesc.url}\n\n` +
+              `*Две общины обменялись дескрипторами. Теперь можно запросить матрицу peer'а:*\n` +
+              `\`curl ${peerUrl}/federation/matrix\``
+            });
+          } catch (e) {
+            send('action', { kind: 'stderr', text: `connect failed: ${e.message}` });
+          }
+        } else {
+          send('action', { kind: 'text', text:
+            '**Federation** (koinon-federation/1.0):\n\n' +
+            '- `/federation list` — связанные общины\n' +
+            '- `/federation whoami` — этот дескриптор\n' +
+            '- `/federation connect <url>` — подключить peer\n\n' +
+            '_Открытая альтернатива Project Glasswing: каждая община автокефальна, связи — через литургию даров._'
+          });
+        }
+        send('done', { dominant: null });
+        break;
+      }
       case 'bench': {
         // /bench — gift-bench (SWE-bench-like). По умолчанию dry n=5.
         const parts = args.split(/\s+/).filter(Boolean);
@@ -545,6 +703,138 @@ async function handleCommand(cmd, args, send, res) {
 function serveJSON_data(res, data) {
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(data));
+}
+
+// ── Federation — peer-to-peer общины ─────────────────────────────
+const KOINON_ID = process.env.KOINON_ID || 'koinon-dionysius';
+const PEERS_FILE = join(ROOT, 'data', 'federation-peers.json');
+
+function federationDescriptor() {
+  return {
+    protocol: 'koinon-federation/1.0',
+    id: KOINON_ID,
+    name: process.env.KOINON_NAME || 'Κοινόν Дионисия',
+    url: process.env.KOINON_URL || `http://localhost:${PORT}`,
+    capabilities: ['matrix-share', 'acts-broadcast', 'intercession'],
+    at: new Date().toISOString(),
+  };
+}
+
+function federationMatrixSnap() {
+  // Публичная проекция W-матрицы: только нити, не тексты
+  try {
+    const f = join(ROOT, 'data', 'sacred-history-W.json');
+    if (!existsSync(f)) return { error: 'no matrix' };
+    const snap = JSON.parse(readFileSync(f, 'utf8'));
+    // Не отдаём полную матрицу — только метаданные и heaviest-threads
+    return {
+      koinon: KOINON_ID,
+      persons: (snap.persons || []).length,
+      actsCount: snap.actsCount || (snap.acts || []).length || 0,
+      at: new Date().toISOString(),
+      threads: snap.heaviest || snap.threads || [],
+    };
+  } catch (e) { return { error: e.message }; }
+}
+
+function loadPeers() {
+  if (!existsSync(PEERS_FILE)) return { peers: [] };
+  try { return JSON.parse(readFileSync(PEERS_FILE, 'utf8')); } catch { return { peers: [] }; }
+}
+function savePeers(data) { writeFileSync(PEERS_FILE, JSON.stringify(data, null, 2)); }
+
+function handleFederationConnect(req, res) {
+  let body = '';
+  req.on('data', c => body += c);
+  req.on('end', () => {
+    try {
+      const peerDesc = JSON.parse(body);
+      const store = loadPeers();
+      store.peers = store.peers || [];
+      // upsert по id
+      const idx = store.peers.findIndex(p => p.id === peerDesc.id);
+      const record = { ...peerDesc, connectedAt: new Date().toISOString() };
+      if (idx >= 0) store.peers[idx] = record; else store.peers.push(record);
+      savePeers(store);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ accepted: true, self: federationDescriptor(), peer: peerDesc.id }));
+    } catch (e) {
+      res.writeHead(400); res.end(JSON.stringify({ error: e.message }));
+    }
+  });
+}
+
+// ── Prometheus metrics ────────────────────────────────────────────
+function servePrometheus(res) {
+  const lines = [];
+  const m = (name, help, type, value, labels = {}) => {
+    const lbl = Object.entries(labels).map(([k, v]) => `${k}="${v}"`).join(',');
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} ${type}`);
+    lines.push(`${name}${lbl ? `{${lbl}}` : ''} ${value}`);
+  };
+
+  // Sobors
+  const sobors = listSessions().sessions;
+  m('gift_sobors_total', 'Total conciliar sessions in journal', 'counter', sobors.length);
+  m('gift_sobors_apophatic', 'Sobors resulted in apophatic (no dominant)', 'counter',
+    sobors.filter(s => s.apophatic).length);
+  m('gift_sobors_silent', 'Sobors that yielded silence (sabbath/quorum)', 'counter',
+    sobors.filter(s => s.silent).length);
+
+  // Chat sessions
+  const chats = listChatSessions().sessions;
+  m('gift_chat_sessions_total', 'Multi-turn chat sessions', 'counter', chats.length);
+  m('gift_chat_turns_total', 'Total chat turns across sessions', 'counter',
+    chats.reduce((a, s) => a + (s.turnCount || 0), 0));
+
+  // Epiclesis
+  const epi = listEpiclesis();
+  m('gift_epiclesis_pending', 'Unanswered epiclesis questions', 'gauge', epi.pending.length);
+  m('gift_epiclesis_answered', 'Answered epiclesis questions', 'counter', epi.answered.length);
+
+  // Matrix (from snapshot)
+  try {
+    const snapPath = join(ROOT, 'data', 'sacred-history-W.json');
+    if (existsSync(snapPath)) {
+      const snap = JSON.parse(readFileSync(snapPath, 'utf8'));
+      const persons = (snap.persons || []).length;
+      const acts = snap.actsCount || (snap.acts || []).length || 0;
+      m('gift_matrix_persons', 'Persons in matrix W', 'gauge', persons);
+      m('gift_matrix_acts', 'Total acts recorded in matrix W', 'counter', acts);
+    }
+  } catch {}
+
+  // Audit reports
+  const auditsDir = join(ROOT, 'data', 'audits');
+  if (existsSync(auditsDir)) {
+    m('gift_audits_total', 'Total security audits performed', 'counter',
+      readdirSync(auditsDir).filter(f => f.endsWith('.json')).length);
+  }
+
+  // Horizons
+  const horizonsDir = join(ROOT, 'data', 'horizons');
+  if (existsSync(horizonsDir)) {
+    const horizons = readdirSync(horizonsDir).filter(d => d.startsWith('horizon-'));
+    m('gift_horizons_total', 'Long-horizon agent runs', 'counter', horizons.length);
+  }
+
+  // Intercessions
+  try {
+    const interPath = join(ROOT, 'data', 'intercessions.json');
+    if (existsSync(interPath)) {
+      const list = JSON.parse(readFileSync(interPath, 'utf8'));
+      m('gift_intercessions_total', 'Trinitarian intercession acts', 'counter', list.length);
+    }
+  } catch {}
+
+  // Info
+  m('gift_info', 'Gift ontology info', 'gauge', 1, {
+    cat_level: '10', version: '0.1.0', protocol: 'koinon-federation/1.0',
+  });
+
+  res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
+  res.end(lines.join('\n') + '\n');
 }
 function listSessions() {
   const dir = join(ROOT, 'data', 'conciliar-swe');

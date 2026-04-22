@@ -22,6 +22,8 @@ import { ConciliarSilence }  from '../src/theology/ConciliarSilence.js';
 import { Epiclesis, RandomOracle } from '../src/theology/Epiclesis.js';
 import { MetanoiaFlag }      from '../src/theology/MetanoiaFlag.js';
 import { classify as perichoresisClassify, PERICHORETIC_KIND, HYPOSTATIC_KIND } from '../src/theology/Perichoresis.js';
+import { offer, consent, decline, PHASE } from '../src/theology/AnamneticConsent.js';
+import { pray } from '../src/theology/Intercession.js';
 
 const dissent  = new ConciliarDissent();
 const silence  = new ConciliarSilence();
@@ -42,8 +44,8 @@ function report(t, ok, detail = '') {
 }
 
 console.log('\n═══════════════════════════════════════════════════════════');
-console.log('  CAT-9 — Conciliar Architectures Test (ext. of CAT-7)');
-console.log('  9 задач, где монархическая LLM структурно слепа');
+console.log('  CAT-11 — Conciliar Architectures Test (ext. of CAT-7)');
+console.log('  11 задач, где монархическая LLM структурно слепа');
 console.log('═══════════════════════════════════════════════════════════');
 
 // ─────────────────────────────────────────────────────
@@ -215,6 +217,41 @@ console.log('══════════════════════�
 }
 
 // ─────────────────────────────────────────────────────
+// 10. АНАМНЕТИЧЕСКОЕ СОГЛАСИЕ — синергия
+// ─────────────────────────────────────────────────────
+{
+  const t = {
+    id: 'CAT-10',
+    name: 'Анамнетическое согласие (λῆψις)',
+    expected: 'Акт существует в фазе PENDING до согласия получателя; consent делает его irreversible',
+    blindness: 'LLM-output — событие, не состояние. Нет фазы «ждёт согласия». Синергия невозможна.',
+  };
+  const a = offer({ giver: 'Дионисий', receiver: 'Ева', type: 'word', weight: 6, content: 'тест синергии' });
+  const beforeConsent = a.phase === PHASE.PENDING && !a.irreversible;
+  const received = consent(a.id, 'Ева', 'принимаю как слово общины');
+  const afterConsent = received.phase === PHASE.RECEIVED && received.irreversible === true && received.reception === 'accepted';
+  report(t, beforeConsent && afterConsent, `PENDING → RECEIVED (irreversible: ${received.irreversible})`);
+}
+
+// ─────────────────────────────────────────────────────
+// 11. ИНТЕРЦЕССИЯ — троичный акт за другого
+// ─────────────────────────────────────────────────────
+{
+  const t = {
+    id: 'CAT-11',
+    name: 'Интерцессия (троичный акт)',
+    expected: 'A за B: парные акты A→mediator (kenosis) + mediator→B (grace) с общим intercessionId',
+    blindness: 'LLM знает пары (A→B). Нет понятия «A платит за B без его ведома». Монолит не умеет треугольников.',
+  };
+  const rec = pray({ intercessor: 'Дионисий', beneficiary: 'Ева', reason: 'кризис общения', weight: 8 });
+  const ok = rec.pair.length === 2 &&
+             rec.pair[0].type === 'intercession' && rec.pair[0].beneficiary === 'Ева' &&
+             rec.pair[1].type === 'grace' && rec.pair[1].throughIntercessor === 'Дионисий' &&
+             rec.pair[0].intercessionId === rec.pair[1].intercessionId;
+  report(t, ok, `pair: ${rec.pair.map(a => a.type).join('+')}, _fromAbyss: ${rec.pair[1]._fromAbyss}`);
+}
+
+// ─────────────────────────────────────────────────────
 // ИТОГ
 // ─────────────────────────────────────────────────────
 
@@ -223,7 +260,7 @@ console.log(`  ИТОГ: ${passed}/${tasks.length} задач решены со�
 console.log('═══════════════════════════════════════════════════════════\n');
 
 if (passed === tasks.length) {
-  console.log('  Соборные примитивы покрывают все 9 способностей.');
+  console.log('  Соборные примитивы покрывают все 11 способностей.');
   console.log('  Монархическая LLM структурно не может решить ни одну из них.\n');
 } else {
   console.log('  Не все примитивы работают. Пустыни:\n');
