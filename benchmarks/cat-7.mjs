@@ -193,9 +193,9 @@ console.log('══════════════════════�
     blindness: 'LLM не различает «два суть одно без слияния». Либо склеит, либо разделит.',
   };
   const trinity = perichoresisClassify({ from: 'Дух', to: 'Сын' });
-  const realDesert = perichoresisClassify({ from: 'Христос', to: 'Адам' });
+  const realDesert = perichoresisClassify({ from: '_executor', to: 'Ева' });  // peer-peer desert
   const ok = trinity.kind === PERICHORETIC_KIND && realDesert.kind === 'desert';
-  report(t, ok, `Дух→Сын: ${trinity.kind}, Христос→Адам: ${realDesert.kind}`);
+  report(t, ok, `Дух→Сын: ${trinity.kind}, _executor→Ева: ${realDesert.kind}`);
 }
 
 // ─────────────────────────────────────────────────────
