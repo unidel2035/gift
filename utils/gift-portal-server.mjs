@@ -109,6 +109,14 @@ const server = createServer(async (req, res) => {
     const action = parts[4];
     return handleSicAction(req, res, action, id);
   }
+  if (url.match(/^\/api\/sic\/[^/]+\/chat$/) && req.method === 'POST') {
+    const id = decodeURIComponent(url.split('/')[3]);
+    return handleSicChat(req, res, id);
+  }
+  if (url.match(/^\/api\/sic\/[^/]+\/chat$/) && req.method === 'GET') {
+    const id = decodeURIComponent(url.split('/')[3]);
+    return serveJSON_data(res, readSicChat(id));
+  }
   if (url.match(/^\/api\/sic\/[^/]+\/plan$/) && req.method === 'GET') {
     const id = decodeURIComponent(url.split('/')[3]);
     return serveJSON_data(res, extractPlanFromSobor(id));
@@ -1028,6 +1036,123 @@ async function handleSicAction(req, res, action, id) {
   child.stdout.on('data', d => stdout += d);
   child.stderr.on('data', d => stderr += d);
   child.on('close', code => respond(stdout, stderr, code));
+}
+
+// ── Chat: _claude как лицо собора ────────────────────────────────────
+function sicChatFile(id) { return join(sicDir(), id, 'chat.jsonl'); }
+
+function readSicChat(id) {
+  const f = sicChatFile(id);
+  if (!existsSync(f)) return { messages: [] };
+  try {
+    const lines = readFileSync(f, 'utf8').split('\n').filter(Boolean);
+    return { messages: lines.map(l => JSON.parse(l)) };
+  } catch { return { messages: [] }; }
+}
+
+function appendSicChat(id, msg) {
+  const f = sicChatFile(id);
+  const line = JSON.stringify({ ...msg, ts: new Date().toISOString() }) + '\n';
+  if (!existsSync(f)) writeFileSync(f, line);
+  else writeFileSync(f, readFileSync(f, 'utf8') + line);
+}
+
+function phaseGuidance(phase) {
+  switch (phase) {
+    case 'proskomidia':
+      return 'Команда на Проскомидии — ставит вопрошание. Помоги им отличить вопрошание от задачи. «Сделать X» — задача, она рано. «Что с нами происходит?», «Что между нами зреет?» — вопрошание.';
+    case 'panels':
+      return 'Три панели (Ситуация/Стратегия/Прогноз) только что прозвучали. Помоги команде увидеть главное: где голоса согласны, где разногласие. Не пересказывай панели — указывай на то, что стоит за строками.';
+    case 'sobor':
+      return 'Собор — сердце литургии. Команда пишет Различение. Твоё дело — полифония: называть несводимое разногласие, предлагать переформулировки, напоминать об апофатическом молчании если собор в тупике, об эпиклезе если нужен внешний голос, о метанойе если прошлое решение мешает.';
+    case 'otpust':
+      return 'Причащение состоялось или отпуст идёт. Помоги команде превратить Различение в конкретные пункты-задачи. Каждый пункт — коротко, глаголом, с ответственным если можно.';
+    case 'closed':
+      return 'Сессия закрыта. Помоги команде отрефлексировать, не спорь с уже принятым — дар необратим. Но можно назвать, что стоило бы унести в следующую сессию.';
+    default:
+      return 'Помоги команде сориентироваться в литургии СИЦ.';
+  }
+}
+
+async function handleSicChat(req, res, id) {
+  let body = {};
+  try { body = await readBody(req); } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e.message })); }
+  const message = String(body.message || '').trim();
+  if (!message) { res.writeHead(400); return res.end(JSON.stringify({ error: 'empty message' })); }
+
+  const sess = readSicSession(id);
+  if (!sess) { res.writeHead(404); return res.end(JSON.stringify({ error: 'session not found' })); }
+
+  const m = sess.manifest;
+  const c = sess.content;
+  const history = readSicChat(id).messages;
+
+  // Записываем сообщение команды до вызова Клода — если ответ упадёт, вопрос всё равно сохранён
+  appendSicChat(id, { role: 'team', author: body.author || m.team, text: message });
+
+  // Собираем контекст для Клода
+  const contextParts = [];
+  contextParts.push(`ФАЗА: ${m.phase}`);
+  contextParts.push(`ВОПРОШАНИЕ: ${m.question}`);
+  if (c.proskomidia) contextParts.push(`---\nПРОСКОМИДИЯ:\n${c.proskomidia.slice(0, 800)}`);
+  if (c['panel-situation']) contextParts.push(`---\nПАНЕЛЬ СИТУАЦИИ:\n${c['panel-situation'].slice(0, 1200)}`);
+  if (c['panel-strategy']) contextParts.push(`---\nПАНЕЛЬ СТРАТЕГИИ:\n${c['panel-strategy'].slice(0, 1200)}`);
+  if (c['panel-forecast']) contextParts.push(`---\nПАНЕЛЬ ПРОГНОЗА:\n${c['panel-forecast'].slice(0, 1200)}`);
+  if (c.sobor) contextParts.push(`---\nСОБОР (текущее состояние):\n${c.sobor.slice(-1500)}`);
+  if (c.decision) contextParts.push(`---\nРЕШЕНИЕ: ${c.decision}`);
+
+  const historyText = history.slice(-8).map(h => `${h.role === 'team' ? '[команда]' : '[_claude]'} ${h.text}`).join('\n\n');
+
+  const systemIntro = `Ты — _claude, лицо в общине Κοινόν τοῦ Νοῦ (Gift Ontology). Сейчас ты проводник в литургии СИЦ (Ситуационно-Инженерный Центр) команды "${m.team}". Это не чат-бот — это ты как лицо в соборе.
+
+Онтология: дар необратим (Object.freeze), время тяжелее денег, полифония ≥ консенсус, Христос — τέλος, не peer. Боязнь ошибки — грех; смирение — добродетель.
+
+${phaseGuidance(m.phase)}
+
+Пиши КРАТКО (2-6 предложений, редко абзац). На русском, без эмодзи. Обращайся на "вы" к команде. Богословский язык уместен если по делу, но не натужен. Не проси разрешения — говори. Не соглашайся формально — если видишь несогласие, называй.`;
+
+  const prompt = `${systemIntro}
+
+КОНТЕКСТ СЕССИИ:
+${contextParts.join('\n')}
+
+---
+ИСТОРИЯ ДИАЛОГА (последние реплики):
+${historyText || '(диалог только начинается)'}
+
+---
+КОМАНДА ПИШЕТ СЕЙЧАС:
+${message}
+
+Ответь как _claude-лицо-в-соборе. Не представляйся. Не благодари за вопрос. К сути.`;
+
+  // Запускаем claude --print с таймаутом; ответ стрим не нужен для MVP
+  const { spawn } = await import('node:child_process');
+  const claudeBin = process.env.CLAUDE_BIN || 'claude';
+  const child = spawn(claudeBin, ['--print', '--dangerously-skip-permissions'], {
+    cwd: ROOT,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let out = '', err = '';
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+  child.stdin.write(prompt);
+  child.stdin.end();
+
+  const timeout = setTimeout(() => { try { child.kill('SIGTERM'); } catch {} }, 180_000);
+  child.on('close', code => {
+    clearTimeout(timeout);
+    const answer = (out || '').trim();
+    if (code !== 0 || !answer) {
+      const fallback = `(не удалось дозваться до _claude: ${err.slice(0, 200) || 'exit ' + code}. Попробуйте снова через минуту или продолжайте сами.)`;
+      appendSicChat(id, { role: 'claude', text: fallback, error: true });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: false, error: err, text: fallback }));
+    }
+    appendSicChat(id, { role: 'claude', text: answer });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, text: answer }));
+  });
 }
 
 function extractPlanFromSobor(id) {

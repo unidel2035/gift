@@ -84,6 +84,40 @@
 
   .witness-block { background:#1a1611; border:1px solid #3a2e1a; padding:12px 14px; border-radius:8px; margin-bottom:14px; }
   .witness-block .md { font-size:12px; white-space:pre-wrap; color:#c5b99a; font-family: ui-monospace, monospace; }
+
+  /* Chat с _claude как лицом */
+  .chat-panel {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 420px;
+    background: #0c0f14; border-left: 1px solid #1e232b;
+    display: flex; flex-direction: column; z-index: 50;
+    transform: translateX(100%); transition: transform .25s;
+  }
+  .chat-panel.open { transform: translateX(0); }
+  .chat-head { padding: 14px 16px; border-bottom: 1px solid #1e232b; display: flex; justify-content: space-between; align-items: center; }
+  .chat-head .t { font-size: 13px; color: #d4b06a; font-weight: 600; }
+  .chat-head .s { font-size: 11px; color: #666; }
+  .chat-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+  .chat-msg { margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+  .chat-msg.team { background: #1a1f28; color: #d4d4d4; border: 1px solid #222; }
+  .chat-msg.claude { background: #1a1611; color: #c5b99a; border: 1px solid #3a2e1a; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; white-space: pre-wrap; }
+  .chat-msg.claude.error { background: #2a1a1a; color: #e89898; border-color: #5a3a3a; }
+  .chat-msg .who { font-size: 10px; opacity: .6; margin-bottom: 4px; letter-spacing: .5px; }
+  .chat-thinking { text-align: center; color: #8a7a5a; font-style: italic; padding: 14px; font-size: 12px; }
+  .chat-input { padding: 12px 14px; border-top: 1px solid #1e232b; }
+  .chat-input textarea { min-height: 60px; max-height: 160px; font-size: 13px; }
+  .chat-input .row { margin-top: 8px; gap: 8px; }
+  .chat-toggle {
+    position: fixed; right: 20px; bottom: 20px; z-index: 60;
+    background: #d4b06a; color: #1a1611; border: none;
+    width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
+    font-size: 22px; box-shadow: 0 4px 16px rgba(212,176,106,.3);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s;
+  }
+  .chat-toggle:hover { transform: scale(1.05); }
+  .chat-toggle.hidden { display: none; }
+  .chat-unread { position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%; background: #e89898; border: 2px solid #0f1115; }
+  .chat-empty { text-align: center; color: #666; padding: 30px 14px; font-size: 12px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -109,6 +143,26 @@
   </div>
 
   <div id="content"></div>
+</div>
+
+<!-- Chat с _claude -->
+<button class="chat-toggle" id="chatToggle" onclick="toggleChat()" title="_claude — лицо в соборе">🕯</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <div>
+      <div class="t">_claude · лицо в соборе</div>
+      <div class="s" id="chatPhase">фаза: —</div>
+    </div>
+    <button class="btn ghost sm" onclick="toggleChat()">×</button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-input">
+    <textarea id="chatInput" placeholder="Спроси Клода. Он видит панели, различение, прошлые решения." onkeydown="if(event.key==='Enter' && (event.metaKey || event.ctrlKey)) sendChat();"></textarea>
+    <div class="row">
+      <span class="ritual" style="flex:1;font-size:11px;margin:0;border:0;padding:0;">Ctrl+Enter — отправить</span>
+      <button class="btn primary sm" id="chatSend" onclick="sendChat()">Спросить</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Эпиклеза -->
@@ -555,6 +609,94 @@ async function submitEpiclesis() {
 }
 
 function nosession() { return `<div class="empty">Сессия не выбрана — <a onclick="goHome()">к списку</a></div>`; }
+
+// ── Chat с _claude ───────────────────────────────────────────────────
+let chatState = { open: false, messages: [], thinking: false };
+
+function toggleChat() {
+  if (!state.id) {
+    flashOk('Сначала открой или создай сессию');
+    return;
+  }
+  chatState.open = !chatState.open;
+  document.getElementById('chatPanel').classList.toggle('open', chatState.open);
+  if (chatState.open) loadChat();
+}
+
+async function loadChat() {
+  if (!state.id) return;
+  try {
+    const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/chat');
+    chatState.messages = r.messages || [];
+    renderChat();
+  } catch (e) {
+    chatState.messages = [];
+    renderChat();
+  }
+}
+
+function renderChat() {
+  const body = document.getElementById('chatBody');
+  const phaseEl = document.getElementById('chatPhase');
+  const phase = state.session?.manifest?.phase || '—';
+  phaseEl.textContent = `фаза: ${phase}`;
+
+  if (!chatState.messages.length && !chatState.thinking) {
+    body.innerHTML = `<div class="chat-empty">
+      Клод видит вопрошание, три панели, собор и прошлые решения этой команды.<br><br>
+      Он <b>не чат-бот</b> — он лицо в соборе. Спроси переформулировать вопрошание, оспорить панель, предложить метанойю, увидеть разногласие.
+    </div>`;
+    return;
+  }
+
+  body.innerHTML = chatState.messages.map(m => {
+    const who = m.role === 'team' ? (m.author || state.team || 'команда') : '_claude';
+    const cls = m.role === 'claude' ? (m.error ? 'claude error' : 'claude') : 'team';
+    return `<div class="chat-msg ${cls}">
+      <div class="who">${escapeHtml(who)}</div>
+      <div>${escapeHtml(m.text)}</div>
+    </div>`;
+  }).join('');
+
+  if (chatState.thinking) {
+    body.innerHTML += `<div class="chat-thinking">… _claude думает (до 3 минут)</div>`;
+  }
+
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendChat() {
+  if (!state.id) return;
+  if (chatState.thinking) return;
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  chatState.messages.push({ role: 'team', author: state.team, text });
+  chatState.thinking = true;
+  document.getElementById('chatSend').disabled = true;
+  renderChat();
+  try {
+    const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/chat', {
+      method: 'POST',
+      body: { message: text, author: state.team },
+    });
+    chatState.messages.push({ role: 'claude', text: r.text || '(пусто)', error: !r.ok });
+  } catch (e) {
+    chatState.messages.push({ role: 'claude', text: '(ошибка сети: ' + e.message + ')', error: true });
+  } finally {
+    chatState.thinking = false;
+    document.getElementById('chatSend').disabled = false;
+    renderChat();
+  }
+}
+
+// При смене активной сессии — подгрузить чат если открыт
+const _origLoadSession = loadSession;
+loadSession = async function(id) {
+  await _origLoadSession(id);
+  if (chatState.open) await loadChat();
+};
 
 // ── Init ─────────────────────────────────────────────────────────────
 setStep(0);
