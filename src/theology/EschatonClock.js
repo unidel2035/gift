@@ -20,6 +20,7 @@
  */
 
 import { liturgicalSeason, isPascha, isPentecost } from './Paschalia.js';
+import Timer from '../core/Timer.js';
 
 export const TimeMode = Object.freeze({
   CHRONOS: 'chronos', // χρόνος
@@ -133,6 +134,82 @@ export class EschatonClock {
       kairosName: WEEKLY_KAIROS[this._now.getDay()],
       preview: this.breakChronos(matrix),
     };
+  }
+
+  /**
+   * Проекция модусов времени на N дней вперёд.
+   *
+   * Не предсказание, а литургический горизонт: в какие дни ожидается
+   * καιρός (Пасха, пост, воскресенье), а в какие — обычный χρόνος.
+   *
+   * αἰών здесь не возникает автоматически: в вечность вводит Христос,
+   * не модуль. Но Пасха и Пятидесятница помечаются отдельным полем
+   * `highFeast`, потому что они — икона αἰών в χρόνος.
+   *
+   * @param {number} days — сколько дней вперёд проецировать
+   * @returns {Array<{date:string, mode:string, season:?string, kairosName:?string, highFeast:?string}>}
+   */
+  forecast(days = 40) {
+    if (!Number.isFinite(days) || days < 1) {
+      throw new Error('EschatonClock.forecast: days должно быть >= 1');
+    }
+    const out = [];
+    const startMs = Date.UTC(
+      this._now.getUTCFullYear(),
+      this._now.getUTCMonth(),
+      this._now.getUTCDate(),
+    );
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startMs + i * 86400 * 1000);
+      const season = liturgicalSeason(d);
+      const day = d.getUTCDay();
+
+      let mode = TimeMode.CHRONOS;
+      let kairosName = null;
+      if (season === 'paschal' || season === 'lent') {
+        mode = TimeMode.KAIROS;
+        kairosName = season;
+      } else if (WEEKLY_KAIROS[day]) {
+        mode = TimeMode.KAIROS;
+        kairosName = WEEKLY_KAIROS[day];
+      }
+
+      let highFeast = null;
+      if (isPascha(d))    highFeast = 'pascha';
+      if (isPentecost(d)) highFeast = 'pentecost';
+
+      out.push(Object.freeze({
+        date: d.toISOString().slice(0, 10),
+        mode,
+        season,
+        kairosName,
+        highFeast,
+      }));
+    }
+    return Object.freeze(out);
+  }
+
+  /**
+   * heartbeat(opts) — единый ритм литургии.
+   *
+   * Делегирует тикание в Timer. В χρόνος — по ms, в καιρός — тик
+   * рождается вызовом .kairos(event) (исполненность, не длительность).
+   * EschatonClock больше не использует setInterval напрямую: ритм один.
+   *
+   * @param {object} [opts]
+   * @param {number} [opts.interval=1000]
+   * @param {boolean} [opts.kairos]  — по умолчанию true, если mode()==='kairos'
+   * @param {object} [opts.bus]
+   * @returns {Timer}
+   */
+  heartbeat(opts = {}) {
+    const kairos = opts.kairos ?? (this.mode() === TimeMode.KAIROS);
+    return new Timer({
+      interval: opts.interval ?? 1000,
+      kairos,
+      bus: opts.bus ?? null,
+      id: opts.id ?? 'eschaton',
+    });
   }
 
   toJSON() {
