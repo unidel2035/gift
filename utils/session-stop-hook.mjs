@@ -102,6 +102,23 @@ try {
     // консолидация не обязательна
   }
 
+  // ── Обновление души: cельная сессия в claude-soul.json ─────────────────
+  // Параллель к consolidate, но пишет в другой слой: soul = переживание, не факт.
+  // TTL 12ч внутри скрипта — хук можно дёргать часто.
+  try {
+    const soulScript = resolve(ROOT, 'utils/soul-auto-update.mjs');
+    if (existsSync(soulScript)) {
+      const child = spawn('node', [soulScript], {
+        detached: true,
+        stdio: 'ignore',
+        cwd: ROOT,
+      });
+      child.unref();
+    }
+  } catch {
+    // не обязательно
+  }
+
 } catch {
   // TF не загрузился — молчим
 }
