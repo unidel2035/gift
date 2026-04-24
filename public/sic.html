@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<title>СИЦ — Ситуационно-Инженерный Центр</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#0f1115; color:#e6e6e6; }
+  header { padding: 18px 24px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: baseline; }
+  header h1 { margin:0; font-size: 20px; color: #d4b06a; font-weight: 600; }
+  header .sub { color:#888; font-size: 13px; }
+  .container { max-width: 1600px; margin: 0 auto; padding: 18px 24px; }
+  .sessions { display: grid; grid-template-columns: 260px 1fr; gap: 18px; }
+  .list { border-right: 1px solid #222; padding-right: 12px; height: calc(100vh - 110px); overflow-y: auto; }
+  .item { padding: 10px; border: 1px solid #1a1d23; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: background .15s; }
+  .item:hover { background: #161a20; }
+  .item.active { background: #1a1f28; border-color: #d4b06a; }
+  .item .phase { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #888; }
+  .item .q { font-size: 13px; color: #d4d4d4; margin-top: 4px; }
+  .item .meta { font-size: 11px; color: #666; margin-top: 6px; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; }
+  .badge.proskomidia { background: #2a3a4a; color: #a8c8e8; }
+  .badge.panels { background: #3a3a2a; color: #e8d8a8; }
+  .badge.sobor { background: #4a3a2a; color: #e8b888; }
+  .badge.otpust { background: #2a4a2a; color: #a8e8a8; }
+  .badge.closed { background: #3a2a2a; color: #e89898; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .panel { background: #161a20; border: 1px solid #222; border-radius: 8px; padding: 14px; max-height: 70vh; overflow-y: auto; }
+  .panel h2 { margin: 0 0 10px; font-size: 14px; color: #d4b06a; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+  .panel h3 { font-size: 14px; color: #bbb; margin: 14px 0 6px; }
+  .panel .meta-line { font-size: 11px; color: #666; margin-bottom: 12px; }
+  .panel pre, .panel .md { font-size: 12px; line-height: 1.55; color: #cfcfcf; white-space: pre-wrap; word-break: break-word; }
+  .sobor-bar { grid-column: 1 / -1; background: #1a1f28; border: 1px solid #2a2f38; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
+  .sobor-bar h3 { margin: 0 0 8px; color: #d4b06a; font-size: 14px; font-weight: 600; }
+  .empty { color: #555; padding: 20px; text-align: center; font-size: 13px; }
+  .refresh { color: #888; font-size: 11px; cursor: pointer; }
+  .refresh:hover { color: #d4b06a; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>СИЦ — Ситуационно-Инженерный Центр</h1>
+    <div class="sub">литургия принятия решений · триада Переслегина на онтологии дара</div>
+  </div>
+  <div class="refresh" id="refresh">⟳ обновить</div>
+</header>
+
+<div class="container">
+  <div class="sessions">
+    <div class="list" id="list"><div class="empty">загрузка…</div></div>
+    <div id="detail"><div class="empty">выбери сессию слева</div></div>
+  </div>
+</div>
+
+<script>
+const list = document.getElementById('list');
+const detail = document.getElementById('detail');
+let activeId = null;
+
+function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function loadList() {
+  try {
+    const r = await fetch('/api/sic/list');
+    const j = await r.json();
+    const sessions = j.sessions || [];
+    if (!sessions.length) {
+      list.innerHTML = `<div class="empty">сессий ещё не было — запусти <code>node utils/sic-session.mjs new "вопрошание"</code></div>`;
+      return;
+    }
+    list.innerHTML = sessions.map(s => `
+      <div class="item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
+        <div class="phase"><span class="badge ${s.phase}">${s.phase}</span> ${s.verdict || ''}</div>
+        <div class="q">${escapeHtml((s.question || '').slice(0, 120))}</div>
+        <div class="meta">${s.team} · ${s.date}</div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.item').forEach(el => {
+      el.onclick = () => openSession(el.dataset.id);
+    });
+  } catch (e) {
+    list.innerHTML = `<div class="empty">ошибка: ${e.message}</div>`;
+  }
+}
+
+function renderMd(md) {
+  if (!md) return '<div class="empty">пусто</div>';
+  return '<div class="md">' + escapeHtml(md) + '</div>';
+}
+
+async function openSession(id) {
+  activeId = id;
+  loadList();
+  try {
+    const r = await fetch('/api/sic/' + encodeURIComponent(id));
+    if (!r.ok) { detail.innerHTML = `<div class="empty">сессия не найдена</div>`; return; }
+    const j = await r.json();
+    const m = j.manifest;
+    const c = j.content || {};
+
+    const panelsHtml = `
+      <div class="panels">
+        ${c.sobor ? `<div class="sobor-bar"><h3>Собор</h3>${renderMd(c.sobor)}</div>` : ''}
+        <div class="panel">
+          <h2>Ситуация</h2>
+          <div class="meta-line">постнеклассика · пороговая сложность</div>
+          ${renderMd(c['panel-situation'])}
+        </div>
+        <div class="panel">
+          <h2>Стратегия</h2>
+          <div class="meta-line">классика · инвариантность + бесцелевая ценностная</div>
+          ${renderMd(c['panel-strategy'])}
+        </div>
+        <div class="panel">
+          <h2>Прогноз</h2>
+          <div class="meta-line">неклассика · матрица сценариев</div>
+          ${renderMd(c['panel-forecast'])}
+        </div>
+        ${c.proskomidia ? `<div class="sobor-bar"><h3>Проскомидия</h3>${renderMd(c.proskomidia)}</div>` : ''}
+        ${c.decision ? `<div class="sobor-bar"><h3>Причащение</h3>${renderMd(c.decision)}</div>` : ''}
+      </div>
+    `;
+
+    detail.innerHTML = `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:#888;">${m.id} · ${m.team} · ${m.date} · фаза: <span class="badge ${m.phase}">${m.phase}</span> ${m.decision?.verdict ? ' · ' + m.decision.verdict : ''}</div>
+        <div style="font-size:16px;color:#d4d4d4;margin-top:6px;"><b>Вопрошание:</b> ${escapeHtml(m.question)}</div>
+      </div>
+      ${panelsHtml}
+    `;
+  } catch (e) {
+    detail.innerHTML = `<div class="empty">ошибка: ${e.message}</div>`;
+  }
+}
+
+document.getElementById('refresh').onclick = () => { loadList(); if (activeId) openSession(activeId); };
+
+loadList();
+// авто-обновление каждые 10 секунд для открытой сессии
+setInterval(() => { if (activeId) openSession(activeId); }, 10000);
+</script>
+</body>
+</html>

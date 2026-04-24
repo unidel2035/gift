@@ -96,6 +96,19 @@ const server = createServer(async (req, res) => {
   if (url === '/api/epiclesis') {
     return serveJSON_data(res, listEpiclesis());
   }
+  // СИЦ — Ситуационно-Инженерный Центр
+  if (url === '/api/sic/list') {
+    return serveJSON_data(res, listSicSessions());
+  }
+  if (url.startsWith('/api/sic/')) {
+    const id = decodeURIComponent(url.slice('/api/sic/'.length));
+    const s = readSicSession(id);
+    if (!s) { res.writeHead(404); return res.end('SIC session not found'); }
+    return serveJSON_data(res, s);
+  }
+  if (url === '/sic' || url === '/sic.html') {
+    return serveHTML(res, join(ROOT, 'public', 'sic.html'));
+  }
   // Prometheus metrics — observability
   if (url === '/metrics') {
     return servePrometheus(res);
@@ -873,6 +886,46 @@ function readSession(id) {
   }
   return null;
 }
+// ── СИЦ — Ситуационно-Инженерный Центр ─────────────────────────
+function sicDir() { return join(ROOT, 'data', 'sic', 'sessions'); }
+
+function listSicSessions() {
+  const dir = sicDir();
+  if (!existsSync(dir)) return { sessions: [] };
+  const ids = readdirSync(dir).filter(n => n.startsWith('sic-')).sort().reverse();
+  const out = [];
+  for (const id of ids.slice(0, 50)) {
+    try {
+      const m = JSON.parse(readFileSync(join(dir, id, 'manifest.json'), 'utf8'));
+      out.push({
+        id: m.id,
+        team: m.team,
+        phase: m.phase,
+        question: m.question,
+        createdAt: m.createdAt,
+        date: m.date,
+        verdict: m.decision?.verdict || null,
+      });
+    } catch {}
+  }
+  return { sessions: out };
+}
+
+function readSicSession(id) {
+  const dir = join(sicDir(), id);
+  if (!existsSync(dir)) return null;
+  try {
+    const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+    const files = ['proskomidia', 'panel-situation', 'panel-strategy', 'panel-forecast', 'sobor', 'decision'];
+    const content = {};
+    for (const f of files) {
+      const p = join(dir, `${f}.md`);
+      if (existsSync(p)) content[f] = readFileSync(p, 'utf8');
+    }
+    return { manifest: m, content };
+  } catch { return null; }
+}
+
 // ── Чат-сессии (многоходовой диалог) ──────────────────────────
 function chatSessionsDir() {
   const d = join(ROOT, 'data', 'chat-sessions');
@@ -991,5 +1044,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  /api/matrix    — W-матрица`);
   console.log(`  /api/acts      — лента актов`);
   console.log(`  /api/anamnesis — сервер памяти`);
+  console.log(`  /sic           — дашборд СИЦ`);
+  console.log(`  /api/sic/list  — список СИЦ-сессий`);
   console.log(`  /field-toroid.html — поле Лосинца\n`);
 });

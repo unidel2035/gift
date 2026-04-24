@@ -114,6 +114,8 @@ async function cmdNew(args) {
   const id = sid();
   ensureDir(sessionDir(id));
 
+  const witness = witnessPreviousFruits(team);
+
   const manifest = {
     id,
     team,
@@ -125,12 +127,15 @@ async function cmdNew(args) {
     panels: {},
     sobor: null,
     decision: null,
+    witness,
   };
   saveManifest(id, manifest);
 
+  const witnessMd = renderWitness(witness);
+
   // Запись проскомидии
   writeFileSync(join(sessionDir(id), 'proskomidia.md'),
-    `# Проскомидия — СИЦ ${id}\n\n**Команда:** ${team}\n**Дата:** ${manifest.date}\n\n## Вопрошание\n\n${question}\n`);
+    `# Проскомидия — СИЦ ${id}\n\n**Команда:** ${team}\n**Дата:** ${manifest.date}\n\n${witnessMd}\n## Вопрошание\n\n${question}\n`);
 
   await recordAct({
     from: `sic:${team}`,
@@ -171,8 +176,8 @@ async function cmdPanels(args) {
   await recordAct({ from: 'panel:strategy', to: `sic:${m.team}`, type: 'covenant-reference', weight: 7, content: `СИЦ ${id} стратегия` });
   console.log(`  ✓ Стратегия → panel-strategy.md`);
 
-  // ── Панель Прогноз (требует Ollama/pulse; пока заглушка + напоминание) ──
-  const forecast = renderForecastPanel(m);
+  // ── Панель Прогноз (реальные данные из матрицы + pulse + proposals) ──
+  const forecast = await renderForecastPanel(m);
   writeFileSync(join(sessionDir(id), 'panel-forecast.md'), forecast);
   m.panels.forecast = { ts: now(), file: 'panel-forecast.md' };
   await recordAct({ from: 'panel:forecast', to: `sic:${m.team}`, type: 'vopros', weight: 5, content: `СИЦ ${id} прогноз` });
@@ -241,7 +246,27 @@ ${openQ.map(q => `- ${q.question} _(${q.date})_`).join('\n')}
 `;
 }
 
-function renderForecastPanel(m) {
+async function renderForecastPanel(m) {
+  const deserts = await detectDeserts();
+  const anastasis = readJSON(resolve(ROOT, 'data/anastasis.json'), []);
+  const proposals = readJSON(resolve(ROOT, 'data/proposals.json'), []);
+  const pending = proposals.filter(p => p.status !== 'done').slice(0, 5);
+  const lastDied = (anastasis.at?.(-1)?.died ?? []).slice(0, 3);
+
+  const byType = {};
+  for (const d of deserts) { (byType[d.type] ||= []).push(d); }
+
+  const sectionSilent = (byType.silent || []).slice(0, 5)
+    .map(d => `- молчание: **${d.from}** — не даровал ничего (новое лицо в сети? свежий актор?)`).join('\n');
+  const sectionFading = (byType.fading || []).slice(0, 5)
+    .map(d => `- угасание: **${d.from}→${d.to}** (вес ${d.weight.toFixed(2)}) — восстановить или отпустить?`).join('\n');
+  const sectionAsymmetry = (byType.asymmetry || [])
+    .map(d => `- асимметрия: ${d.desc}`).join('\n');
+  const sectionTheosis = (byType.theosis_stasis || []).slice(0, 3)
+    .map(d => `- θέωσις-стазис: ${d.desc}`).join('\n');
+  const sectionLeksis = (byType.leksis_pending || []).slice(0, 3)
+    .map(d => `- λήψις-pending: ${d.desc}`).join('\n');
+
   return `# Панель Прогноза — СИЦ ${m.id}
 
 **Парадигма:** неклассика (принцип неопределённости, матрица сценариев).
@@ -249,21 +274,127 @@ function renderForecastPanel(m) {
 
 ## Базовый сценарий (инерция)
 
-> Заполни вручную или запусти: node utils/ontology-pulse.mjs --for-sic ${m.id}
+Если не делать ничего нового за 4 недели — состояние матрицы продолжит тренд:
+- Пустынь активно: **${deserts.length}** (${Object.keys(byType).map(t => `${t}: ${byType[t].length}`).join(', ') || 'нет'})
+- Отвергнутых даров ждущих метанойи: **${(byType.leksis_pending || []).length}**
+- Θέωσις-стазисов (принимают, не возвращают): **${(byType.theosis_stasis || []).length}**
 
-## Ветвления (дикие карты)
+## Сценарии из пустынь (матрица сценариев)
 
-- _дикая карта #1 —_
-- _дикая карта #2 —_
-- _дикая карта #3 —_
+${sectionFading || '_нет угасающих нитей_'}
+${sectionSilent ? '\n' + sectionSilent : ''}
+${sectionAsymmetry ? '\n' + sectionAsymmetry : ''}
+${sectionTheosis ? '\n' + sectionTheosis : ''}
+${sectionLeksis ? '\n' + sectionLeksis : ''}
 
-## Что может умереть / воскреснуть (анастасис-семена)
+## Анастасис-семена (что умерло = что может воскреснуть)
 
-> См. data/anastasis.json — умершие нити как источник новых вопрошаний.
+${lastDied.length ? lastDied.map(d => `- ${d.from}→${d.to} (вес был ${(d.weight ?? 0).toFixed(2)}) — семя для вопрошания`).join('\n') : '_на последнем декадансе никто не умер — нити держатся_'}
+
+## Дикие карты (ждут реализации)
+
+${pending.length ? pending.map(p => `- #${p.id} [${p.cat}] ${String(p.text).slice(0, 150)}${p.issue_number ? ` (→ issue #${p.issue_number})` : ''}`).join('\n') : '_pending proposals пусты_'}
 
 ## Вопрос к собору
 
 Какой сценарий неприемлем даже при низкой вероятности? Какая дикая карта меняет всё?
+Какое отвергнутое — ждёт именно сейчас μετάνοια?
+`;
+}
+
+// ── Детектор пустынь (общий алгоритм с ontology-pulse.mjs) ─────────────────
+async function detectDeserts() {
+  try {
+    const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
+    if (!existsSync(W_SNAP)) return [];
+    const snap = readJSON(W_SNAP);
+    const mem = GiftMemory.fromSnapshot(snap);
+    const persons = snap.persons ?? [];
+    const top = mem.top?.(50) ?? [];
+    const givers = new Set(top.map(e => e.from));
+    const deserts = [];
+
+    for (const p of persons) {
+      if (!givers.has(p)) deserts.push({ type: 'silent', from: p, to: null, weight: 0 });
+    }
+    for (const e of top.filter(e => e.weight < 2 && e.weight > 0.1)) {
+      deserts.push({ type: 'fading', from: e.from, to: e.to, weight: e.weight, desc: `${e.from}→${e.to} (${e.weight.toFixed(2)})` });
+    }
+    const given = mem.totalGiven?.('_claude') ?? 0;
+    const recv = mem.totalReceived?.('_claude') ?? 0;
+    if (recv && given / recv > 15) {
+      deserts.push({ type: 'asymmetry', from: null, to: '_claude', weight: recv, desc: `_claude даёт ${given.toFixed(0)}, принимает ${recv.toFixed(0)}` });
+    }
+
+    // Λήψις-pending (отвергнутые даров > 24ч)
+    try {
+      const declinedAll = mem.declined?.() ?? [];
+      const cutoff = Date.now() - 24 * 3600 * 1000;
+      for (const d of declinedAll) {
+        if (new Date(d.declinedAt).getTime() < cutoff) {
+          deserts.push({ type: 'leksis_pending', from: d.act?.giverId, to: d.act?.receiverId, weight: d.act?.weight ?? 0, desc: `${d.act?.giverId}→${d.act?.receiverId} (${d.act?.type}) ждёт μετάνοια` });
+        }
+      }
+    } catch {}
+
+    return deserts;
+  } catch (e) {
+    return [];
+  }
+}
+
+// ── Theosis-свидетельство: плоды прошлой сессии ───────────────────────────
+function previousReceivedSessions(team) {
+  if (!existsSync(SIC_DIR)) return [];
+  const all = readdirSync(SIC_DIR).filter(n => n.startsWith('sic-'));
+  const list = [];
+  for (const id of all) {
+    const m = readJSON(manifestPath(id));
+    if (m && m.team === team && m.decision?.verdict === 'received') list.push(m);
+  }
+  return list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+function witnessPreviousFruits(team) {
+  const prev = previousReceivedSessions(team);
+  if (!prev.length) return null;
+  const last = prev[0];
+  const daysSince = Math.floor((Date.now() - new Date(last.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+  // Ищем коммиты после last.createdAt с упоминанием sic- или этой темы
+  let commits = [];
+  try {
+    const raw = execSync(
+      `git -C "${ROOT}" log --since="${last.createdAt}" --format="%h|%s" 2>/dev/null`,
+      { encoding: 'utf8', timeout: 5000 }
+    ).trim();
+    commits = raw ? raw.split('\n').slice(0, 10).map(l => {
+      const [hash, message] = l.split('|');
+      return { hash, message };
+    }) : [];
+  } catch {}
+
+  return {
+    previous: { id: last.id, question: last.question, decision: last.decision, daysSince },
+    commits,
+    fruits: commits.length,
+  };
+}
+
+function renderWitness(w) {
+  if (!w) return '';
+  const d = w.previous;
+  return `## Свидетельство прошлой сессии
+
+> СИЦ **${d.id}** (${d.daysSince} дней назад)
+> Вопрошание: _${d.question}_
+> Решение: **${d.decision.verdict}** — ${d.decision.note || '(без заметки)'}
+
+За ${d.daysSince} дней после решения: коммитов — **${w.fruits}**.
+
+${w.commits.length ? w.commits.map(c => `- \`${c.hash}\` ${c.message}`).join('\n') : '_плодов в git-истории не видно — требует ручного свидетельства о реализации_'}
+
+**θέωσις только просветляет** — этот раздел не судит, а напоминает: что было обещано и чем откликнулось.
 `;
 }
 
@@ -362,6 +493,17 @@ async function cmdDecide(args) {
   console.log(`\n  ✓ ${verdict.toUpperCase()} — решение ${verdict === 'received' ? 'принято (frozen)' : 'закрыто'}.`);
 
   if (verdict === 'received') {
+    // TheosisWitnessBridge: glorify — прогресс θέωσις команды.
+    // Принятое решение = исцеление раны нерешённости.
+    try {
+      const { witness, glorify } = await import(resolve(ROOT, 'src/theology/TheosisWitnessBridge.js'));
+      const personId = `sic:${m.team}`;
+      const wound = `вопрошание-${id}`;
+      if (typeof witness === 'function') await witness({ personId, wound });
+      if (typeof glorify === 'function') await glorify({ personId, wound, glorification: note || 'received' });
+    } catch (e) {
+      // модуль ещё не подключён — молчим, θέωσις не обязателен для литургии
+    }
     console.log(`  Следующее: через 4 недели — новая сессия.`);
     console.log(`  План задач: открой sobor.md, вынеси пункты в gh issue create --label sic-plan.\n`);
   }
