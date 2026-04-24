@@ -100,6 +100,19 @@ const server = createServer(async (req, res) => {
   if (url === '/api/sic/list') {
     return serveJSON_data(res, listSicSessions());
   }
+  if (url === '/api/sic/new' && req.method === 'POST') {
+    return handleSicAction(req, res, 'new');
+  }
+  if (url.match(/^\/api\/sic\/[^/]+\/(panels|sobor|discernment|decide|epiclesis|plan)$/) && req.method === 'POST') {
+    const parts = url.split('/');
+    const id = decodeURIComponent(parts[3]);
+    const action = parts[4];
+    return handleSicAction(req, res, action, id);
+  }
+  if (url.match(/^\/api\/sic\/[^/]+\/plan$/) && req.method === 'GET') {
+    const id = decodeURIComponent(url.split('/')[3]);
+    return serveJSON_data(res, extractPlanFromSobor(id));
+  }
   if (url.startsWith('/api/sic/')) {
     const id = decodeURIComponent(url.slice('/api/sic/'.length));
     const s = readSicSession(id);
@@ -924,6 +937,118 @@ function readSicSession(id) {
     }
     return { manifest: m, content };
   } catch { return null; }
+}
+
+async function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let b = '';
+    req.on('data', c => b += c);
+    req.on('end', () => { try { resolve(b ? JSON.parse(b) : {}); } catch (e) { reject(e); } });
+    req.on('error', reject);
+  });
+}
+
+// ── POST-обработчики СИЦ: вызывают sic-session.mjs как подпроцесс ─────
+async function handleSicAction(req, res, action, id) {
+  const { spawn } = await import('node:child_process');
+  let body = {};
+  try { body = await readBody(req); } catch { /* empty ok */ }
+
+  const args = [];
+  let respond = (out, err, code) => {
+    const ok = code === 0;
+    res.writeHead(ok ? 200 : 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(ok ? { ok: true, id, out } : { ok: false, error: err || out }));
+  };
+
+  if (action === 'new') {
+    args.push('new', body.question || '');
+    if (body.team) args.push('--team', body.team);
+    args.push('--skip-kairos'); // команда уже здесь — она сама знает, уместно ли
+    respond = (out, err, code) => {
+      if (code !== 0) { res.writeHead(500); return res.end(JSON.stringify({ ok: false, error: err || out })); }
+      const idMatch = out.match(/sic-\d+/);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, id: idMatch ? idMatch[0] : null }));
+    };
+  } else if (action === 'panels') {
+    args.push('panels', id);
+  } else if (action === 'sobor') {
+    args.push('sobor', id);
+  } else if (action === 'decide') {
+    args.push('decide', id, '--verdict', body.verdict || 'received');
+    if (body.note) args.push('--note', body.note);
+  } else if (action === 'discernment') {
+    // сохранить Различение как замену соответствующего раздела в sobor.md
+    const p = join(sicDir(), id, 'sobor.md');
+    if (!existsSync(p)) { res.writeHead(404); return res.end('sobor not found'); }
+    let md = readFileSync(p, 'utf8');
+    const marker = '## Различение';
+    const draft = '## Набросок решения';
+    const i = md.indexOf(marker);
+    const j = md.indexOf(draft);
+    if (i >= 0 && j > i) {
+      md = md.slice(0, i) + `${marker}\n\n${body.text || ''}\n\n` + md.slice(j);
+    } else {
+      md += `\n\n${marker}\n\n${body.text || ''}\n`;
+    }
+    writeFileSync(p, md);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true }));
+  } else if (action === 'epiclesis') {
+    // создать файл в data/epiclesis-inbox/ для tg-oracle-bridge
+    const inbox = join(ROOT, 'data', 'epiclesis-inbox');
+    mkdirSync(inbox, { recursive: true });
+    const epiId = `epiclesis-${Date.now()}-${(id || 'sic').slice(-6)}`;
+    const fname = `${epiId}.md`;
+    const fm = [
+      '---',
+      `id: ${epiId}`,
+      `from: sic:${body.team || 'unknown'}`,
+      `sic_id: ${id || ''}`,
+      `question: ${(body.question || '').replace(/\n/g, ' ')}`,
+      `context: ${(body.context || '').replace(/\n/g, ' ')}`,
+      `asked_at: ${new Date().toISOString()}`,
+      `status: pending`,
+      '---',
+    ].join('\n');
+    writeFileSync(join(inbox, fname), `${fm}\n\n# Эпиклеза\n\n${body.question || ''}\n\n${body.context ? `## Контекст\n\n${body.context}\n` : ''}`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, id: epiId, file: fname }));
+  } else if (action === 'plan') {
+    // вернуть разбор Различения/Наброска на пункты
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(extractPlanFromSobor(id)));
+  } else {
+    res.writeHead(400); return res.end(JSON.stringify({ error: 'unknown action' }));
+  }
+
+  const child = spawn('node', [join(ROOT, 'utils/sic-session.mjs'), ...args], { cwd: ROOT });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', d => stdout += d);
+  child.stderr.on('data', d => stderr += d);
+  child.on('close', code => respond(stdout, stderr, code));
+}
+
+function extractPlanFromSobor(id) {
+  const p = join(sicDir(), id, 'sobor.md');
+  if (!existsSync(p)) return { items: [] };
+  const md = readFileSync(p, 'utf8');
+  // Берём только секции "## Различение" и "## Набросок решения" — план живёт там
+  const sections = md.split(/^## /m).slice(1);
+  const items = [];
+  for (const sec of sections) {
+    const firstLine = sec.split('\n')[0].trim().toLowerCase();
+    if (!/^(различение|набросок)/i.test(firstLine)) continue;
+    const body = sec.split('\n').slice(1).join('\n');
+    for (const ln of body.split('\n')) {
+      const m = ln.match(/^\s*-\s*(?:\[[ xX]\])?\s*(.+)$/);
+      if (m && m[1].trim() && !m[1].startsWith('_') && !m[1].startsWith('#') && !m[1].startsWith('**')) {
+        items.push({ text: m[1].trim() });
+      }
+    }
+  }
+  return { items };
 }
 
 // ── Чат-сессии (многоходовой диалог) ──────────────────────────

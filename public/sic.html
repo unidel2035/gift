@@ -5,140 +5,560 @@
 <title>СИЦ — Ситуационно-Инженерный Центр</title>
 <style>
   * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#0f1115; color:#e6e6e6; }
-  header { padding: 18px 24px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: baseline; }
-  header h1 { margin:0; font-size: 20px; color: #d4b06a; font-weight: 600; }
-  header .sub { color:#888; font-size: 13px; }
-  .container { max-width: 1600px; margin: 0 auto; padding: 18px 24px; }
-  .sessions { display: grid; grid-template-columns: 260px 1fr; gap: 18px; }
-  .list { border-right: 1px solid #222; padding-right: 12px; height: calc(100vh - 110px); overflow-y: auto; }
-  .item { padding: 10px; border: 1px solid #1a1d23; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: background .15s; }
-  .item:hover { background: #161a20; }
-  .item.active { background: #1a1f28; border-color: #d4b06a; }
-  .item .phase { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #888; }
-  .item .q { font-size: 13px; color: #d4d4d4; margin-top: 4px; }
-  .item .meta { font-size: 11px; color: #666; margin-top: 6px; }
-  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; }
-  .badge.proskomidia { background: #2a3a4a; color: #a8c8e8; }
-  .badge.panels { background: #3a3a2a; color: #e8d8a8; }
-  .badge.sobor { background: #4a3a2a; color: #e8b888; }
-  .badge.otpust { background: #2a4a2a; color: #a8e8a8; }
-  .badge.closed { background: #3a2a2a; color: #e89898; }
+  html, body { margin:0; padding:0; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#0f1115; color:#e6e6e6; min-height:100vh; }
+  a { color:#d4b06a; }
+  button { font-family: inherit; cursor: pointer; transition: all .15s; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  input, textarea { font-family: inherit; background:#0a0c10; border:1px solid #2a2f38; color:#e6e6e6; border-radius:6px; padding:10px 12px; font-size:14px; width:100%; }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
+  input:focus, textarea:focus { outline: none; border-color: #d4b06a; }
+
+  header { padding: 14px 24px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin:0; font-size: 18px; color: #d4b06a; font-weight: 600; }
+  header .sub { color:#888; font-size: 12px; margin-top:2px; }
+
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 24px; }
+
+  /* Step strip */
+  .steps { display: flex; gap: 6px; margin-bottom: 24px; background:#161a20; padding:8px; border-radius:10px; border:1px solid #222; }
+  .step { flex:1; padding:10px 12px; text-align:center; border-radius:6px; font-size:12px; color:#666; cursor:pointer; user-select:none; border:1px solid transparent; }
+  .step.active { background:#1a1f28; color:#d4b06a; border-color:#2e2a1f; }
+  .step.done { color:#7ab87a; }
+  .step .num { display:inline-block; width:20px; height:20px; line-height:20px; border-radius:50%; background:#2a2f38; color:#aaa; margin-right:6px; font-size:11px; }
+  .step.active .num { background:#d4b06a; color:#1a1611; }
+  .step.done .num { background:#2a4a2a; color:#a8e8a8; }
+
+  .card { background:#161a20; border:1px solid #222; border-radius:10px; padding:20px 22px; margin-bottom:14px; }
+  .card h2 { margin:0 0 8px; font-size: 16px; color:#d4b06a; font-weight:600; letter-spacing:.3px; }
+  .card h3 { margin:18px 0 8px; font-size: 14px; color:#bbb; }
+  .card .hint { color:#888; font-size:12px; margin-bottom:12px; line-height:1.55; }
+
+  .btn { background:#2a2f38; color:#e6e6e6; border:1px solid #3a3f48; padding:10px 18px; border-radius:6px; font-size:14px; }
+  .btn:hover:not(:disabled) { background:#3a3f48; }
+  .btn.primary { background:#d4b06a; color:#1a1611; border-color:#d4b06a; font-weight:600; }
+  .btn.primary:hover:not(:disabled) { background:#e0c285; }
+  .btn.danger { background:#3a2a2a; color:#e89898; border-color:#5a3a3a; }
+  .btn.ghost { background:transparent; border-color:#3a3f48; color:#aaa; }
+  .btn.sm { padding:6px 12px; font-size:12px; }
+
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .row.right { justify-content: flex-end; }
+  .spacer { flex:1; }
+
   .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-  .panel { background: #161a20; border: 1px solid #222; border-radius: 8px; padding: 14px; max-height: 70vh; overflow-y: auto; }
-  .panel h2 { margin: 0 0 10px; font-size: 14px; color: #d4b06a; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
-  .panel h3 { font-size: 14px; color: #bbb; margin: 14px 0 6px; }
-  .panel .meta-line { font-size: 11px; color: #666; margin-bottom: 12px; }
-  .panel pre, .panel .md { font-size: 12px; line-height: 1.55; color: #cfcfcf; white-space: pre-wrap; word-break: break-word; }
-  .sobor-bar { grid-column: 1 / -1; background: #1a1f28; border: 1px solid #2a2f38; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
-  .sobor-bar h3 { margin: 0 0 8px; color: #d4b06a; font-size: 14px; font-weight: 600; }
-  .empty { color: #555; padding: 20px; text-align: center; font-size: 13px; }
-  .refresh { color: #888; font-size: 11px; cursor: pointer; }
-  .refresh:hover { color: #d4b06a; }
+  .panel { background:#0e1218; border:1px solid #1e232b; border-radius:8px; padding:14px; max-height: 55vh; overflow-y:auto; }
+  .panel h4 { margin:0 0 6px; font-size: 13px; color:#d4b06a; text-transform: uppercase; letter-spacing:.8px; font-weight:600; }
+  .panel .meta-line { font-size: 10px; color:#666; margin-bottom: 10px; letter-spacing:.3px; }
+  .panel .md { font-size: 11.5px; line-height: 1.55; color:#c5c5c5; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; margin-right:4px; text-transform: uppercase; letter-spacing:.5px; font-weight:600; }
+  .badge.proskomidia { background:#2a3a4a; color:#a8c8e8; }
+  .badge.panels { background:#3a3a2a; color:#e8d8a8; }
+  .badge.sobor { background:#4a3a2a; color:#e8b888; }
+  .badge.otpust { background:#2a4a2a; color:#a8e8a8; }
+  .badge.closed { background:#3a2a2a; color:#e89898; }
+
+  .empty { color:#555; padding: 30px; text-align:center; font-size: 13px; border: 1px dashed #2a2f38; border-radius:8px; }
+  .ses-list { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+  .ses { background:#0e1218; border:1px solid #1e232b; border-radius:8px; padding:12px; cursor:pointer; transition: all .15s; }
+  .ses:hover { border-color:#d4b06a; }
+  .ses .q { font-size:13px; color:#d4d4d4; margin:6px 0; line-height:1.4; }
+  .ses .meta { font-size:11px; color:#666; }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; padding:20px; z-index:100; }
+  .modal.on { display:flex; }
+  .modal .box { background:#161a20; border:1px solid #2a2f38; border-radius:10px; padding:24px; max-width: 600px; width: 100%; }
+  .modal h3 { margin-top:0; color:#d4b06a; }
+
+  .alert { background:#2a3a4a; border:1px solid #3a4a5a; color:#a8c8e8; padding:12px 14px; border-radius:6px; font-size:13px; margin-bottom:14px; }
+  .alert.warn { background:#3a3a2a; border-color:#5a5a3a; color:#e8d8a8; }
+  .alert.ok { background:#2a4a2a; border-color:#3a5a3a; color:#a8e8a8; }
+
+  .plan-item { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:#0e1218; border:1px solid #1e232b; border-radius:6px; margin-bottom:6px; }
+  .plan-item input[type=checkbox] { width:auto; margin-top:3px; }
+  .plan-item .t { flex:1; font-size:13px; color:#d4d4d4; }
+
+  code, pre { background:#0a0c10; padding:2px 5px; border-radius:3px; font-size:11.5px; color:#d4b06a; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .ritual { font-style: italic; color:#8a7a5a; font-size:12px; border-left:2px solid #3a2e1a; padding-left:10px; margin: 8px 0; }
+
+  .witness-block { background:#1a1611; border:1px solid #3a2e1a; padding:12px 14px; border-radius:8px; margin-bottom:14px; }
+  .witness-block .md { font-size:12px; white-space:pre-wrap; color:#c5b99a; font-family: ui-monospace, monospace; }
 </style>
 </head>
 <body>
 <header>
   <div>
-    <h1>СИЦ — Ситуационно-Инженерный Центр</h1>
-    <div class="sub">литургия принятия решений · триада Переслегина на онтологии дара</div>
+    <h1>СИЦ · Ситуационно-Инженерный Центр</h1>
+    <div class="sub" id="sub">Κοινόν τοῦ Νοῦ · литургия принятия решений</div>
   </div>
-  <div class="refresh" id="refresh">⟳ обновить</div>
+  <div class="row">
+    <input id="teamInput" placeholder="имя команды" style="width:180px; font-size:12px;"/>
+    <button class="btn ghost sm" onclick="goHome()">↺ к списку</button>
+  </div>
 </header>
 
-<div class="container">
-  <div class="sessions">
-    <div class="list" id="list"><div class="empty">загрузка…</div></div>
-    <div id="detail"><div class="empty">выбери сессию слева</div></div>
+<div class="wrap">
+  <div class="steps" id="steps">
+    <div class="step" data-step="0" onclick="setStep(0)"><span class="num">○</span>Главная</div>
+    <div class="step" data-step="1" onclick="setStep(1)"><span class="num">1</span>Проскомидия</div>
+    <div class="step" data-step="2" onclick="setStep(2)"><span class="num">2</span>Оглашенные</div>
+    <div class="step" data-step="3" onclick="setStep(3)"><span class="num">3</span>Собор</div>
+    <div class="step" data-step="4" onclick="setStep(4)"><span class="num">4</span>Причащение</div>
+    <div class="step" data-step="5" onclick="setStep(5)"><span class="num">5</span>Отпуст</div>
+  </div>
+
+  <div id="content"></div>
+</div>
+
+<!-- Modal: Эпиклеза -->
+<div class="modal" id="epiModal">
+  <div class="box">
+    <h3>🕯 Эпиклеза — призыв внешнего оракула</h3>
+    <div class="hint">Собор не знает. Попроси помощи у живых экспертов через Telegram-общину. Файл попадёт в <code>data/epiclesis-inbox/</code>; <code>tg-oracle-bridge</code> доставит в бот.</div>
+    <label style="font-size:12px;color:#888;">Вопрос эксперту</label>
+    <textarea id="epiQuestion" placeholder="Сформулируй вопрос ясно — именно на него ждёшь ответ"></textarea>
+    <label style="font-size:12px;color:#888;margin-top:10px;display:block;">Контекст (опционально)</label>
+    <textarea id="epiContext" placeholder="Почему собор не смог сам"></textarea>
+    <div class="row right" style="margin-top:14px;">
+      <button class="btn ghost" onclick="closeModal('epiModal')">Отмена</button>
+      <button class="btn primary" onclick="submitEpiclesis()">Отправить в inbox</button>
+    </div>
   </div>
 </div>
 
 <script>
-const list = document.getElementById('list');
-const detail = document.getElementById('detail');
-let activeId = null;
+const state = {
+  step: 0,
+  id: null,
+  session: null,
+  team: localStorage.getItem('sic_team') || 'КомандаДионисия',
+};
+
+document.getElementById('teamInput').value = state.team;
+document.getElementById('teamInput').oninput = e => {
+  state.team = e.target.value || 'КомандаДионисия';
+  localStorage.setItem('sic_team', state.team);
+};
+
+function setStep(n) {
+  state.step = n;
+  for (const el of document.querySelectorAll('.step')) el.classList.remove('active');
+  document.querySelector(`.step[data-step="${n}"]`).classList.add('active');
+  render();
+}
+
+function phaseToStep(m) {
+  if (!m) return 0;
+  if (m.phase === 'proskomidia') return 1;
+  if (m.phase === 'panels') return 2;
+  if (m.phase === 'sobor') return 3;
+  if (m.phase === 'otpust') return 5;
+  if (m.phase === 'closed') return 4;
+  return 0;
+}
 
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-async function loadList() {
-  try {
-    const r = await fetch('/api/sic/list');
-    const j = await r.json();
-    const sessions = j.sessions || [];
-    if (!sessions.length) {
-      list.innerHTML = `<div class="empty">сессий ещё не было — запусти <code>node utils/sic-session.mjs new "вопрошание"</code></div>`;
-      return;
+function markDoneSteps() {
+  const p = state.session?.manifest?.phase;
+  const order = ['proskomidia', 'panels', 'sobor', 'otpust', 'closed'];
+  const idx = p ? order.indexOf(p) : -1;
+  for (const el of document.querySelectorAll('.step')) el.classList.remove('done');
+  for (let i = 1; i <= 5; i++) {
+    const stepIdx = i - 1;
+    if (stepIdx < idx || (stepIdx === idx && p === 'otpust' && state.session?.manifest?.decision?.verdict === 'received' && i < 5)) {
+      document.querySelector(`.step[data-step="${i}"]`).classList.add('done');
     }
-    list.innerHTML = sessions.map(s => `
-      <div class="item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
-        <div class="phase"><span class="badge ${s.phase}">${s.phase}</span> ${s.verdict || ''}</div>
-        <div class="q">${escapeHtml((s.question || '').slice(0, 120))}</div>
-        <div class="meta">${s.team} · ${s.date}</div>
-      </div>
-    `).join('');
-    list.querySelectorAll('.item').forEach(el => {
-      el.onclick = () => openSession(el.dataset.id);
-    });
-  } catch (e) {
-    list.innerHTML = `<div class="empty">ошибка: ${e.message}</div>`;
   }
 }
 
-function renderMd(md) {
-  if (!md) return '<div class="empty">пусто</div>';
-  return '<div class="md">' + escapeHtml(md) + '</div>';
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  return await r.json();
 }
 
-async function openSession(id) {
-  activeId = id;
-  loadList();
-  try {
-    const r = await fetch('/api/sic/' + encodeURIComponent(id));
-    if (!r.ok) { detail.innerHTML = `<div class="empty">сессия не найдена</div>`; return; }
-    const j = await r.json();
-    const m = j.manifest;
-    const c = j.content || {};
+async function loadSession(id) {
+  state.id = id;
+  const j = await api('/api/sic/' + encodeURIComponent(id));
+  state.session = j.manifest ? j : null;
+  if (state.session) setStep(phaseToStep(state.session.manifest));
+  markDoneSteps();
+}
 
-    const panelsHtml = `
-      <div class="panels">
-        ${c.sobor ? `<div class="sobor-bar"><h3>Собор</h3>${renderMd(c.sobor)}</div>` : ''}
-        <div class="panel">
-          <h2>Ситуация</h2>
-          <div class="meta-line">постнеклассика · пороговая сложность</div>
-          ${renderMd(c['panel-situation'])}
-        </div>
-        <div class="panel">
-          <h2>Стратегия</h2>
-          <div class="meta-line">классика · инвариантность + бесцелевая ценностная</div>
-          ${renderMd(c['panel-strategy'])}
-        </div>
-        <div class="panel">
-          <h2>Прогноз</h2>
-          <div class="meta-line">неклассика · матрица сценариев</div>
-          ${renderMd(c['panel-forecast'])}
-        </div>
-        ${c.proskomidia ? `<div class="sobor-bar"><h3>Проскомидия</h3>${renderMd(c.proskomidia)}</div>` : ''}
-        ${c.decision ? `<div class="sobor-bar"><h3>Причащение</h3>${renderMd(c.decision)}</div>` : ''}
+async function goHome() {
+  state.id = null; state.session = null;
+  setStep(0);
+}
+
+// ── Render dispatch ──────────────────────────────────────────────────
+function render() {
+  const el = document.getElementById('content');
+  markDoneSteps();
+  const r = {
+    0: renderHome,
+    1: renderProskomidia,
+    2: renderPanels,
+    3: renderSobor,
+    4: renderPrichashenie,
+    5: renderOtpust,
+  }[state.step];
+  el.innerHTML = r ? r() : '<div class="empty">неизвестный шаг</div>';
+  const afterRender = window.__afterRender;
+  if (afterRender) { window.__afterRender = null; afterRender(); }
+}
+
+// ── Step 0: Home ─────────────────────────────────────────────────────
+function renderHome() {
+  window.__afterRender = async () => {
+    const j = await api('/api/sic/list');
+    const list = j.sessions || [];
+    const active = list.filter(s => s.phase !== 'closed' && !(s.phase === 'otpust' && s.verdict));
+    const archive = list.filter(s => s.phase === 'closed' || (s.phase === 'otpust' && s.verdict));
+    const active_html = active.length
+      ? `<div class="ses-list">${active.map(s => sesCard(s)).join('')}</div>`
+      : `<div class="empty">открытых сессий нет</div>`;
+    const archive_html = archive.length
+      ? `<div class="ses-list" style="margin-top:18px;">${archive.map(s => sesCard(s, true)).join('')}</div>`
+      : '';
+    document.getElementById('home-lists').innerHTML = active_html + archive_html;
+  };
+  return `
+    <div class="card">
+      <h2>Команда пришла</h2>
+      <p class="hint">Один раз в месяц. 2-4 часа. Один вопрос. 4 недели воплощения после.</p>
+      <div class="row">
+        <input id="newQuestion" placeholder="Вопрошание месяца: &quot;что с нами происходит?&quot; > &quot;что делать?&quot;" style="flex:1; min-width:280px;"/>
+        <button class="btn primary" onclick="startNew()">🕯 Начать сессию</button>
+      </div>
+      <div class="ritual">Вопрошание — не задача. «Что с нами происходит?» — хорошо. «Сделать X» — пока рано. Собор различает прежде, чем действует.</div>
+    </div>
+    <div class="card">
+      <h3>Открытые сессии</h3>
+      <div id="home-lists"><div class="empty">загрузка…</div></div>
+    </div>
+  `;
+}
+
+function sesCard(s, archived = false) {
+  return `
+    <div class="ses" onclick="loadSession('${s.id}')">
+      <div><span class="badge ${s.phase}">${s.phase}</span>${s.verdict ? `<span class="badge ${s.verdict === 'received' ? 'otpust' : 'closed'}">${s.verdict}</span>` : ''}</div>
+      <div class="q">${escapeHtml((s.question || '').slice(0, 140))}</div>
+      <div class="meta">${s.team} · ${s.date}</div>
+    </div>
+  `;
+}
+
+async function startNew() {
+  const q = document.getElementById('newQuestion').value.trim();
+  if (!q) { alert('Сформулируй вопрошание'); return; }
+  const r = await api('/api/sic/new', { method: 'POST', body: { question: q, team: state.team } });
+  if (r.ok && r.id) { await loadSession(r.id); }
+  else alert('Ошибка: ' + (r.error || JSON.stringify(r)));
+}
+
+// ── Step 1: Проскомидия ──────────────────────────────────────────────
+function renderProskomidia() {
+  if (!state.session) return nosession();
+  const m = state.session.manifest;
+  const w = m.witness;
+  const witnessHtml = w
+    ? `<div class="witness-block"><div style="color:#d4b06a;font-size:12px;font-weight:600;margin-bottom:6px;">⟳ Свидетельство предыдущей сессии</div>
+         <div>СИЦ <code>${w.previous.id}</code> — <b>${w.previous.daysSince}</b> дней назад</div>
+         <div style="margin:6px 0;">${escapeHtml(w.previous.question)}</div>
+         <div>Решение: <b>${w.previous.decision.verdict}</b> — ${escapeHtml(w.previous.decision.note || '—')}</div>
+         <div style="margin-top:8px;font-size:11px;color:#888;">Коммитов с тех пор: <b>${w.fruits}</b></div>
+       </div>`
+    : '';
+  return `
+    <div class="card">
+      <h2>1. Проскомидия — постановка вопрошания</h2>
+      <div class="ritual">Команда собирается. Не обсуждать решения — различить, что спрашиваешь.</div>
+      ${witnessHtml}
+      <h3>Сегодняшнее вопрошание</h3>
+      <div style="font-size:18px;color:#d4d4d4;background:#0e1218;border:1px solid #1e232b;padding:14px;border-radius:8px;line-height:1.55;">
+        ${escapeHtml(m.question)}
+      </div>
+      <div class="row right" style="margin-top:18px;">
+        <button class="btn primary" onclick="runPanels()">Перейти к Литургии оглашенных →</button>
+      </div>
+    </div>
+  `;
+}
+
+async function runPanels() {
+  document.getElementById('content').innerHTML = '<div class="card"><div class="empty">Собираю панели — читаю матрицу, душу, пульс…</div></div>';
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/panels', { method: 'POST' });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || '')); return; }
+  await loadSession(state.id);
+}
+
+// ── Step 2: Литургия оглашенных ──────────────────────────────────────
+function renderPanels() {
+  if (!state.session) return nosession();
+  const c = state.session.content;
+  const phase = state.session.manifest.phase;
+  const havePanels = c['panel-situation'] && c['panel-strategy'] && c['panel-forecast'];
+  if (!havePanels && phase === 'proskomidia') {
+    return `
+      <div class="card">
+        <h2>2. Литургия оглашенных</h2>
+        <div class="ritual">Три панели работают независимо. Сила в различии голосов.</div>
+        <p class="hint">Панели ещё не собраны. Нажми чтобы запустить сбор из матрицы W, claude-soul и pulse.</p>
+        <button class="btn primary" onclick="runPanels()">Собрать три панели</button>
       </div>
     `;
-
-    detail.innerHTML = `
-      <div style="margin-bottom:14px;">
-        <div style="font-size:11px;color:#888;">${m.id} · ${m.team} · ${m.date} · фаза: <span class="badge ${m.phase}">${m.phase}</span> ${m.decision?.verdict ? ' · ' + m.decision.verdict : ''}</div>
-        <div style="font-size:16px;color:#d4d4d4;margin-top:6px;"><b>Вопрошание:</b> ${escapeHtml(m.question)}</div>
-      </div>
-      ${panelsHtml}
-    `;
-  } catch (e) {
-    detail.innerHTML = `<div class="empty">ошибка: ${e.message}</div>`;
   }
+  return `
+    <div class="card">
+      <h2>2. Литургия оглашенных — три голоса</h2>
+      <div class="ritual">Команда читает все три панели. Не спорит между ними. Запоминает несогласия — в собор.</div>
+    </div>
+    <div class="panels">
+      <div class="panel">
+        <h4>Ситуация</h4>
+        <div class="meta-line">постнеклассика · пороговая сложность</div>
+        <div class="md">${escapeHtml(c['panel-situation'] || '')}</div>
+      </div>
+      <div class="panel">
+        <h4>Стратегия</h4>
+        <div class="meta-line">классика · инварианты + ценности</div>
+        <div class="md">${escapeHtml(c['panel-strategy'] || '')}</div>
+      </div>
+      <div class="panel">
+        <h4>Прогноз</h4>
+        <div class="meta-line">неклассика · матрица сценариев</div>
+        <div class="md">${escapeHtml(c['panel-forecast'] || '')}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="row right">
+        <button class="btn ghost sm" onclick="runPanels()">↻ пересобрать</button>
+        <button class="btn primary" onclick="runSobor()">К Собору →</button>
+      </div>
+    </div>
+  `;
 }
 
-document.getElementById('refresh').onclick = () => { loadList(); if (activeId) openSession(activeId); };
+async function runSobor() {
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/sobor', { method: 'POST' });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || '')); return; }
+  await loadSession(state.id);
+}
 
-loadList();
-// авто-обновление каждые 10 секунд для открытой сессии
-setInterval(() => { if (activeId) openSession(activeId); }, 10000);
+// ── Step 3: Собор ────────────────────────────────────────────────────
+function renderSobor() {
+  if (!state.session) return nosession();
+  const c = state.session.content;
+  if (!c.sobor) {
+    return `
+      <div class="card">
+        <h2>3. Собор — полифония</h2>
+        <p class="hint">Сначала собери панели, потом открывай собор.</p>
+        <button class="btn primary" onclick="runSobor()">Открыть собор</button>
+      </div>
+    `;
+  }
+  // Извлекаем "Различение" из sobor.md чтобы показать в textarea
+  const disMatch = c.sobor.match(/## Различение[\s\S]*?(?=\n## |$)/);
+  const discernment = disMatch ? disMatch[0].replace(/^## Различение\s*\n+/, '').replace(/_[^_]*_/g, '').trim() : '';
+
+  return `
+    <div class="card">
+      <h2>3. Собор — различение и полифония</h2>
+      <div class="ritual">Три голоса уже прозвучали. Теперь команда различает: где согласие, где несводимое разногласие, где нужен внешний голос.</div>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <h4>Ситуация (сжатие)</h4>
+        <div class="md" style="font-size:11px;">${escapeHtml((c['panel-situation']||'').split('\n').slice(0, 20).join('\n'))}</div>
+      </div>
+      <div class="panel">
+        <h4>Стратегия (сжатие)</h4>
+        <div class="md" style="font-size:11px;">${escapeHtml((c['panel-strategy']||'').split('\n').slice(0, 20).join('\n'))}</div>
+      </div>
+      <div class="panel">
+        <h4>Прогноз (сжатие)</h4>
+        <div class="md" style="font-size:11px;">${escapeHtml((c['panel-forecast']||'').split('\n').slice(0, 20).join('\n'))}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <h3>Различение (общий текст команды)</h3>
+      <p class="hint">Где голоса согласны? Где несводимое разногласие (ConciliarDissent — это истина, не ошибка)? Что требует эпиклезы к внешнему эксперту? Что требует метанойи о прошлом решении? В конце — набросок решения.</p>
+      <textarea id="discernmentText" style="min-height: 220px;" placeholder="1. Голоса сошлись в том, что...&#10;2. Несогласие: между Ситуацией и Прогнозом — ...&#10;3. Набросок решения: ...">${escapeHtml(discernment)}</textarea>
+      <div class="row" style="margin-top:14px;">
+        <button class="btn sm" onclick="saveDiscernment()">💾 Сохранить</button>
+        <button class="btn sm ghost" onclick="openEpiclesis()">🕯 Эпиклеза к эксперту</button>
+        <div class="spacer"></div>
+        <button class="btn danger" onclick="decideFast('declined', 'апофатическое молчание — собор не различил')">Апофатическое молчание</button>
+        <button class="btn primary" onclick="toPrichashenie()">К Причащению →</button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveDiscernment() {
+  const text = document.getElementById('discernmentText').value;
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/discernment', { method: 'POST', body: { text } });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || '')); return; }
+  flashOk('Различение сохранено');
+}
+
+async function toPrichashenie() {
+  await saveDiscernment();
+  setStep(4);
+}
+
+function flashOk(msg) {
+  const el = document.createElement('div');
+  el.className = 'alert ok';
+  el.textContent = msg;
+  el.style.position = 'fixed'; el.style.bottom = '20px'; el.style.right = '20px'; el.style.zIndex = '200';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2200);
+}
+
+// ── Step 4: Причащение ───────────────────────────────────────────────
+function renderPrichashenie() {
+  if (!state.session) return nosession();
+  const m = state.session.manifest;
+  if (m.decision) {
+    return `
+      <div class="card">
+        <h2>4. Причащение — ${m.decision.verdict === 'received' ? 'состоялось' : 'не состоялось'}</h2>
+        <div class="${m.decision.verdict === 'received' ? 'alert ok' : 'alert warn'}">
+          <b>${m.decision.verdict.toUpperCase()}</b> — ${escapeHtml(m.decision.note || '')}
+          <br/><small style="opacity:.7;">${m.decision.ts}</small>
+        </div>
+        <div class="ritual">Решение <b>frozen</b> (irreversible:true). Пересмотр — только через метанойю (новый акт, оригинал неприкосновенен).</div>
+        ${m.decision.verdict === 'received'
+          ? `<div class="row right"><button class="btn primary" onclick="setStep(5)">К Отпусту → 4 недели</button></div>`
+          : ''
+        }
+      </div>
+    `;
+  }
+  return `
+    <div class="card">
+      <h2>4. Причащение — решение как таинство</h2>
+      <div class="ritual">CAT-10 λῆψις: OFFERED → PENDING → RECEIVED. «Бог делает всё, но не без нас» — команда обязана согласиться единым умом.</div>
+
+      <h3>Текст решения (итог из Различения)</h3>
+      <textarea id="decisionNote" style="min-height: 140px;" placeholder="Одним абзацем: что именно команда принимает. Не план, а РЕШЕНИЕ."></textarea>
+
+      <h3>Синергия</h3>
+      <label style="display:flex;align-items:center;gap:10px;margin:10px 0;">
+        <input type="checkbox" id="synergyAll" style="width:auto;margin:0;"/>
+        <span>Команда согласна единым умом. Ни одно лицо не возразило.</span>
+      </label>
+
+      <div class="row right" style="margin-top:14px;">
+        <button class="btn danger" onclick="decideWithNote('declined')">Отложить (declined)</button>
+        <button class="btn primary" onclick="decideWithNote('received')">🕯 Причаститься</button>
+      </div>
+    </div>
+  `;
+}
+
+async function decideWithNote(verdict) {
+  const note = document.getElementById('decisionNote').value.trim();
+  if (verdict === 'received' && !document.getElementById('synergyAll').checked) {
+    alert('Для received необходимо согласие команды единым умом (CAT-10 синергия)');
+    return;
+  }
+  if (verdict === 'received' && !note) { alert('Запиши текст решения'); return; }
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/decide', { method: 'POST', body: { verdict, note } });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || JSON.stringify(r))); return; }
+  await loadSession(state.id);
+}
+
+async function decideFast(verdict, note) {
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/decide', { method: 'POST', body: { verdict, note } });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || '')); return; }
+  await loadSession(state.id);
+}
+
+// ── Step 5: Отпуст ───────────────────────────────────────────────────
+function renderOtpust() {
+  if (!state.session) return nosession();
+  const m = state.session.manifest;
+  if (m.decision?.verdict !== 'received') {
+    return `<div class="card"><h2>5. Отпуст</h2><p class="hint">Доступно после received-причащения.</p></div>`;
+  }
+  window.__afterRender = async () => {
+    const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/plan');
+    const items = (r.items || []).filter(i => i.text.length > 10 && i.text.length < 300);
+    const html = items.length
+      ? items.map((it, idx) => `
+          <div class="plan-item">
+            <input type="checkbox" data-idx="${idx}"/>
+            <div class="t">${escapeHtml(it.text)}</div>
+            <button class="btn sm" onclick="createIssue(${idx})">→ GitHub issue</button>
+          </div>
+        `).join('')
+      : `<div class="empty">Не нашёл пунктов в Различении — добавь список в sobor.md ("- пункт")</div>`;
+    document.getElementById('plan-list').innerHTML = html;
+    window.__planItems = items;
+  };
+  const decisionTs = new Date(m.decision.ts);
+  const deadline = new Date(decisionTs.getTime() + 28*24*3600*1000);
+  const daysLeft = Math.max(0, Math.ceil((deadline - new Date()) / (24*3600*1000)));
+  return `
+    <div class="card">
+      <h2>5. Отпуст — 4 недели преображения</h2>
+      <div class="ritual">«С миром изыдем» — команда выходит из литургии в действие. Через ${daysLeft} дней — следующая сессия. Дотуда — воплощение.</div>
+      <div class="alert">
+        <b>Решение:</b> ${escapeHtml(m.decision.note || '')}<br/>
+        <small>принято ${decisionTs.toISOString().slice(0,10)} · следующая сессия ${deadline.toISOString().slice(0,10)}</small>
+      </div>
+    </div>
+    <div class="card">
+      <h3>План задач (из Различения собора)</h3>
+      <p class="hint">Отметь пункты, которые сейчас готов вынести в GitHub как issues с меткой <code>sic-plan</code>.</p>
+      <div id="plan-list"><div class="empty">загрузка…</div></div>
+    </div>
+  `;
+}
+
+async function createIssue(idx) {
+  const item = (window.__planItems || [])[idx];
+  if (!item) return;
+  const title = prompt('Заголовок issue', item.text.slice(0, 70));
+  if (!title) return;
+  // MVP: выводим команду, которую пользователь сам скопирует (не даём веб-серверу доступ к gh CLI)
+  const cmd = `gh issue create --label sic-plan --title "${title.replace(/"/g,'\\"')}" --body "Из собора СИЦ ${state.id}: ${item.text.replace(/"/g,'\\"')}"`;
+  navigator.clipboard?.writeText(cmd).catch(()=>{});
+  alert('Команда gh скопирована в буфер:\n\n' + cmd);
+}
+
+// ── Modal: Эпиклеза ──────────────────────────────────────────────────
+function openEpiclesis() { document.getElementById('epiModal').classList.add('on'); }
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+async function submitEpiclesis() {
+  const question = document.getElementById('epiQuestion').value.trim();
+  const context = document.getElementById('epiContext').value.trim();
+  if (!question) { alert('Сформулируй вопрос'); return; }
+  const r = await api('/api/sic/' + encodeURIComponent(state.id) + '/epiclesis', { method: 'POST', body: { question, context, team: state.team } });
+  if (!r.ok) { alert('Ошибка: ' + (r.error || '')); return; }
+  closeModal('epiModal');
+  flashOk(`Эпиклеза ${r.id} отправлена в inbox. Бот доставит.`);
+  document.getElementById('epiQuestion').value = '';
+  document.getElementById('epiContext').value = '';
+}
+
+function nosession() { return `<div class="empty">Сессия не выбрана — <a onclick="goHome()">к списку</a></div>`; }
+
+// ── Init ─────────────────────────────────────────────────────────────
+setStep(0);
+render();
 </script>
 </body>
 </html>
