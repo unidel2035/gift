@@ -163,8 +163,8 @@ function parseNewFormatSpec(src) {
       depth += (line.match(/\{/g) || []).length;
       depth -= (line.match(/\}/g) || []).length;
       if (depth <= 0) {
-        const fromM   = block.match(/от:\s*([\wА-яёЁ_:]+)/);
-        const toM     = block.match(/кому:\s*([\wА-яёЁ_:]+)/);
+        const fromM   = block.match(/от:\s*([\wА-яёЁ_:\/]+)/);
+        const toM     = block.match(/кому:\s*([\wА-яёЁ_:\/]+)/);
         const typeM   = block.match(/тип:\s*(\w+)/);
         const weightM = block.match(/вес:\s*(\d+(?:\.\d+)?)/);
         const irrevM  = block.match(/необратим:\s*(да|нет)/);
