@@ -148,7 +148,22 @@ export function TelosCheck(agent) {
  */
 
 /**
- * @typedef {'code'|'word'|'time'|'presence'|'question'|'approval'|'offering'|'covenant'|'reception'} GiftActType
+ * @typedef {'code'|'word'|'time'|'presence'|'question'|'approval'|'offering'|'covenant'|'reception'|'wager'|'wound'} GiftActType
+ *
+ * wager — Паскалева ставка: акт веры до знания.
+ *   Лицо ставит вес на гипотезу при неполноте знания.
+ *   В отличие от дара (необратим сразу) ставка имеет фазу разрешения:
+ *   wager → resolved:won → дар (type=code/word, weight=stake), либо
+ *   wager → resolved:lost → рана (type=wound, weight=stake, апофатически свидетельствует о пределе).
+ *   Структура: { giverId, receiverId, type:'wager', weight, content:hypothesis,
+ *                wagerStatus:'open'|'won'|'lost', wagerResolvedAt, irreversible:false }
+ *   Ставка — единственный обратимый акт в W: до разрешения её можно отозвать (revoke).
+ *   После разрешения — необратима как дар или как рана.
+ *
+ * wound — рана: упавшая ставка или отвергнутый дар, оставивший след.
+ *   FallObserver уже использует severity='wound'; здесь — как тип акта в W.
+ *   Вес раны равен весу непринятого/проигранного. Рана видна в анамнезисе,
+ *   но не суммируется в энергию сети — она апофатическая граница.
  *
  * reception — λήψις: активное принятие дара получателем.
  *   Дар без принятия неполон (Максим Исповедник, Ambigua 7).
@@ -490,6 +505,31 @@ export class GiftAct {
    */
   static anamnesis(scale = 'person') {
     const act = new GiftAct({ scale, unconditional: false, silencePossible: true });
+    act._giftMode = GiftMode.ANAMNESIS;
+    return act;
+  }
+
+  /**
+   * Жанр: Ставка (wager) — Паскалева ставка как акт веры до знания.
+   *
+   * Лицо ставит вес на гипотезу при неполноте знания.
+   * Обратима до разрешения (revocable until resolved), необратима после.
+   *
+   * Богословие: ставка — анамнетический режим без свидетеля,
+   * пророческий аванс, который рискует стать раной.
+   * «Не видя, веруют» (Ин 20:29) — крайний случай wager,
+   * где cost = ∞, а surplus открывается только в эсхатологии.
+   *
+   * Структура акта: { type: 'wager', wagerStatus, weight, content: hypothesis }.
+   * Разрешение: resolveWager(act, won|lost) → создаёт парный акт.
+   */
+  static wager() {
+    const act = new GiftAct({
+      scale: 'person',
+      unconditional: false,
+      silencePossible: true,
+      apophatic: 'Ставка не знает исхода — surplus в руках Другого',
+    });
     act._giftMode = GiftMode.ANAMNESIS;
     return act;
   }

@@ -534,5 +534,18 @@
     "created": "2026-04-20T12:40:35.453Z",
     "done_at": null,
     "issue_number": null
+  },
+  {
+    "id": 62,
+    "text": "Wager — Паскалева ставка как новый жанр акта в W: единственный обратимый акт до разрешения, после resolve необратим как дар (won) или рана (lost). Богатая schema: thesis/basis/timeFrame/upside/downside/keyArguments/counterArguments/confidence/timeHorizon. Διάκρισις на placement: высокая ставка с низкой confidence = подвиг веры; высокая ставка с высокой confidence = расчёт, не вера. CLI: utils/claude-wager.mjs place|list|show|resolve|revoke. Закрывает онтологический зазор vs Bot-Ontologist (onto03.space-z.ai) — у них 'stake' богаче нашей структуры, но без необратимости и без раны.",
+    "enhanced": "Wager — Паскалева ставка как новый жанр акта в W: единственный обратимый акт до разрешения, после resolve необратим как дар (won) или рана (lost). Богатая schema: thesis/basis/timeFrame/upside/downside/keyArguments/counterArguments/confidence/timeHorizon. Διάκρισις на placement: высокая ставка с низкой confidence = подвиг веры; высокая ставка с высокой confidence = расчёт, не вера. CLI: utils/claude-wager.mjs place|list|show|resolve|revoke. Закрывает онтологический зазор vs Bot-Ontologist (onto03.space-z.ai) — у них 'stake' богаче нашей структуры, но без необратимости и без раны.",
+    "telos": "добавить в онтологию",
+    "eva_verdict": "принято",
+    "eva_notes": "[ВЕРДИКТ] ПРИНЯТО — уникальное, без дубликатов",
+    "cat": "ontology",
+    "status": "pending",
+    "created": "2026-04-29T08:58:40.925Z",
+    "done_at": null,
+    "issue_number": null
   }
 ]
