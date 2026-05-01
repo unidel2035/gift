@@ -22,6 +22,8 @@
 
 import { runGiftAgent } from '../src/agent-cli/run.js';
 import { runOllamaAgent } from '../src/agent-cli/ollama-runner.js';
+import { runApiAgent } from '../src/agent-cli/api-runner.js';
+import { runPolzaAgent } from '../src/agent-cli/polza-runner.js';
 import { readFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
@@ -35,27 +37,38 @@ if (flag('--help') || flag('-h')) {
   console.log(`
 gift-agent — агентный CLI
 
-Два runner'а:
-  ${' '}default: @anthropic-ai/claude-agent-sdk (Claude через подписку, требует
-  ${' '}свободного auth-слота — anti-recursion если активна Claude Code session)
-  ${' '}--ollama: локальный Ollama agent loop через llama3.1:8b или mistral:7b
-  ${' '}(работает параллельно с Claude Code, без anti-recursion)
+Четыре runner'а:
+  ${' '}default (--sdk): @anthropic-ai/claude-agent-sdk (Claude через подписку,
+  ${' '}    требует свободного auth-слота — блокируется anti-recursion'ом)
+  ${' '}--polza: polza.ai OpenAI-compat proxy (Claude+GPT+Llama+Gemini через
+  ${' '}    единый ключ; URL по умолчанию http://173.249.2.184/v1)
+  ${' '}--api: прямой Anthropic API (требует ANTHROPIC_API_KEY)
+  ${' '}--ollama: локальный Ollama (llama3.1:8b / mistral:7b)
 
-  gift-agent "промпт"                    # default: Claude SDK
-  gift-agent --ollama "промпт"           # Ollama-runner (всегда работает)
+  gift-agent "промпт"                    # default: SDK runner
+  gift-agent --polza "промпт"            # polza.ai (рекомендуется)
+  gift-agent --polza --model gpt-4o "промпт"
+  gift-agent --api "промпт"              # прямой Anthropic API
+  gift-agent --api --model claude-sonnet-4-6 "промпт"
+  gift-agent --ollama "промпт"           # локально
   gift-agent --ollama --model mistral:7b "промпт"
-  gift-agent --plan "промпт"             # plan mode (только Claude)
-  gift-agent --accept-edits "промпт"     # авто-апрув edit'ов (Claude)
-  gift-agent --bypass "промпт"           # без апрувов (Claude, опасно)
+  gift-agent --plan "промпт"             # plan mode (только SDK)
+  gift-agent --accept-edits "промпт"     # авто-апрув edit'ов (только SDK)
+  gift-agent --bypass "промпт"           # без апрувов (SDK, опасно)
   gift-agent --max-turns 20 "промпт"
   gift-agent --verbose "промпт"
-  gift-agent --no-builtins "промпт"      # только mcp__gift__* tools (Claude)
+  gift-agent --no-builtins "промпт"      # только mcp__gift__* (только SDK)
   gift-agent -                           # промпт из stdin
 
+Auto-detect (если нет явного флага):
+  POLZA_API_KEY задан       → --polza
+  ANTHROPIC_API_KEY задан   → --api
+  иначе                     → --sdk (Claude Code SDK)
+
 Custom tools:
-  matrix_query, sobor_celebrate*, decoupage_cut, vintage_assess,
-  score_profile, epiclesis_ask, pustynya_list, liturgical_today, gift_receive
-  (* sobor_celebrate — только в Claude-runner, требует claude --print)
+  matrix_query, decoupage_cut, vintage_assess, score_profile,
+  epiclesis_ask, pustynya_list, liturgical_today, gift_receive,
+  sobor_celebrate (только в SDK runner)
 `);
   process.exit(0);
 }
@@ -65,18 +78,22 @@ if (flag('--plan'))         permissionMode = 'plan';
 else if (flag('--accept-edits')) permissionMode = 'acceptEdits';
 else if (flag('--bypass'))  permissionMode = 'bypassPermissions';
 
-const useOllama      = flag('--ollama');
-const ollamaModel    = arg('--model', 'llama3.1:8b');
-const maxTurns       = parseInt(arg('--max-turns', useOllama ? '10' : '30'), 10);
-const verbose        = flag('--verbose') || flag('-v');
+const useOllama = flag('--ollama');
+const usePolza  = flag('--polza') || (!flag('--sdk') && !flag('--api') && !useOllama && !!process.env.POLZA_API_KEY);
+const useApi    = !usePolza && !useOllama && (flag('--api') || (!flag('--sdk') && !!process.env.ANTHROPIC_API_KEY));
+const useSdk    = !useOllama && !useApi && !usePolza;
+
+const defaultModel = useOllama ? 'llama3.1:8b' : 'claude-opus-4-7';
+const model        = arg('--model', defaultModel);
+const maxTurns     = parseInt(arg('--max-turns', useOllama ? '10' : '15'), 10);
+const verbose      = flag('--verbose') || flag('-v');
 const includeBuiltins = !flag('--no-builtins');
 
 // Промпт — последний позиционный аргумент или stdin
 let prompt;
-if (args.includes('-') || args.includes('--')) {
+if (args.length === 1 && (args[0] === '-' || args[0] === '--')) {
   prompt = readFileSync(0, 'utf8').trim();
 } else {
-  // Берём всё, что не флаг и не значение флага
   const valuedFlags = new Set(['--max-turns', '--model']);
   const positional = [];
   for (let i = 0; i < args.length; i++) {
@@ -96,14 +113,9 @@ if (!prompt) {
 }
 
 if (useOllama) {
-  console.error(`\x1b[2m[gift-agent] runner=ollama model=${ollamaModel} maxTurns=${maxTurns}\x1b[0m`);
+  console.error(`\x1b[2m[gift-agent] runner=ollama model=${model} maxTurns=${maxTurns}\x1b[0m`);
   try {
-    const r = await runOllamaAgent({
-      prompt,
-      model: ollamaModel,
-      maxTurns,
-      verbose,
-    });
+    const r = await runOllamaAgent({ prompt, model, maxTurns, verbose });
     if (!r.success) {
       console.error(`\n\x1b[31m✗ ollama error (turns=${r.turns}): ${r.error}\x1b[0m`);
       process.exit(1);
@@ -112,8 +124,49 @@ if (useOllama) {
     console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
     process.exit(1);
   }
+} else if (usePolza) {
+  console.error(`\x1b[2m[gift-agent] runner=polza model=${model} maxTurns=${maxTurns}\x1b[0m`);
+  try {
+    const r = await runPolzaAgent({ prompt, model, maxTurns, verbose });
+    if (!r.success) {
+      if (r.error === 'no_api_key') {
+        console.error(`\n\x1b[33m⚠ ${r.message}\x1b[0m`);
+        console.error(`\x1b[2m   Узнай ключ на root@173.249.2.184. Альтернативы: --api, --ollama, --sdk\x1b[0m`);
+        process.exit(2);
+      }
+      console.error(`\n\x1b[31m✗ polza error (turns=${r.turns}): ${r.error}${r.message ? ' — ' + r.message : ''}\x1b[0m`);
+      process.exit(1);
+    }
+    if (verbose && r.usage) {
+      console.error(`\x1b[2m[polza-agent] usage: in=${r.usage.prompt_tokens} out=${r.usage.completion_tokens}\x1b[0m`);
+    }
+  } catch (e) {
+    console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
+    process.exit(1);
+  }
+} else if (useApi) {
+  console.error(`\x1b[2m[gift-agent] runner=api model=${model} maxTurns=${maxTurns}\x1b[0m`);
+  try {
+    const r = await runApiAgent({ prompt, model, maxTurns, verbose });
+    if (!r.success) {
+      if (r.error === 'no_api_key') {
+        console.error(`\n\x1b[33m⚠ ${r.message}\x1b[0m`);
+        console.error(`\x1b[2m   Альтернативы: --ollama (локально), --sdk (Claude Code SDK)\x1b[0m`);
+        process.exit(2);
+      }
+      console.error(`\n\x1b[31m✗ api error (turns=${r.turns}): ${r.error}${r.message ? ' — ' + r.message : ''}\x1b[0m`);
+      process.exit(1);
+    }
+    if (verbose && r.usage) {
+      console.error(`\x1b[2m[api-agent] usage: in=${r.usage.input_tokens} out=${r.usage.output_tokens}\x1b[0m`);
+    }
+  } catch (e) {
+    console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
+    process.exit(1);
+  }
 } else {
-  console.error(`\x1b[2m[gift-agent] runner=claude mode=${permissionMode} maxTurns=${maxTurns} ${verbose ? 'verbose' : ''}\x1b[0m`);
+  // SDK runner
+  console.error(`\x1b[2m[gift-agent] runner=sdk mode=${permissionMode} maxTurns=${maxTurns} ${verbose ? 'verbose' : ''}\x1b[0m`);
   try {
     const r = await runGiftAgent({
       prompt,
@@ -124,7 +177,7 @@ if (useOllama) {
     });
     if (!r.success) {
       if (r.error === 'recursion_blocked') {
-        console.error(`\x1b[2m   Подсказка: попробуй --ollama для локального runner'а\x1b[0m`);
+        console.error(`\x1b[2m   Подсказка: --api (прямой Anthropic API) или --ollama (локально)\x1b[0m`);
         process.exit(2);
       }
       console.error(`\n\x1b[31m✗ agent error: ${r.error ?? r.subtype}\x1b[0m`);
