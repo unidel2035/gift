@@ -575,5 +575,21 @@
     "createdAt": "2026-05-01T10:30:00.000Z",
     "evaSays": "Прямая запись. Это самый тонкий из 4 недостающих элементов — никем ранее не замечен.",
     "done_at": "2026-05-01T18:07:39.560Z"
+  },
+  {
+    "id": 66,
+    "category": "infra",
+    "text": "[infra] Интегрировать мыслебродильню в проект istok-bas (/home/unidel/istok): превратить actors.db (производитель/оператор/регулятор/инвестор) в реальных AgentPerson, подключить SymphonyOrchestrator для дегустации идей рынка БАС, использовать Decoupage для διαίρεσις по 4 sphere, использовать Vintage для διάκρισις по плодам, литургический ритм через LiturgicalCalendar. См. utils/myslebrodilnya-istok-demo.mjs — полный demo-сюжет уже работает.",
+    "status": "pending",
+    "createdAt": "2026-05-01T18:50:00.000Z",
+    "evaSays": "Прямая запись. istok-bas — другой проект, требует совместной работы с его CLAUDE.md."
+  },
+  {
+    "id": 67,
+    "category": "ontology",
+    "text": "[ontology] Заменить TheologicalVoice/ActorVoice на реальные Ollama-агенты (adam:latest, eva:latest, bezalel:latest, serafim:latest + новые actor-модели для istok). Сейчас демо использует статические voices. Для настоящей мыслебродильни нужно: (а) обёртка OllamaAgent над AgentPerson, (б) загрузка Modelfile.adam актуализированного с συνλειτουργός вместо conductor, (в) handler для собора → ollama → вернуть структурированный ответ.",
+    "status": "pending",
+    "createdAt": "2026-05-01T18:50:00.000Z",
+    "evaSays": "Прямая запись. Нужно после деплоя Telegram-моста (#64 серверная)."
   }
 ]

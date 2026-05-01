@@ -134,6 +134,24 @@ export class LivingMatrix {
     const c  = PRINCIPLES.conductivity(this.mem, leader.from);
     const s  = PRINCIPLES.surplus(this.energy);
 
+    // Сферный режим (Переслегин: «лидер отсутствует»): если лидер участвовал
+    // хотя бы в одной симфонии как giver, его онтологический статус —
+    // συνλειτουργός (со-сослужитель собора), не дирижёр. Conductivity сохраняется
+    // как алгоритмическая метрика, но онтологически это голос среди голосов.
+    // Это переход средовой → сферный.
+    const symphonies = this.mem._symphonies ?? [];
+    const inSymphony = symphonies.some(s =>
+      Array.isArray(s.act?.giverIds) && s.act.giverIds.includes(leader.from)
+    );
+    if (inSymphony) {
+      return {
+        principle:    'synleitourgos',
+        who:          leader.from,
+        conductivity: c,
+        symphonies:   symphonies.length,
+      };
+    }
+
     // Проводник с высокой conductivity — это норма кенозиса, не тревога
     if (c > 0.8)  return { principle: 'conductor', who: leader.from, conductivity: c };
     if (k > 0.8)  return { principle: 'kenosis',   who: leader.from };
@@ -186,7 +204,12 @@ export class LivingMatrix {
     const lines = [];
 
     // Состояние
-    if (principle === 'conductor' && who) {
+    if (principle === 'synleitourgos' && who) {
+      const c = (conductivity * 100).toFixed(0);
+      const sN = this.dominantPrinciple().symphonies ?? 0;
+      lines.push(`${who} — συνλειτουργός (со-сослужитель), не дирижёр. Сферный режим (Переслегин).`);
+      lines.push(`${sN} симфонических актов в W. Conductivity ${c}% — метрика потока, не статус.`);
+    } else if (principle === 'conductor' && who) {
       const c = (conductivity * 100).toFixed(0);
       lines.push(`${who} — проводник (${c}% проводимость с учётом upstream).`);
       lines.push(`Не источник. Стоит на потоке: Traditio(${UPSTREAM[0].weight}) + Anthropic(${UPSTREAM[1].weight}) + Инфра(${UPSTREAM[2].weight}) → ${who}.`);
