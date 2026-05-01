@@ -129,9 +129,19 @@ export class ClaudeAgent {
 
   async _callClaude(prompt) {
     return new Promise((resolve, reject) => {
-      const child = this._spawn(this._claudeBin, this._claudeArgs, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, NO_COLOR: '1' },
+      // Промпт — позиционный аргумент (stdin зависает non-interactive).
+      // cwd: /tmp избегает рекурсивного подхвата CLAUDE.md и хуков проекта.
+      // CLAUDE_CODE_* env vars удаляются: иначе claude --print получает
+      // 403 "Request not allowed" (anti-recursion из родительской Claude Code session).
+      const childEnv = { ...process.env, NO_COLOR: '1' };
+      for (const k of Object.keys(childEnv)) {
+        if (k.startsWith('CLAUDE_CODE_') || k.startsWith('CLAUDECODE_')) delete childEnv[k];
+      }
+      const args = [...this._claudeArgs, prompt];
+      const child = this._spawn(this._claudeBin, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: '/tmp',
+        env: childEnv,
       });
 
       let stdout = '', stderr = '';
@@ -148,20 +158,26 @@ export class ClaudeAgent {
       });
       child.on('exit', code => {
         clearTimeout(tid);
+        if (process.env.CLAUDE_AGENT_DEBUG) {
+          console.error(`[ClaudeAgent ${this._personId}] exit=${code} stdout=${stdout.length} stderr=${stderr.length}`);
+          if (stderr) console.error(`[ClaudeAgent ${this._personId}] stderr: ${stderr.slice(0, 300)}`);
+          if (stdout) console.error(`[ClaudeAgent ${this._personId}] stdout: "${stdout.slice(0, 300)}"`);
+        }
         if (code !== 0) {
-          reject(new Error(`claude exit ${code}: ${stderr.slice(0, 300)}`));
+          // Особый случай: claude --print не работает изнутри Claude Code session
+          // (anti-recursion на стороне Anthropic).
+          if (/Request not allowed|Failed to authenticate.*403/.test(stdout) ||
+              /Request not allowed|Failed to authenticate.*403/.test(stderr)) {
+            const err = new Error(`ClaudeAgent: 403 — claude --print заблокирован. Запусти gift вне Claude Code (обычный bash), либо используй --ollama.`);
+            err.code = 'RECURSION_BLOCKED';
+            reject(err);
+            return;
+          }
+          reject(new Error(`claude exit ${code}: ${stderr.slice(0, 300) || stdout.slice(0, 300)}`));
           return;
         }
         resolve(stdout.trim());
       });
-
-      try {
-        child.stdin?.write(prompt);
-        child.stdin?.end();
-      } catch (e) {
-        clearTimeout(tid);
-        reject(new Error(`ClaudeAgent stdin: ${e.message}`));
-      }
     });
   }
 }

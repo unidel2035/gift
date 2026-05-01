@@ -56,12 +56,20 @@ const epiclesisTimeoutMs = parseInt(arg('--epiclesis-timeout', '600000'), 10);
 const outputPath   = arg('--output', `/home/unidel/gift/data/diagnostics/myslo-${Date.now()}.md`);
 
 // ── Доступность Claude CLI ────────────────────────────────────────────
+// Anti-recursion: если запущены изнутри Claude Code session — claude --print
+// возвращает 403. Детектируем по env CLAUDE_CODE_EXECPATH/CLAUDECODE.
+const insideClaudeCode = !!(process.env.CLAUDE_CODE_EXECPATH || process.env.CLAUDECODE_ENTRYPOINT);
 let claudeAvailable = false;
 if (!useOllama) {
   try { execSync('which claude', { stdio: 'pipe' }); claudeAvailable = true; }
   catch { claudeAvailable = false; }
 }
-const useClaude = !useOllama && claudeAvailable;
+let useClaude = !useOllama && claudeAvailable && !insideClaudeCode;
+if (claudeAvailable && insideClaudeCode && !useOllama) {
+  console.log('  ⚠ claude --print заблокирован (anti-recursion внутри Claude Code).');
+  console.log('  → Переключаюсь на Ollama. Запусти из обычного bash для Claude.');
+  useClaude = false;
+}
 
 // ── Загрузка ──────────────────────────────────────────────────────────
 const cal = new LiturgicalCalendar();

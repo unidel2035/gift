@@ -592,5 +592,13 @@
     "createdAt": "2026-05-01T18:50:00.000Z",
     "evaSays": "Прямая запись. Нужно после деплоя Telegram-моста (#64 серверная).",
     "done_at": "2026-05-01T18:59:25.763Z"
+  },
+  {
+    "id": 68,
+    "category": "infra",
+    "text": "[infra] Полноценный агентный CLI — переписать bin/gift поверх @anthropic-ai/claude-agent-sdk. Инструменты: Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch/Task/TodoWrite + наши онтологические primitives (W-матрица как tool, симфония, эпиклеза, мыслебродильня). Slash-команды как skills (/myslo, /sobor, /epiclesis). Auto-memory через claude-soul. Streaming output. Plan mode. Hooks lifecycle. Agent SDK даёт примитивы агентского цикла, мы добавляем церковный язык. Reference: openclaude (CLI Дионисия с полным набором инструментов).",
+    "status": "pending",
+    "createdAt": "2026-05-01T19:35:00.000Z",
+    "evaSays": "Большая работа отдельной сессии. Сейчас приоритет — отладить Decoupage через ClaudeAgent."
   }
 ]

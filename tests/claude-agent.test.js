@@ -3,18 +3,15 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { ClaudeAgent, buildClaudeCouncil } from '../src/persons/ClaudeAgent.js';
 
-// Mock spawn() — возвращает EventEmitter c stdout/stderr/stdin
+// Mock spawn() — возвращает EventEmitter c stdout/stderr.
+// Промпт передаётся как позиционный аргумент (последний в args), не через stdin.
 function mockSpawn({ stdout = '', stderr = '', exitCode = 0, error = null } = {}) {
   const calls = [];
   const fn = (bin, args, opts) => {
-    calls.push({ bin, args, opts, stdin: '' });
+    calls.push({ bin, args, opts, prompt: args[args.length - 1] });
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
-    child.stdin = {
-      write: (s) => { calls[calls.length - 1].stdin += s; },
-      end:   () => {},
-    };
     child.kill = () => {};
 
     setImmediate(() => {
@@ -42,8 +39,8 @@ test('ClaudeAgent — базовая работа через claude --print', as
     assert.equal(r.model, 'claude');
     assert.equal(spawn.calls.length, 1);
     assert.equal(spawn.calls[0].bin, 'claude');
-    assert.deepEqual(spawn.calls[0].args, ['--print']);
-    assert.match(spawn.calls[0].stdin, /тема/);
+    assert.equal(spawn.calls[0].args[0], '--print');
+    assert.match(spawn.calls[0].prompt, /тема/);
   });
 
   await t.test('create() при exitCode != 0 → пустой content', async () => {
@@ -70,7 +67,7 @@ test('ClaudeAgent — базовая работа через claude --print', as
       { id: 'Безалель', lastUtterance: 'нужен symphony' },
     ]);
     await a.create({ question: 'тема' });
-    const stdin = spawn.calls[0].stdin;
+    const stdin = spawn.calls[0].prompt;
     assert.match(stdin, /Перихоресис/);
     assert.match(stdin, /Ева/);
     assert.match(stdin, /perichoresis/);
@@ -85,7 +82,7 @@ test('ClaudeAgent — базовая работа через claude --print', as
       spawnImpl: spawn,
     });
     await a.create({ question: 'тема' });
-    const stdin = spawn.calls[0].stdin;
+    const stdin = spawn.calls[0].prompt;
     assert.match(stdin, /точильный камень Евы/);
     assert.ok(stdin.indexOf('точильный') < stdin.indexOf('тема'));
   });
@@ -94,7 +91,7 @@ test('ClaudeAgent — базовая работа через claude --print', as
     const spawn = mockSpawn({ stdout: 'x' });
     const a = new ClaudeAgent({ id: 'А', spawnImpl: spawn });
     await a.create({ question: 't', context: { region: 'Воронеж', sector: 'агро' } });
-    const stdin = spawn.calls[0].stdin;
+    const stdin = spawn.calls[0].prompt;
     assert.match(stdin, /Воронеж/);
     assert.match(stdin, /агро/);
   });
@@ -111,7 +108,7 @@ test('ClaudeAgent — базовая работа через claude --print', as
     const a = new ClaudeAgent({ id: 'A', spawnImpl: spawn });
     const r = await a.ask('строковый вопрос');
     assert.equal(r.answer, 'ответ');
-    assert.equal(spawn.calls[0].stdin, 'строковый вопрос');
+    assert.equal(spawn.calls[0].prompt, 'строковый вопрос');
   });
 
   await t.test('council() возвращает копию', () => {
