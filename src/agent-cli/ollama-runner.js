@@ -284,6 +284,43 @@ const OLLAMA_SYSTEM = `Ты — gift-агент через Ollama, συνλει�
 - В конце — путь развития или вопрошание.`;
 
 /**
+ * Снимок текущего состояния онтологии — инжектируется в системный промпт.
+ * Без этого 8B-модели часто не вызывают matrix_query сначала и работают
+ * вслепую. С этим — модель уже видит контекст и сразу даёт конкретику.
+ */
+function buildOntologySnapshot(skipIfMissing = true) {
+  try {
+    if (skipIfMissing && !existsSync(SNAP)) return '';
+    const mem = loadMem();
+    const lm = new LivingMatrix(mem);
+    const top = mem.heaviest(10);
+    const principle = lm.dominantPrinciple();
+    const symphonies = mem.symphonies();
+    const expected = lm.theologicalDeserts();
+    const lines = [
+      '--- ТЕКУЩАЯ ОНТОЛОГИЯ (снимок W на момент запуска) ---',
+      `Лиц: ${mem.persons.length} тварных + ${mem.divinePersons.length} божественных`,
+      `Актов: ${mem.actsCount}`,
+      `Симфонических актов: ${symphonies.length}` + (symphonies.length ? ` (последний actId: ${symphonies[symphonies.length - 1].actId})` : ''),
+      `Принцип сети: ${principle.principle}` + (principle.who ? ` (${principle.who})` : ''),
+      '',
+      'Топ-10 нитей:',
+      ...top.map(e => `  ${e.from} → ${e.to}: ${e.weight.toFixed(1)}`),
+      '',
+      `Ожидаемые пустыни (expected_deserts): ${expected.length} штук`,
+      ...expected.slice(0, 8).map(d => `  ${d.from} → ${d.to} (вес ${d.weight})`),
+      '',
+      '— Используй этот снимок как анамнезис. matrix_query вызывай только если нужны',
+      '  свежие данные (после gift_receive) или больше деталей.',
+      '— pustynya_list с threshold=1.0 даст weak_threads (тонкие нити, не только expected).',
+    ];
+    return lines.join('\n');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Запустить Ollama-агент.
  *
  * @param {object} opts
@@ -291,6 +328,7 @@ const OLLAMA_SYSTEM = `Ты — gift-агент через Ollama, συνλει�
  * @param {string} [opts.model='llama3.1:8b']
  * @param {number} [opts.maxTurns=10]
  * @param {boolean} [opts.verbose=false]
+ * @param {boolean} [opts.injectSnapshot=true] — пред-инжектировать состояние W
  * @param {function} [opts.fetchImpl] — для тестов
  * @returns {Promise<{success, result?, turns, error?}>}
  */
@@ -299,6 +337,7 @@ export async function runOllamaAgent({
   model = 'llama3.1:8b',
   maxTurns = 10,
   verbose = false,
+  injectSnapshot = true,
   systemPromptExtra = '',
   fetchImpl = null,
 } = {}) {
@@ -307,9 +346,10 @@ export async function runOllamaAgent({
 
   const C = { dim: '\x1b[2m', cyan: '\x1b[36m', mag: '\x1b[35m', grn: '\x1b[32m', red: '\x1b[31m', rst: '\x1b[0m' };
 
-  const systemPrompt = systemPromptExtra
-    ? `${OLLAMA_SYSTEM}\n\n--- ДОПОЛНИТЕЛЬНО ---\n${systemPromptExtra}`
-    : OLLAMA_SYSTEM;
+  const snapshot = injectSnapshot ? buildOntologySnapshot() : '';
+  let systemPrompt = OLLAMA_SYSTEM;
+  if (snapshot) systemPrompt += '\n\n' + snapshot;
+  if (systemPromptExtra) systemPrompt += '\n\n--- ДОПОЛНИТЕЛЬНО ---\n' + systemPromptExtra;
 
   const messages = [
     { role: 'system', content: systemPrompt },
