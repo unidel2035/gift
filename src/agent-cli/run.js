@@ -108,12 +108,34 @@ export async function runGiftAgent(opts = {}) {
     options: queryOptions,
   });
 
+  // Timeout detector: если за N секунд не пришло ни одного сообщения,
+  // вероятно SDK висит на anti-recursion блокировке (claude --print
+  // не отвечает). Выводим понятное сообщение.
+  const STARTUP_TIMEOUT_MS = 45_000;
+  let firstMessageReceived = false;
+  const startupWatch = setTimeout(() => {
+    if (!firstMessageReceived) {
+      console.error(`\n${C.yellow}⚠ за ${STARTUP_TIMEOUT_MS / 1000}с от SDK не пришло ни одного сообщения.${C.reset}`);
+      console.error(`${C.dim}  Скорее всего активна Claude Code session где-то в системе и`);
+      console.error(`${C.dim}  claude --print заблокирован anti-recursion'ом Anthropic.`);
+      console.error(`${C.dim}  Закрой все Claude Code сессии и запусти снова, либо используй`);
+      console.error(`${C.dim}  ANTHROPIC_API_KEY для обхода CLI-блокировки.${C.reset}`);
+    }
+  }, STARTUP_TIMEOUT_MS);
+
+  console.error(`${C.dim}[gift-agent] initializing SDK + MCP server...${C.reset}`);
+
   try {
     for await (const message of generator) {
+      if (!firstMessageReceived) {
+        firstMessageReceived = true;
+        clearTimeout(startupWatch);
+      }
       switch (message.type) {
         case 'system':
-          if (verbose && message.subtype === 'init') {
-            console.error(`${C.dim}[system:init] mcp_servers: ${JSON.stringify(message.mcp_servers ?? [])}${C.reset}`);
+          if (message.subtype === 'init') {
+            const mcps = (message.mcp_servers ?? []).map(s => `${s.name}=${s.status}`).join(', ');
+            console.error(`${C.dim}[system:init] mcp: ${mcps || '(none)'} | tools: ${(message.tools ?? []).length}${C.reset}`);
           }
           break;
 
