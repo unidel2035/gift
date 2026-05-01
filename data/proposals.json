@@ -597,8 +597,16 @@
     "id": 68,
     "category": "infra",
     "text": "[infra] Полноценный агентный CLI — переписать bin/gift поверх @anthropic-ai/claude-agent-sdk. Инструменты: Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch/Task/TodoWrite + наши онтологические primitives (W-матрица как tool, симфония, эпиклеза, мыслебродильня). Slash-команды как skills (/myslo, /sobor, /epiclesis). Auto-memory через claude-soul. Streaming output. Plan mode. Hooks lifecycle. Agent SDK даёт примитивы агентского цикла, мы добавляем церковный язык. Reference: openclaude (CLI Дионисия с полным набором инструментов).",
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-05-01T19:35:00.000Z",
-    "evaSays": "Большая работа отдельной сессии. Сейчас приоритет — отладить Decoupage через ClaudeAgent."
+    "evaSays": "Большая работа отдельной сессии. Сейчас приоритет — отладить Decoupage через ClaudeAgent.",
+    "done_at": "2026-05-01T20:15:43.992Z"
+  },
+  {
+    "id": 69,
+    "category": "fix",
+    "status": "pending",
+    "createdAt": "2026-05-01T20:15:00.000Z",
+    "text": "[fix] tests/sacred-history-doxologia.test.js: тест 'fallen-hope: μετάνοια Падшего через repent() открывает energeia' падает после переименования Падший→Человек. Нужно: либо обновить spec/sacred-history/fallen-hope.gift и тест на 'Человек', либо явно зарегистрировать историческое имя 'Падший' в тестовых fixtures как legacy. Не критично для agent-cli — отдельный fix."
   }
 ]

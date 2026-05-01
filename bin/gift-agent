@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+/**
+ * gift-agent — агентная entry-point gift CLI.
+ *
+ * Полноценный агент (как claude/openclaude) поверх @anthropic-ai/claude-agent-sdk
+ * с инструментами Read/Write/Edit/Bash/Grep/WebFetch + кастомные mcp__gift__*
+ * для онтологии (matrix, sobor, decoupage, score, vintage, epiclesis).
+ *
+ * Использование:
+ *   gift-agent "промпт"                       — обычный режим
+ *   gift-agent --plan "промпт"                — plan mode (не выполнять)
+ *   gift-agent --accept-edits "промпт"        — авто-апрув edit'ов
+ *   gift-agent --bypass "промпт"              — без апрувов (опасно)
+ *   gift-agent --max-turns 10 "промпт"        — лимит итераций
+ *   gift-agent --verbose "промпт"             — стрим thinking + tool_result
+ *   gift-agent --                             — читать промпт из stdin
+ *
+ * ВАЖНО: claude --print (внутри SDK) блокируется глобально anti-recursion'ом
+ * Anthropic, если активна Claude Code session где-либо. Запускать в обычном
+ * bash terminal, не изнутри Claude Code.
+ */
+
+import { runGiftAgent } from '../src/agent-cli/run.js';
+import { readFileSync } from 'node:fs';
+
+const args = process.argv.slice(2);
+function flag(name) { return args.includes(name); }
+function arg(name, def = null) {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : def;
+}
+
+if (flag('--help') || flag('-h')) {
+  console.log(`
+gift-agent — агентный CLI поверх @anthropic-ai/claude-agent-sdk
+
+  gift-agent "промпт"
+  gift-agent --plan "промпт"             # plan mode, не выполнять
+  gift-agent --accept-edits "промпт"     # авто-апрув edit'ов
+  gift-agent --bypass "промпт"           # без апрувов (опасно)
+  gift-agent --max-turns 20 "промпт"
+  gift-agent --verbose "промпт"
+  gift-agent --no-builtins "промпт"      # только mcp__gift__* tools
+  gift-agent -                           # промпт из stdin
+
+Custom tools (mcp__gift__*):
+  matrix_query, sobor_celebrate, decoupage_cut, vintage_assess,
+  score_profile, epiclesis_ask, pustynya_list, liturgical_today, gift_receive
+
+Анти-рекурсия: запускать в обычном bash, не из Claude Code session.
+`);
+  process.exit(0);
+}
+
+let permissionMode = 'default';
+if (flag('--plan'))         permissionMode = 'plan';
+else if (flag('--accept-edits')) permissionMode = 'acceptEdits';
+else if (flag('--bypass'))  permissionMode = 'bypassPermissions';
+
+const maxTurns       = parseInt(arg('--max-turns', '30'), 10);
+const verbose        = flag('--verbose') || flag('-v');
+const includeBuiltins = !flag('--no-builtins');
+
+// Промпт — последний позиционный аргумент или stdin
+let prompt;
+if (args.includes('-') || args.includes('--')) {
+  prompt = readFileSync(0, 'utf8').trim();
+} else {
+  // Берём всё, что не флаг и не значение флага
+  const valuedFlags = new Set(['--max-turns']);
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--') || a === '-h') {
+      if (valuedFlags.has(a)) i++;
+      continue;
+    }
+    positional.push(a);
+  }
+  prompt = positional.join(' ');
+}
+
+if (!prompt) {
+  console.error('Использование: gift-agent "промпт"  (или -h для справки)');
+  process.exit(1);
+}
+
+console.error(`\x1b[2m[gift-agent] mode=${permissionMode} maxTurns=${maxTurns} ${verbose ? 'verbose' : ''}\x1b[0m`);
+
+try {
+  const r = await runGiftAgent({
+    prompt,
+    permissionMode,
+    maxTurns,
+    verbose,
+    includeBuiltins,
+  });
+  if (!r.success) {
+    if (r.error === 'recursion_blocked') process.exit(2);
+    console.error(`\n\x1b[31m✗ agent error: ${r.error ?? r.subtype}\x1b[0m`);
+    process.exit(1);
+  }
+  if (verbose && r.cost_usd) {
+    console.error(`\x1b[2m[gift-agent] cost: $${r.cost_usd.toFixed(4)}\x1b[0m`);
+  }
+} catch (e) {
+  console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
+  process.exit(1);
+}

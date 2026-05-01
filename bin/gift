@@ -115,6 +115,12 @@ ${C.b('Веб-Скиния:')}
   gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
   gift web --stop                 — остановить
 
+${C.b('Агентный режим (полный CLI):')}
+  gift agent "промпт"             — агент с tools (Read/Write/Edit/Bash/Grep + mcp__gift__*)
+  gift agent --plan "промпт"      — plan mode (не выполнять)
+  gift agent --verbose "промпт"   — стрим thinking + tool_result
+  ${C.dim}(требует обычный bash, не Claude Code session — anti-recursion)${C.reset}
+
 ${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
   gift myslo cut "идея"           — διαίρεσις по 4 sphere (Переслегин)
@@ -232,6 +238,14 @@ try {
 
     case 'benchmark': {
       await run('benchmarks/cat-7.mjs');
+      break;
+    }
+
+    case 'agent': {
+      // Агентный режим — поверх @anthropic-ai/claude-agent-sdk
+      // Передаём все аргументы прямо в bin/gift-agent
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('bin/gift-agent', allArgs);
       break;
     }
 

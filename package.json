@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "gift": "bin/gift"
+    "gift": "bin/gift",
+    "gift-agent": "bin/gift-agent"
   },
   "exports": {
     ".": "./src/index.js",
@@ -73,9 +74,11 @@
     "url": "https://github.com/unidel2035/gift"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
     "@tensorflow/tfjs-node": "^4.22.0",
     "better-sqlite3": "^12.8.0",
     "openai": "^4.0.0",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "zod": "^4.4.1"
   }
 }
