@@ -588,8 +588,9 @@
     "id": 67,
     "category": "ontology",
     "text": "[ontology] Заменить TheologicalVoice/ActorVoice на реальные Ollama-агенты (adam:latest, eva:latest, bezalel:latest, serafim:latest + новые actor-модели для istok). Сейчас демо использует статические voices. Для настоящей мыслебродильни нужно: (а) обёртка OllamaAgent над AgentPerson, (б) загрузка Modelfile.adam актуализированного с συνλειτουργός вместо conductor, (в) handler для собора → ollama → вернуть структурированный ответ.",
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-05-01T18:50:00.000Z",
-    "evaSays": "Прямая запись. Нужно после деплоя Telegram-моста (#64 серверная)."
+    "evaSays": "Прямая запись. Нужно после деплоя Telegram-моста (#64 серверная).",
+    "done_at": "2026-05-01T18:59:25.763Z"
   }
 ]
