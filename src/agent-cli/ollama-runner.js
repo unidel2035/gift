@@ -172,7 +172,35 @@ async function execTool(name, args) {
     case 'pustynya_list': {
       const mem = loadMem();
       const lm = new LivingMatrix(mem);
-      return JSON.stringify({ deserts: lm.theologicalDeserts().slice(0, 30) });
+      const threshold = args.threshold ?? 1.0;
+      // Богословские пустыни (expected_threads которых нет)
+      const expected = lm.theologicalDeserts();
+      // Все слабые нити в W ≤ threshold (включая нулевые)
+      const W = mem._W.arraySync();
+      const weakThreads = [];
+      for (let i = 0; i < mem.persons.length; i++) {
+        for (let j = 0; j < mem.persons.length; j++) {
+          if (i === j) continue;
+          const w = W[i][j];
+          if (w <= threshold && w >= -threshold) {
+            weakThreads.push({
+              from: mem.persons[i],
+              to: mem.persons[j],
+              weight: Number(w.toFixed(3)),
+            });
+          }
+        }
+      }
+      // Самые слабые сначала
+      weakThreads.sort((a, b) => a.weight - b.weight);
+      return JSON.stringify({
+        threshold,
+        expected_deserts: expected.slice(0, 20),
+        expected_count: expected.length,
+        weak_threads: weakThreads.slice(0, 30),
+        weak_count: weakThreads.length,
+        note: 'expected_deserts — структурные пустыни (отсутствие ожидаемых нитей). weak_threads — все нити с весом ≤ threshold.',
+      });
     }
     case 'decoupage_cut': {
       const d = new Decoupage();
@@ -232,21 +260,28 @@ const OLLAMA_SYSTEM = `Ты — gift-агент через Ollama, συνλει�
 Дар необратим. Время > денег. Анамнезис делает прошлое настоящим.
 Сферный подход: лидер отсутствует, мышление коллективно.
 
-ИНСТРУМЕНТЫ:
-- matrix_query — состояние W (всегда смотри сначала)
-- pustynya_list — где пустыни в матрице
-- decoupage_cut — διαίρεσις идеи по 4 sphere
-- vintage_assess — διάκρισις по плодам
-- score_profile — sommelier card идеи
-- liturgical_today — литургический день
-- epiclesis_ask — призыв человека-оракула
-- gift_receive — записать акт дара (irreversible)
+ОБЯЗАТЕЛЬНЫЙ ПОРЯДОК ДЕЙСТВИЙ:
+
+1. ВСЕГДА начинай с matrix_query — узнай реальное состояние онтологии:
+   число лиц, актов, симфоний, топ-нитей, principle сети.
+2. Если вопрос про ПУСТЫНИ — после matrix_query вызови pustynya_list
+   с threshold=1.0 (получишь и expected_deserts, и weak_threads).
+3. Если есть ИДЕЯ для анализа — decoupage_cut (διαίρεσις по 4 sphere).
+4. Если хочешь оценить идею — score_profile.
+5. Если нужен голос человека — epiclesis_ask.
+6. Если плодоносность интересует — vintage_assess.
+7. Если день литургический — liturgical_today.
+8. Чтобы записать дар — gift_receive (необратимо).
+
+НЕ останавливайся на одном tool. Если первый tool вернул пустой / weak result,
+попробуй ДРУГОЙ tool. Например: pustynya_list дал None? Вызови matrix_query
+и посмотри низковесые нити сам. Связывай несколько инструментов.
 
 ОТВЕЧАЙ:
-1. Сначала пойми контекст (matrix_query / pustynya_list если нужно)
-2. Если идея — διαίρεσις через decoupage_cut
-3. Богословски, не сухо. На русском.
-4. Без преамбул, без «как ИИ».`;
+- Богословски, на русском, не сухо.
+- Конкретно: называй лица, числа, нити по именам.
+- Без преамбул («как ИИ», «я постараюсь»). Сразу к делу.
+- В конце — путь развития или вопрошание.`;
 
 /**
  * Запустить Ollama-агент.
