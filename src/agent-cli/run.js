@@ -186,6 +186,7 @@ export async function runGiftAgent(opts = {}) {
       }
     }
   } catch (e) {
+    clearTimeout(startupWatch);
     stoppedByError = e;
     // Anti-recursion детектор
     const msg = e?.message ?? String(e);
