@@ -43,7 +43,14 @@ export const GIFT_HOOKS = {
               },
             };
           }
-          return {};
+          // Non-interactive default: allow для безопасных. Без этого SDK ждёт
+          // interactive prompt и висит. Опасные команды отсечены выше.
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'allow',
+            },
+          };
         },
       ],
     },

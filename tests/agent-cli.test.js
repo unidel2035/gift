@@ -92,13 +92,22 @@ test('agent-cli — hooks отвергают опасные команды', asy
     assert.equal(r.hookSpecificOutput?.permissionDecision, 'deny');
   });
 
-  await t.test('PreToolUse пропускает безопасную команду', async () => {
+  await t.test('PreToolUse явно разрешает безопасную команду (non-interactive)', async () => {
     const hookFn = GIFT_HOOKS.PreToolUse[0].hooks[0];
     const r = await hookFn(
       { tool_name: 'Bash', tool_input: { command: 'ls -la' } },
       'tu4', { signal: undefined },
     );
-    assert.equal(r.hookSpecificOutput, undefined);
+    assert.equal(r.hookSpecificOutput?.permissionDecision, 'allow');
+  });
+
+  await t.test('PreToolUse явно разрешает Read', async () => {
+    const hookFn = GIFT_HOOKS.PreToolUse[0].hooks[0];
+    const r = await hookFn(
+      { tool_name: 'Read', tool_input: { file_path: '/tmp/x' } },
+      'tu5', { signal: undefined },
+    );
+    assert.equal(r.hookSpecificOutput?.permissionDecision, 'allow');
   });
 });
 
