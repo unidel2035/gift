@@ -76,6 +76,20 @@ function run(script, args = []) {
   });
 }
 
+// runRaw — для agent-команд: НЕ снимает HTTP_PROXY/HTTPS_PROXY, потому что
+// Дионисию в WSL2 они могут быть нужны для egress через Windows proxy.
+// curl в polza-runner иначе таймаутит на 120с.
+function runRaw(script, args = []) {
+  return new Promise((res, rej) => {
+    const child = spawn('node', [resolve(ROOT, script), ...args], {
+      cwd: ROOT, stdio: 'inherit',
+      env: { ...process.env, GIFT_CLI: 'gift' },
+    });
+    child.on('exit', code => code === 0 ? res() : rej(new Error(`exit ${code}`)));
+    child.on('error', rej);
+  });
+}
+
 async function gh(cmd) {
   const { execSync } = await import('node:child_process');
   return execSync(cmd, {
@@ -242,10 +256,10 @@ try {
     }
 
     case 'agent': {
-      // Агентный режим — поверх @anthropic-ai/claude-agent-sdk
-      // Передаём все аргументы прямо в bin/gift-agent
+      // Агентный режим. runRaw сохраняет HTTP_PROXY/HTTPS_PROXY env vars —
+      // они нужны curl/fetch'ам в WSL2 для выхода через Windows proxy.
       const allArgs = [sub, ...rest].filter(Boolean);
-      await run('bin/gift-agent', allArgs);
+      await runRaw('bin/gift-agent', allArgs);
       break;
     }
 
