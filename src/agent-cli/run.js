@@ -9,9 +9,27 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { buildGiftMcpServer, GIFT_TOOL_NAMES } from './gift-tools.js';
 import { GIFT_SYSTEM_PROMPT } from './system-prompt.js';
 import { GIFT_HOOKS } from './hooks.js';
+
+/**
+ * Найти исполняемый claude. SDK по умолчанию ищет bundled binary в своих
+ * node_modules, но он бывает не установлен (musl-arch на WSL и т.п.).
+ * Auto-detect: переменная env GIFT_CLAUDE_BIN → which claude → null.
+ */
+function findClaudeBin() {
+  if (process.env.GIFT_CLAUDE_BIN && existsSync(process.env.GIFT_CLAUDE_BIN)) {
+    return process.env.GIFT_CLAUDE_BIN;
+  }
+  try {
+    const path = execSync('which claude', { encoding: 'utf8' }).trim();
+    if (path && existsSync(path)) return path;
+  } catch {}
+  return null;
+}
 
 const C = {
   reset:   '\x1b[0m',
@@ -66,21 +84,28 @@ export async function runGiftAgent(opts = {}) {
     : GIFT_SYSTEM_PROMPT;
 
   const giftServer = buildGiftMcpServer();
+  const claudeBin = findClaudeBin();
 
   let lastResult = null;
   let stoppedByError = null;
 
+  const queryOptions = {
+    systemPrompt,
+    mcpServers: { gift: giftServer },
+    allowedTools,
+    permissionMode,
+    maxTurns,
+    cwd,
+    hooks: GIFT_HOOKS,
+  };
+  if (claudeBin) {
+    queryOptions.pathToClaudeCodeExecutable = claudeBin;
+    if (verbose) console.error(`${C.dim}[gift-agent] using claude bin: ${claudeBin}${C.reset}`);
+  }
+
   const generator = query({
     prompt,
-    options: {
-      systemPrompt,
-      mcpServers: { gift: giftServer },
-      allowedTools,
-      permissionMode,
-      maxTurns,
-      cwd,
-      hooks: GIFT_HOOKS,
-    },
+    options: queryOptions,
   });
 
   try {
@@ -142,6 +167,12 @@ export async function runGiftAgent(opts = {}) {
     stoppedByError = e;
     // Anti-recursion детектор
     const msg = e?.message ?? String(e);
+    if (/Claude Code native binary not found/i.test(msg)) {
+      console.error(`\n${C.red}✗ native binary не найден.${C.reset}`);
+      console.error(`${C.dim}  SDK не нашёл claude в node_modules. Установи системный claude (npm i -g @anthropic-ai/claude-code)${C.reset}`);
+      console.error(`${C.dim}  или укажи путь через GIFT_CLAUDE_BIN env var.${C.reset}`);
+      return { success: false, error: 'claude_not_found' };
+    }
     if (/Request not allowed|403|Failed to authenticate/i.test(msg)) {
       console.error(`\n${C.red}✗ claude --print заблокирован.${C.reset}`);
       console.error(`${C.dim}  Anthropic anti-recursion: пока активна Claude Code session где-то в системе,${C.reset}`);
