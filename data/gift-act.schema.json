@@ -5,13 +5,20 @@
   "description": "Онтологический акт дара — единица Священной истории",
   "type": "object",
 
-  "required": ["giverId", "receiverId", "type", "weight"],
+  "required": ["receiverId", "type", "weight"],
 
   "properties": {
     "giverId": {
       "type": "string",
       "minLength": 1,
-      "description": "Даритель — лицо в матрице"
+      "description": "Даритель — лицо в матрице (одиночный акт). Для symphony использовать giverIds[]."
+    },
+    "giverIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 3,
+      "uniqueItems": true,
+      "description": "Дарители — собор лиц с μία ἐνέργεια (только для type:'symphony', минимум 3)."
     },
     "receiverId": {
       "type": "string",
@@ -26,9 +33,25 @@
         "incarnation", "gift",        "witness",     "sacrifice",
         "resurrection","grace",       "question",    "covenant",
         "offering",    "labour",      "prayer",      "anamnesis",
-        "intercession"
+        "intercession","symphony"
       ],
-      "description": "Тип дара — богословская категория"
+      "description": "Тип дара — богословская категория. 'symphony' = соборный акт с μία ἐνέργεια (Деян 15:28)."
+    },
+    "chorus": {
+      "type": "boolean",
+      "description": "Симфония: единое слово от собора, не сумма голосов (условие 1 иконичности)."
+    },
+    "epiclesis": {
+      "type": "boolean",
+      "description": "Эпиклеза: оставлено место для Духа (условие 4 иконичности)."
+    },
+    "perichoretic": {
+      "type": "boolean",
+      "description": "Перихоресис: каждый giver содержит модус других (условие 2 иконичности)."
+    },
+    "kenotic": {
+      "type": "boolean",
+      "description": "Кенозис без остатка: дар необратим, без сохранения авторства (условие 3 иконичности)."
     },
     "weight": {
       "type": "number",
@@ -62,16 +85,28 @@
 
   "additionalProperties": true,
 
-  "if": {
-    "properties": {
-      "giverId": { "const": "_abyss" }
+  "allOf": [
+    {
+      "if": { "properties": { "giverId": { "const": "_abyss" } } },
+      "then": { "properties": { "weight": { "minimum": 0.5 } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "symphony" } }, "required": ["type"] },
+      "then": {
+        "required": ["giverIds", "chorus", "perichoretic", "kenotic", "epiclesis"],
+        "properties": {
+          "chorus":       { "const": true },
+          "perichoretic": { "const": true },
+          "kenotic":      { "const": true },
+          "epiclesis":    { "const": true }
+        },
+        "description": "Symphony требует все 4 условия иконичности (Палама + Деян 15:28). Без них — не икона, а идол функциональной троицы."
+      },
+      "else": {
+        "required": ["giverId"]
+      }
     }
-  },
-  "then": {
-    "properties": {
-      "weight": { "minimum": 0.5 }
-    }
-  },
+  ],
 
   "$defs": {
     "divinePersons": {

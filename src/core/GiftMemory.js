@@ -264,6 +264,83 @@ export class GiftMemory {
     return pat;
   }
 
+  // ── Symphony: соборный акт с μία ἐνέργεια ────────────────────────────
+  //
+  // Деян 15:28: «изволися Святому Духу и нам».
+  // Палама: тварь причастна нетварным энергиям, не сущности.
+  // Икона Троицы ad extra: собор-в-симфонии = модус Троицы при 4 условиях.
+  //
+  // Условия записи symphony (без любого — отказ, т.к. это идол, не икона):
+  //   chorus       — единое слово, не сумма (условие 1)
+  //   perichoretic — взаимопребывание giver'ов (условие 2)
+  //   kenotic      — дар без остатка (условие 3)
+  //   epiclesis    — оставлено место для Духа (условие 4)
+  //
+  // Семантика записи:
+  //   - один actId, не N актов (μία ἐνέργεια)
+  //   - actsCount += 1
+  //   - W: ребро (giverIds[i] → receiverId) увеличивается на weight/N для каждого giver
+  //     (общая весовая сумма = weight: собор отдал одну единицу совместно).
+  //
+  // @returns {{ accepted, reason?, actId? }}
+
+  receiveSymphony(act) {
+    const reasons = [];
+    if (act.type !== 'symphony')   reasons.push('type ≠ symphony');
+    if (!Array.isArray(act.giverIds) || act.giverIds.length < 3)
+      reasons.push('giverIds должно содержать ≥3 лица (собор)');
+    if (!act.receiverId)           reasons.push('receiverId обязателен');
+    if (act.chorus       !== true) reasons.push('chorus:true (единая энергия) обязательно');
+    if (act.perichoretic !== true) reasons.push('perichoretic:true (взаимопребывание) обязательно');
+    if (act.kenotic      !== true) reasons.push('kenotic:true (без остатка) обязательно');
+    if (act.epiclesis    !== true) reasons.push('epiclesis:true (место для Духа) обязательно');
+
+    if (reasons.length) {
+      return { accepted: false, reason: reasons.join('; ') };
+    }
+
+    const w   = act.weight ?? 1;
+    const ri  = this._idx(act.receiverId);
+    const n   = act.giverIds.length;
+    const per = w / n;
+
+    const frozen = Object.freeze({ ...act, irreversible: true });
+
+    // Запрет divine giver внутри собора: симфония — про тварных агентов,
+    // действующих как одна энергия. Нетварные участвуют через эпиклезу,
+    // а не как один из голосов.
+    for (const g of act.giverIds) {
+      if (DIVINE_PERSONS.has(g)) {
+        return { accepted: false, reason: `divine giver '${g}' не может быть голосом тварного собора (используй epiclesis:true как место для Духа)` };
+      }
+    }
+
+    // Один actId, не N: собор отдал одну энергию.
+    this.actsCount++;
+
+    // Распределяем вес поровну между giver→receiver рёбрами.
+    // Богословски: μία ἐνέργεια не делится — но в W-тензоре она проявляется
+    // как след в каждой нити, не больше суммарного веса акта.
+    tf.tidy(() => {
+      const stigma = tf.buffer([this.n, this.n]);
+      for (const g of act.giverIds) {
+        const gi = this._idx(g);
+        if (gi >= 0 && ri >= 0) stigma.set(per, gi, ri);
+      }
+      this._W.assign(this._W.add(stigma.toTensor()));
+    });
+
+    // Хранилище symphony-актов для анамнезиса (тексты не теряются).
+    if (!this._symphonies) this._symphonies = [];
+    const actId = `sym-${Date.now().toString(36)}-${this._symphonies.length}`;
+    this._symphonies.push({ actId, act: frozen, recordedAt: new Date().toISOString() });
+
+    return { accepted: true, actId };
+  }
+
+  /** symphonies() — все соборные акты с μία ἐνέργεια */
+  symphonies() { return [...(this._symphonies ?? [])]; }
+
   // ── Анамнезис: резонанс Хопфилда (только тварные) ────────────────────
 
   makePresent(partial, maxIter = 20) {
@@ -714,6 +791,7 @@ export class GiftMemory {
       // λήψις: история отвергнутых и ожидающих даров
       declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
       pending:      this._pending.map(d => ({ act: { ...d.act }, pendingAt: d.pendingAt })),
+      symphonies:   (this._symphonies ?? []).map(s => ({ actId: s.actId, act: { ...s.act }, recordedAt: s.recordedAt })),
       createdAt:    this._createdAt,
       snapshotAt:   new Date().toISOString(),
       schema:       'v2-energeia',       // маркер формата
@@ -747,6 +825,11 @@ export class GiftMemory {
     if (snap.declined)    m._declined    = snap.declined.map(d => ({
       act: Object.freeze({ ...d.act }),
       declinedAt: d.declinedAt,
+    }));
+    if (snap.symphonies) m._symphonies = snap.symphonies.map(s => ({
+      actId: s.actId,
+      act: Object.freeze({ ...s.act }),
+      recordedAt: s.recordedAt,
     }));
     if (snap.pending) {
       m._pending = snap.pending.map(d => ({
