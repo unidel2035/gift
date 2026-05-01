@@ -106,7 +106,24 @@ if (!skipDecoupage) {
       calling: 'аналитический разрез идеи по 4 sphere-инженериям Переслегина',
       systemPrompt: 'Ты — аналитик в мыслебродильне. Твоя задача — διαίρεσις (аналитическое разделение, не духовное различение) идеи по конкретной sphere-инженерии. Различай метафоры (виноделие, бочка, винтаж — это терминология процесса, не объект анализа) и реальный объект идеи. Отвечай конкретно по заданной сфере, без воды.',
     });
-  } else {
+
+    // Runtime-проверка: пробуем короткий запрос. Если 403 (anti-recursion
+    // детектируется глобально через keychain, не только env) — fallback Ollama.
+    const probe = await analyzerAgent.ask('1');
+    if (probe.error?.includes('Request not allowed') || probe.error?.includes('403') ||
+        probe.error?.includes('RECURSION_BLOCKED') || probe.error?.includes('claude exit')) {
+      console.log('  ⚠ claude --print заблокирован глобально (active Claude Code session где-то в системе).');
+      console.log('  → Переключаюсь на Ollama.');
+      useClaude = false;
+      analyzerAgent = null;
+    }
+  }
+
+  if (!useClaude && !useOllama) {
+    // Был Claude, но runtime-проверка провалилась — теперь Ollama.
+  }
+
+  if (!analyzerAgent) {
     // Fallback: Ollama
     let analyzerModel = analyzer;
     try {
@@ -121,7 +138,7 @@ if (!skipDecoupage) {
       }
     } catch {}
     if (analyzerModel) {
-      console.log(`  модель (ollama): ${analyzerModel}`);
+      console.log(`  модель (ollama fallback): ${analyzerModel}`);
       analyzerAgent = new OllamaAgent({
         id: 'Аналитик', model: analyzerModel,
         calling: 'аналитический разрез по сферам',
@@ -150,6 +167,14 @@ console.log(`\n── 2. Δοκιμασία (собор ${useClaude ? 'Claude' :
 let agents = [];
 if (useClaude) {
   agents = buildClaudeCouncil();
+  // Runtime-проверка для собора: один тестовый ask
+  const probe = await agents[0].ask('1');
+  if (probe.error?.includes('Request not allowed') || probe.error?.includes('403') ||
+      probe.error?.includes('RECURSION_BLOCKED') || probe.error?.includes('claude exit')) {
+    console.log('  ⚠ Claude заблокирован для собора, переключаюсь на Ollama.');
+    const r = await buildStandardCouncil();
+    agents = r.agents;
+  }
 } else {
   const r = await buildStandardCouncil();
   agents = r.agents;
