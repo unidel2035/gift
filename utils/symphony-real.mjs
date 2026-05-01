@@ -57,8 +57,9 @@ console.log(`  Эпиклеза:   ${oracle ? 'через HumanOracleInbox (time
 console.log('━'.repeat(72));
 
 const t0 = Date.now();
+const epiclesisTimeoutMs = parseInt(process.env.EPICLESIS_TIMEOUT_MS ?? '600000', 10);
 const result = await orch.celebrate({
-  question, weight: 8, epiclesisTimeoutMs: 8000,
+  question, weight: 8, epiclesisTimeoutMs,
 });
 const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
