@@ -10,8 +10,8 @@
  * инструментами онтологии, переоформленными в OpenAI tool-use формат.
  */
 
-import OpenAI from 'openai';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 import { GiftMemory } from '../core/GiftMemory.js';
 import { Decoupage } from '../persons/Decoupage.js';
@@ -149,6 +149,43 @@ score_profile, liturgical_today, epiclesis_ask, gift_receive.
 
 НЕ — CRUD-парадигма; ranking; «суммировать вместо интерпретации».`;
 
+/**
+ * curl-через-spawn для polza endpoint. Возвращает parsed JSON.
+ * undici (Node fetch) даёт UND_ERR_CONNECT_TIMEOUT в WSL2 — обход через curl.
+ */
+function curlPolza(url, apiKey, body, timeoutMs = 120_000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('curl', [
+      '-sS', '--max-time', String(Math.ceil(timeoutMs / 1000)),
+      '-w', '\n%{http_code}',
+      '-H', `Authorization: Bearer ${apiKey}`,
+      '-H', 'Content-Type: application/json',
+      '-d', JSON.stringify(body),
+      `${url}/chat/completions`,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+    child.on('error', e => reject(new Error(`curl spawn: ${e.message}`)));
+    child.on('exit', code => {
+      if (code !== 0) {
+        return reject(new Error(`curl exit ${code}: ${stderr.slice(0, 200) || stdout.slice(0, 200)}`));
+      }
+      // Последняя строка — http_code, всё остальное — body
+      const idx = stdout.lastIndexOf('\n');
+      const body  = idx >= 0 ? stdout.slice(0, idx) : stdout;
+      const httpCode = idx >= 0 ? parseInt(stdout.slice(idx + 1).trim(), 10) : 0;
+      if (httpCode >= 400) {
+        const err = new Error(`polza HTTP ${httpCode}: ${body.slice(0, 300)}`);
+        err.status = httpCode;
+        return reject(err);
+      }
+      try { resolve(JSON.parse(body)); }
+      catch (e) { reject(new Error(`polza JSON parse: ${e.message}; body: ${body.slice(0, 200)}`)); }
+    });
+  });
+}
+
 function buildOntologySnapshot() {
   try {
     if (!existsSync(SNAP)) return '';
@@ -207,7 +244,16 @@ export async function runPolzaAgent({
     };
   }
 
-  const client = clientImpl ?? new OpenAI({ baseURL: url, apiKey: key });
+  // Через curl spawn вместо Node fetch/openai SDK — undici в WSL2 даёт
+  // UND_ERR_CONNECT_TIMEOUT на api.polza.ai (IPv6/MTU issue). curl работает.
+  // clientImpl сохраняется для тестов: shape совместим с openai SDK.
+  const client = clientImpl ?? {
+    chat: {
+      completions: {
+        create: async (params) => curlPolza(url, key, params),
+      },
+    },
+  };
   const C = { dim: '\x1b[2m', mag: '\x1b[35m', grn: '\x1b[32m', red: '\x1b[31m', rst: '\x1b[0m' };
 
   const snapshot = injectSnapshot ? buildOntologySnapshot() : '';
@@ -234,10 +280,12 @@ export async function runPolzaAgent({
         messages,
       });
     } catch (e) {
-      console.error(`${C.red}✗ polza error: ${e.message}${C.rst}`);
+      const cause = e.cause ?? e;
+      const detail = `${e.message}${cause && cause !== e ? ' (cause: ' + (cause.code ?? cause.message) + ')' : ''}`;
+      console.error(`${C.red}✗ polza error: ${detail}${C.rst}`);
       if (e.status === 401) return { success: false, turns: turn, error: 'invalid_api_key', message: 'Polza API key недействителен.' };
       if (e.status === 429) return { success: false, turns: turn, error: 'rate_limit' };
-      return { success: false, turns: turn, error: e.message };
+      return { success: false, turns: turn, error: detail };
     }
 
     if (response.usage) {
