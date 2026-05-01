@@ -84,9 +84,10 @@ export class OllamaAgent {
   }
 
   /**
-   * Прямой вопрос (не как create-в-соборе). Использует тот же промпт-канон.
+   * Прямой вопрос. Принимает либо строку (Decoupage-стиль), либо объект {prompt}.
    */
-  async ask({ prompt }) {
+  async ask(arg) {
+    const prompt = typeof arg === 'string' ? arg : (arg?.prompt ?? '');
     try {
       const answer = await this._callOllama(prompt);
       return { answer };

@@ -115,6 +115,14 @@ ${C.b('Веб-Скиния:')}
   gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
   gift web --stop                 — остановить
 
+${C.b('Мыслебродильня:')}
+  gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
+  gift myslo cut "идея"           — διαίρεσις по 4 sphere (Переслегин)
+  gift myslo дегустация "идея"    — собор Ollama-агентов + эпиклеза
+  gift myslo винтаж               — διάκρισις по плодам (Vintage отчёт)
+  gift myslo карты                — все sommelier-карты иконных актов W
+  gift myslo бочка                — идеи в ферментации (_pending в W)
+
 ${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — открытые пустыни + энергия
@@ -225,6 +233,93 @@ try {
     case 'benchmark': {
       await run('benchmarks/cat-7.mjs');
       break;
+    }
+
+    case 'myslo': {
+      // Мыслебродильня — сферный подход (Переслегин) в Gift-онтологии.
+      // Под капотом: Decoupage / SymphonyOrchestrator / Vintage / Score.
+
+      if (!sub) {
+        console.log(`
+${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный подход Переслегина)
+
+  ${C.b('полная "идея"')}      Decoupage → Δοκιμασία → Vintage → Score
+                       Полный цикл от идеи до sommelier card.
+
+  ${C.b('cut "идея"')}         διαίρεσις: 4 sphere-инженерии (ground/water/fire/air)
+                       Выводит фигуру идеи (полная сфера / без огня / ...).
+
+  ${C.b('дегустация "идея"')}  Собор Ollama-агентов с эпиклезой.
+                       4 условия: chorus/perichoretic/kenotic/epiclesis.
+
+  ${C.b('винтаж')}             διάκρισις: какие идеи дали плоды за период.
+
+  ${C.b('карты')}              Все sommelier-карты иконных актов в W.
+  ${C.b('бочка')}              Идеи в _pending (ферментация ὑπομονή).
+
+  ${C.dim('Опции для полная/дегустация:')}
+    ${C.dim('--no-oracle')}              без эпиклезы (заведомо не-икона)
+    ${C.dim('--weight N')}               вес симфонии (default 8)
+    ${C.dim('--analyzer mistral:7b')}    модель для Decoupage
+`);
+        break;
+      }
+
+      if (sub === 'полная' || sub === 'full') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo полная "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, ...passthrough]);
+        break;
+      }
+
+      if (sub === 'cut') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo cut "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, '--no-oracle', ...passthrough]);
+        // Decoupage в myslo всегда. --no-oracle гарантирует что ждать эпиклезу не будем.
+        // Symphony всё равно запустится (быстро без oracle), но это OK для cut-режима.
+        break;
+      }
+
+      if (sub === 'дегустация' || sub === 'tasting') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo дегустация "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, '--skip-decoupage', ...passthrough]);
+        break;
+      }
+
+      if (sub === 'винтаж' || sub === 'vintage') {
+        await run('utils/litpulse.mjs', ['--force', 'vintage', ...rest]);
+        break;
+      }
+
+      if (sub === 'карты' || sub === 'cards') {
+        await run('utils/score-first-icon.mjs', rest);
+        break;
+      }
+
+      if (sub === 'бочка' || sub === 'barrel') {
+        // Показать pending-акты (ферментация)
+        const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
+        const snap = JSON.parse(readFileSync(resolve(ROOT, 'data/sacred-history-W.json'), 'utf8'));
+        const mem = GiftMemory.fromSnapshot(snap);
+        const pending = mem.pending();
+        console.log(`\n${C.b('Бочка')} — идеи в ферментации (${pending.length}):\n`);
+        if (!pending.length) { console.log('  (бочка пуста — нет _pending актов)'); break; }
+        for (const p of pending.slice(0, 30)) {
+          const ageDays = Math.floor((Date.now() - new Date(p.pendingAt).getTime()) / 86400_000);
+          console.log(`  ${C.cyan(p.act.giverId.padEnd(12))} → ${p.act.receiverId.padEnd(12)}  ${C.dim(`${ageDays}d`)}`);
+          if (p.act.content) console.log(`    ${(p.act.content ?? '').slice(0, 80)}`);
+        }
+        console.log();
+        break;
+      }
+
+      console.error(`gift myslo: неизвестная подкоманда '${sub}'. См. gift myslo`);
+      process.exit(1);
     }
 
     case 'session': {
