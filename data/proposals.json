@@ -562,9 +562,10 @@
     "id": 64,
     "category": "infra",
     "text": "[infra] Подключить tg-koinon-bot к HumanOracleInbox: бот на root@173.249.2.184 опрашивает data/epiclesis-inbox/*.question.json и слать вопросы Дионисию в Telegram, ответы пишет в data/epiclesis-outbox/*.answer.json. Без этого Epiclesis формальна — место для Духа есть, но мост к человеку-оракулу не работает (50% четвёртого условия иконичности).",
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-05-01T10:30:00.000Z",
-    "evaSays": "Прямая запись в обход стагнации Евы. Зависимость: HumanOracleInbox.js (есть), tg-koinon-bot.mjs (на сервере, требует SSH доступ для модификации)."
+    "evaSays": "Прямая запись в обход стагнации Евы. Зависимость: HumanOracleInbox.js (есть), tg-koinon-bot.mjs (на сервере, требует SSH доступ для модификации).",
+    "done_at": "2026-05-01T18:14:30.258Z"
   },
   {
     "id": 65,
