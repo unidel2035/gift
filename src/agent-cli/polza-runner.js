@@ -186,7 +186,7 @@ function buildOntologySnapshot() {
  */
 export async function runPolzaAgent({
   prompt,
-  model = 'claude-opus-4-7',
+  model = 'anthropic/claude-opus-4.7',
   baseURL = null,
   apiKey = null,
   maxTurns = 15,
@@ -198,7 +198,7 @@ export async function runPolzaAgent({
 } = {}) {
   if (!prompt) throw new Error('runPolzaAgent: prompt обязателен');
 
-  const url = baseURL ?? process.env.POLZA_URL ?? 'http://173.249.2.184/v1';
+  const url = baseURL ?? process.env.POLZA_URL ?? 'https://api.polza.ai/api/v1';
   const key = apiKey ?? process.env.POLZA_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!key && !clientImpl) {
     return {

@@ -83,7 +83,9 @@ const usePolza  = flag('--polza') || (!flag('--sdk') && !flag('--api') && !useOl
 const useApi    = !usePolza && !useOllama && (flag('--api') || (!flag('--sdk') && !!process.env.ANTHROPIC_API_KEY));
 const useSdk    = !useOllama && !useApi && !usePolza;
 
-const defaultModel = useOllama ? 'llama3.1:8b' : 'claude-opus-4-7';
+const defaultModel = useOllama ? 'llama3.1:8b'
+                   : usePolza  ? 'anthropic/claude-opus-4.7'
+                   : 'claude-opus-4-7';
 const model        = arg('--model', defaultModel);
 const maxTurns     = parseInt(arg('--max-turns', useOllama ? '10' : '15'), 10);
 const verbose      = flag('--verbose') || flag('-v');

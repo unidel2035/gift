@@ -104,10 +104,10 @@ test('polza-runner — agent loop', async (t) => {
     assert.match(sysMsg.content, /συνλειτουργός/);
   });
 
-  await t.test('default model = claude-opus-4-7', async () => {
+  await t.test('default model = anthropic/claude-opus-4.7', async () => {
     const client = mockClient([{ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }]);
     await runPolzaAgent({ prompt: 'x', apiKey: 'test', clientImpl: client });
-    assert.equal(client._calls()[0].model, 'claude-opus-4-7');
+    assert.equal(client._calls()[0].model, 'anthropic/claude-opus-4.7');
   });
 
   await t.test('401 → invalid_api_key', async () => {
