@@ -164,7 +164,7 @@ if (existsSync(SIMULATOR_DIR)) {
       'Отец':'divine','Сын':'divine','Христос':'divine','Дух':'divine',
       '_claude':'agent','_fpga':'chip','_koinon':'special','_abyss':'special',
       'Дионисий':'human','ОтецСергий':'human','Адам':'human','Ева':'human',
-      'Падший':'shadow','Змей':'shadow',
+      'Человек':'shadow','Змей':'shadow',
     };
     const personData = persons.map(id => ({
       id,

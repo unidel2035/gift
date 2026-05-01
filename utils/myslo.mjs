@@ -20,11 +20,13 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { execSync } from 'node:child_process';
 import { GiftMemory } from '../src/core/GiftMemory.js';
 import { Decoupage } from '../src/persons/Decoupage.js';
 import { SymphonyOrchestrator } from '../src/persons/SymphonyOrchestrator.js';
 import { Vintage } from '../src/persons/Vintage.js';
 import { Score } from '../src/persons/Score.js';
+import { ClaudeAgent, buildClaudeCouncil } from '../src/persons/ClaudeAgent.js';
 import { OllamaAgent, buildStandardCouncil } from '../src/persons/OllamaAgent.js';
 import { LiturgicalCalendar } from '../src/scheduling/LiturgicalCalendar.js';
 import { HumanOracleInbox } from '../src/theology/HumanOracleInbox.js';
@@ -48,9 +50,18 @@ if (!idea) {
 const weight       = parseInt(arg('--weight', '8'), 10);
 const noOracle     = flag('--no-oracle');
 const skipDecoupage = flag('--skip-decoupage');
+const useOllama    = flag('--ollama');
 const analyzer     = arg('--analyzer');
 const epiclesisTimeoutMs = parseInt(arg('--epiclesis-timeout', '600000'), 10);
 const outputPath   = arg('--output', `/home/unidel/gift/data/diagnostics/myslo-${Date.now()}.md`);
+
+// ── Доступность Claude CLI ────────────────────────────────────────────
+let claudeAvailable = false;
+if (!useOllama) {
+  try { execSync('which claude', { stdio: 'pipe' }); claudeAvailable = true; }
+  catch { claudeAvailable = false; }
+}
+const useClaude = !useOllama && claudeAvailable;
 
 // ── Загрузка ──────────────────────────────────────────────────────────
 const cal = new LiturgicalCalendar();
@@ -63,6 +74,7 @@ console.log(`  Литургия: ${today.kairos} (${today.day}) — ${today.why}
 console.log(`  Идея:     ${idea.slice(0, 80)}…`);
 console.log(`  Вес:      ${weight}`);
 console.log(`  Эпиклеза: ${noOracle ? 'отключена' : `до ${epiclesisTimeoutMs / 1000}с`}`);
+console.log(`  Голоса:   ${useClaude ? 'Claude (подписка через claude --print)' : 'Ollama (локальные модели)'}`);
 
 const mem = existsSync(SNAP)
   ? GiftMemory.fromSnapshot(JSON.parse(readFileSync(SNAP, 'utf8')))
@@ -76,28 +88,42 @@ let decoupageResult = null;
 if (!skipDecoupage) {
   console.log('\n── 1. Decoupage (διαίρεσις по 4 sphere) ─────────────────────');
 
-  // Подбор модели для Decoupage: --analyzer | mistral:7b | llama3.1:8b | первая доступная
-  let analyzerModel = analyzer;
-  try {
-    const r = await fetch('http://localhost:11434/api/tags');
-    const j = await r.json();
-    const names = (j.models ?? []).map(m => m.name);
-    if (!analyzerModel) {
-      analyzerModel = names.find(n => n.startsWith('mistral'))
-                  ?? names.find(n => n.startsWith('llama3.1'))
-                  ?? names.find(n => n.startsWith('qwen2.5') && !n.includes('lora'))
-                  ?? names[0];
-    }
-  } catch {}
+  let analyzerAgent = null;
 
-  if (!analyzerModel) {
-    console.log('  ✗ Ollama недоступна — пропускаю Decoupage');
-  } else {
-    console.log(`  модель: ${analyzerModel}`);
-    const analyzerAgent = new OllamaAgent({
-      id: 'Аналитик', model: analyzerModel,
-      calling: 'аналитический разрез по сферам',
+  if (useClaude) {
+    console.log('  модель: claude (подписка)');
+    analyzerAgent = new ClaudeAgent({
+      id: 'Аналитик',
+      role: 'аналитик 4 сфер',
+      calling: 'аналитический разрез идеи по 4 sphere-инженериям Переслегина',
+      systemPrompt: 'Ты — аналитик в мыслебродильне. Твоя задача — διαίρεσις (аналитическое разделение, не духовное различение) идеи по конкретной sphere-инженерии. Различай метафоры (виноделие, бочка, винтаж — это терминология процесса, не объект анализа) и реальный объект идеи. Отвечай конкретно по заданной сфере, без воды.',
     });
+  } else {
+    // Fallback: Ollama
+    let analyzerModel = analyzer;
+    try {
+      const r = await fetch('http://localhost:11434/api/tags');
+      const j = await r.json();
+      const names = (j.models ?? []).map(m => m.name);
+      if (!analyzerModel) {
+        analyzerModel = names.find(n => n.startsWith('mistral'))
+                    ?? names.find(n => n.startsWith('llama3.1'))
+                    ?? names.find(n => n.startsWith('qwen2.5') && !n.includes('lora'))
+                    ?? names[0];
+      }
+    } catch {}
+    if (analyzerModel) {
+      console.log(`  модель (ollama): ${analyzerModel}`);
+      analyzerAgent = new OllamaAgent({
+        id: 'Аналитик', model: analyzerModel,
+        calling: 'аналитический разрез по сферам',
+      });
+    }
+  }
+
+  if (!analyzerAgent) {
+    console.log('  ✗ ни Claude, ни Ollama недоступны — пропускаю Decoupage');
+  } else {
     const decoupage = new Decoupage({ llmClient: analyzerAgent });
     decoupageResult = await decoupage.cut({ idea });
 
@@ -111,13 +137,20 @@ if (!skipDecoupage) {
 }
 
 // ── 2. Symphony ──────────────────────────────────────────────────────
-console.log('\n── 2. Δοκιμασία (собор Ollama-агентов) ──────────────────────');
-const { agents, available } = await buildStandardCouncil();
+console.log(`\n── 2. Δοκιμασία (собор ${useClaude ? 'Claude' : 'Ollama'}-агентов) ──────────────────────`);
+
+let agents = [];
+if (useClaude) {
+  agents = buildClaudeCouncil();
+} else {
+  const r = await buildStandardCouncil();
+  agents = r.agents;
+}
 console.log(`  собор: ${agents.map(a => a._personId).join(' + ')}`);
 
 let symphonyResult = null;
 if (agents.length < 3) {
-  console.log('  ✗ < 3 агентов в Ollama, симфония невозможна');
+  console.log(`  ✗ < 3 агентов, симфония невозможна`);
 } else {
   const oracle = noOracle ? null : new HumanOracleInbox({ recipient: 'Дионисий', pollInterval: 500 });
   const orch = new SymphonyOrchestrator({ agents, receiver: 'Дионисий', memory: mem, oracle });
