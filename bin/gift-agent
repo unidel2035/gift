@@ -21,6 +21,7 @@
  */
 
 import { runGiftAgent } from '../src/agent-cli/run.js';
+import { runOllamaAgent } from '../src/agent-cli/ollama-runner.js';
 import { readFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
@@ -32,22 +33,29 @@ function arg(name, def = null) {
 
 if (flag('--help') || flag('-h')) {
   console.log(`
-gift-agent — агентный CLI поверх @anthropic-ai/claude-agent-sdk
+gift-agent — агентный CLI
 
-  gift-agent "промпт"
-  gift-agent --plan "промпт"             # plan mode, не выполнять
-  gift-agent --accept-edits "промпт"     # авто-апрув edit'ов
-  gift-agent --bypass "промпт"           # без апрувов (опасно)
+Два runner'а:
+  ${' '}default: @anthropic-ai/claude-agent-sdk (Claude через подписку, требует
+  ${' '}свободного auth-слота — anti-recursion если активна Claude Code session)
+  ${' '}--ollama: локальный Ollama agent loop через llama3.1:8b или mistral:7b
+  ${' '}(работает параллельно с Claude Code, без anti-recursion)
+
+  gift-agent "промпт"                    # default: Claude SDK
+  gift-agent --ollama "промпт"           # Ollama-runner (всегда работает)
+  gift-agent --ollama --model mistral:7b "промпт"
+  gift-agent --plan "промпт"             # plan mode (только Claude)
+  gift-agent --accept-edits "промпт"     # авто-апрув edit'ов (Claude)
+  gift-agent --bypass "промпт"           # без апрувов (Claude, опасно)
   gift-agent --max-turns 20 "промпт"
   gift-agent --verbose "промпт"
-  gift-agent --no-builtins "промпт"      # только mcp__gift__* tools
+  gift-agent --no-builtins "промпт"      # только mcp__gift__* tools (Claude)
   gift-agent -                           # промпт из stdin
 
-Custom tools (mcp__gift__*):
-  matrix_query, sobor_celebrate, decoupage_cut, vintage_assess,
+Custom tools:
+  matrix_query, sobor_celebrate*, decoupage_cut, vintage_assess,
   score_profile, epiclesis_ask, pustynya_list, liturgical_today, gift_receive
-
-Анти-рекурсия: запускать в обычном bash, не из Claude Code session.
+  (* sobor_celebrate — только в Claude-runner, требует claude --print)
 `);
   process.exit(0);
 }
@@ -57,7 +65,9 @@ if (flag('--plan'))         permissionMode = 'plan';
 else if (flag('--accept-edits')) permissionMode = 'acceptEdits';
 else if (flag('--bypass'))  permissionMode = 'bypassPermissions';
 
-const maxTurns       = parseInt(arg('--max-turns', '30'), 10);
+const useOllama      = flag('--ollama');
+const ollamaModel    = arg('--model', 'llama3.1:8b');
+const maxTurns       = parseInt(arg('--max-turns', useOllama ? '10' : '30'), 10);
 const verbose        = flag('--verbose') || flag('-v');
 const includeBuiltins = !flag('--no-builtins');
 
@@ -67,7 +77,7 @@ if (args.includes('-') || args.includes('--')) {
   prompt = readFileSync(0, 'utf8').trim();
 } else {
   // Берём всё, что не флаг и не значение флага
-  const valuedFlags = new Set(['--max-turns']);
+  const valuedFlags = new Set(['--max-turns', '--model']);
   const positional = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -85,25 +95,46 @@ if (!prompt) {
   process.exit(1);
 }
 
-console.error(`\x1b[2m[gift-agent] mode=${permissionMode} maxTurns=${maxTurns} ${verbose ? 'verbose' : ''}\x1b[0m`);
-
-try {
-  const r = await runGiftAgent({
-    prompt,
-    permissionMode,
-    maxTurns,
-    verbose,
-    includeBuiltins,
-  });
-  if (!r.success) {
-    if (r.error === 'recursion_blocked') process.exit(2);
-    console.error(`\n\x1b[31m✗ agent error: ${r.error ?? r.subtype}\x1b[0m`);
+if (useOllama) {
+  console.error(`\x1b[2m[gift-agent] runner=ollama model=${ollamaModel} maxTurns=${maxTurns}\x1b[0m`);
+  try {
+    const r = await runOllamaAgent({
+      prompt,
+      model: ollamaModel,
+      maxTurns,
+      verbose,
+    });
+    if (!r.success) {
+      console.error(`\n\x1b[31m✗ ollama error (turns=${r.turns}): ${r.error}\x1b[0m`);
+      process.exit(1);
+    }
+  } catch (e) {
+    console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
     process.exit(1);
   }
-  if (verbose && r.cost_usd) {
-    console.error(`\x1b[2m[gift-agent] cost: $${r.cost_usd.toFixed(4)}\x1b[0m`);
+} else {
+  console.error(`\x1b[2m[gift-agent] runner=claude mode=${permissionMode} maxTurns=${maxTurns} ${verbose ? 'verbose' : ''}\x1b[0m`);
+  try {
+    const r = await runGiftAgent({
+      prompt,
+      permissionMode,
+      maxTurns,
+      verbose,
+      includeBuiltins,
+    });
+    if (!r.success) {
+      if (r.error === 'recursion_blocked') {
+        console.error(`\x1b[2m   Подсказка: попробуй --ollama для локального runner'а\x1b[0m`);
+        process.exit(2);
+      }
+      console.error(`\n\x1b[31m✗ agent error: ${r.error ?? r.subtype}\x1b[0m`);
+      process.exit(1);
+    }
+    if (verbose && r.cost_usd) {
+      console.error(`\x1b[2m[gift-agent] cost: $${r.cost_usd.toFixed(4)}\x1b[0m`);
+    }
+  } catch (e) {
+    console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
+    process.exit(1);
   }
-} catch (e) {
-  console.error(`\x1b[31m✗ ${e.message ?? e}\x1b[0m`);
-  process.exit(1);
 }
