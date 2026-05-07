@@ -180,7 +180,8 @@ const HELP_SECTIONS = {
 
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
-  gift status                     — состояние онтологии (6 слоёв)`,
+  gift status                     — состояние онтологии (6 слоёв)
+  gift glossary ${C.dim('[find <слово>]')}      — словарь греческих терминов (русск.)`,
 };
 
 const COMMANDS = Object.keys(HELP_SECTIONS).concat(['benchmark', 'completion', 'version']);
@@ -224,6 +225,7 @@ function bashCompletion() {
   const subTreasure = 'recall unfold ingest stats';
   const subAgrypnia = 'tick list cancel once daily interval';
   const subChat     = '--resume --list last';
+  const subGlossary = 'find';
   return `# gift bash completion (eval "$(gift completion bash)")
 _gift_completions() {
   local cur prev cmd
@@ -244,6 +246,7 @@ _gift_completions() {
     treasure)  COMPREPLY=( $(compgen -W "${subTreasure}" -- "\$cur") );;
     agrypnia)  COMPREPLY=( $(compgen -W "${subAgrypnia}" -- "\$cur") );;
     chat)      COMPREPLY=( $(compgen -W "${subChat}" -- "\$cur") );;
+    glossary)  COMPREPLY=( $(compgen -W "${subGlossary}" -- "\$cur") );;
     help)      COMPREPLY=( $(compgen -W "${cmds}" -- "\$cur") );;
   esac
 }
@@ -555,6 +558,13 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       // в utils/run-chat.mjs сработать ДО первого импорта tfjs-node.
       const allArgs = [sub, ...rest].filter(Boolean);
       await runRaw('utils/run-chat.mjs', allArgs);
+      break;
+    }
+
+    case 'glossary': {
+      // Словарь греческих терминов (греч. → рус.) — снимает языковой барьер.
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('utils/gift-glossary.mjs', allArgs);
       break;
     }
 

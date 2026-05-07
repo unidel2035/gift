@@ -109,6 +109,7 @@ class ReplState {
     this.totalCost = 0;
     this.totalUsage = { input_tokens: 0, output_tokens: 0 };
     this.turnInProgress = false;
+    this.plainMode = !!session.plainMode;
   }
   appendUser(text) {
     this.session.messages.push({
@@ -281,9 +282,12 @@ export async function runGiftRepl(opts = {}) {
   const allowedTools = [...new Set([...builtins, ...GIFT_TOOL_NAMES])];
 
   const anamnesis = buildAnamnesisSnapshot();
+  const LANGUAGE_RULE = state.plainMode
+    ? `\n\n--- РЕЖИМ /plain ---\nОтвечай простым русским. Греческие/латинские термины используй ТОЛЬКО если без них совсем нельзя — и обязательно с русским объяснением в скобках при первом употреблении в сообщении. Не используй термины как украшение.`
+    : `\n\n--- ЯЗЫК ---\nКогда используешь греческий/латинский термин (κένωσις, ἀνάμνησις и т.п.) — обязательно дай русский эквивалент в скобках при первом употреблении в данном сообщении. Это не «упрощение», это уважение к собеседнику. Дионисий — автор онтологии, но не классицист. Лучше одно ясное русское слово, чем три греческих без перевода.`;
   const systemPrompt = anamnesis
-    ? `${GIFT_SYSTEM_PROMPT}\n\n--- АНАМНЕЗИС ---\n\n${anamnesis}`
-    : GIFT_SYSTEM_PROMPT;
+    ? `${GIFT_SYSTEM_PROMPT}\n\n--- АНАМНЕЗИС ---\n\n${anamnesis}${LANGUAGE_RULE}`
+    : `${GIFT_SYSTEM_PROMPT}${LANGUAGE_RULE}`;
 
   const queryOptions = {
     systemPrompt,
@@ -390,6 +394,8 @@ async function handleSlash(line, state, rl, quit, pushToInbox) {
       console.log('  /title <text>               задать/переименовать заголовок сессии');
       console.log('  /branch [new-id]            форк: скопировать сессию и продолжить в копии');
       console.log('  /refresh                    обновить анамнезис матрицы для модели');
+      console.log('  /plain [on|off]             режим без греческих терминов (нужен restart)');
+      console.log('  /glossary [<слово>]         показать словарь терминов (греч. → рус.)');
       console.log('  /sessions                   последние сессии');
       console.log('  /resume <id|last>           перейти к сессии (нужен restart)');
       console.log('  /tools                      список доступных tools');
@@ -445,6 +451,30 @@ async function handleSlash(line, state, rl, quit, pushToInbox) {
       pushToInbox(seed);
       console.log(c('dim', '↻ анамнезис обновлён, шлю модели…'));
       return { expectsResponse: true };
+    }
+
+    case '/plain': {
+      // Включить/выключить режим простого русского.
+      // Меняет sessionprefs; для применения нужен перезапуск (systemPrompt
+      // фиксируется при старте SDK-run).
+      const want = arg === 'off' ? false : (arg === 'on' || !arg ? true : !!arg);
+      state.plainMode = want;
+      state.session.plainMode = want;
+      saveSession(state.session);
+      console.log(c('dim', `✓ /plain ${want ? 'on' : 'off'}`));
+      console.log(c('yellow', '⚠ для применения нужен restart: Ctrl+D, затем gift chat --resume ' + state.session.id));
+      break;
+    }
+
+    case '/glossary': {
+      // Локальный показ словаря (без roundtrip к модели).
+      const { spawn } = await import('node:child_process');
+      const args = arg ? ['utils/gift-glossary.mjs', 'find', arg] : ['utils/gift-glossary.mjs'];
+      await new Promise(r => {
+        const p = spawn('node', args, { cwd: ROOT, stdio: 'inherit' });
+        p.on('exit', r);
+      });
+      break;
     }
 
     case '/sessions': {
