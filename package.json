@@ -61,7 +61,9 @@
     "eval:list": "node utils/gift-eval.mjs --list",
     "lcm": "node utils/lcm-cli.mjs",
     "lcm:ingest": "node utils/lcm-cli.mjs ingest",
-    "lcm:stats": "node utils/lcm-cli.mjs stats"
+    "lcm:stats": "node utils/lcm-cli.mjs stats",
+    "agrypnia": "node utils/agrypnia-tick.mjs",
+    "agrypnia:tick": "node utils/agrypnia-tick.mjs tick"
   },
   "keywords": [
     "gift",

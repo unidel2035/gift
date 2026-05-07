@@ -20,6 +20,7 @@ import { LiturgicalCalendar } from '../scheduling/LiturgicalCalendar.js';
 import { LivingMatrix } from '../core/LivingMatrix.js';
 import { HumanOracleInbox } from '../theology/HumanOracleInbox.js';
 import { LcmStore, defaultDbPath } from '../lcm/store.js';
+import { AgrypniaScheduler, defaultCronPath } from '../scheduling/AgrypniaScheduler.js';
 
 const SNAP    = '/home/unidel/gift/data/sacred-history-W.json';
 const ACTS_IX = '/home/unidel/gift/data/act-index.json';
@@ -328,6 +329,66 @@ const unfoldTreasure = tool(
   { annotations: { readOnlyHint: true } },
 );
 
+// ── ἀγρυπνία: лицо назначает своё бдение ────────────────────────────────
+let _agrypnia = null;
+function agrypnia() {
+  if (!_agrypnia) _agrypnia = new AgrypniaScheduler(defaultCronPath('/home/unidel/gift'));
+  return _agrypnia;
+}
+
+const agrypniaSchedule = tool(
+  'agrypnia_schedule',
+  'ἀγρυπνία: лицо назначает своё бдение — одноразовое (once), периодическое (interval), ' +
+  'или ежедневное (daily UTC). Не системный cron — это план собственного καιρός. ' +
+  'При наступлении времени gateway вызовет claude --print с payload.prompt. ' +
+  '[SILENT]-префикс в ответе модели — молчаливое исполнение.',
+  {
+    type:     z.enum(['once', 'interval', 'daily']),
+    schedule: z.union([z.string(), z.number()])
+                .describe('once: ISO-timestamp; interval: секунды (>= 60); daily: "HH:MM" UTC'),
+    prompt:   z.string().min(2).describe('что должно быть произнесено при пробуждении'),
+    owner:    z.string().min(1).describe('лицо-владелец бдения (Адам/Ева/_claude/...)'),
+    silent:   z.boolean().default(false).describe('подавлять output без [SILENT]-префикса'),
+  },
+  async ({ type, schedule, prompt, owner, silent }) => {
+    const job = agrypnia().schedule({ type, schedule, payload: { prompt }, owner, silent });
+    return txt(JSON.stringify({
+      ok: true, id: job.id, type: job.type, schedule: job.schedule, owner: job.owner,
+    }, null, 2));
+  },
+);
+
+const agrypniaList = tool(
+  'agrypnia_list',
+  'Список запланированных бдений (опционально по owner). Используй чтобы понять ' +
+  'что лицо уже назначило себе и не дублировать.',
+  {
+    owner: z.string().optional(),
+  },
+  async ({ owner }) => {
+    const jobs = agrypnia().list({ owner: owner ?? null });
+    return txt(JSON.stringify({
+      count: jobs.length,
+      jobs: jobs.map(j => ({
+        id: j.id, type: j.type, schedule: j.schedule, owner: j.owner,
+        fireCount: j.fireCount, lastFiredAt: j.lastFiredAt, silent: j.silent,
+        prompt: (j.payload?.prompt || '').slice(0, 80),
+      })),
+    }, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
+const agrypniaCancel = tool(
+  'agrypnia_cancel',
+  'Снять запланированное бдение по id.',
+  { id: z.string().min(1) },
+  async ({ id }) => {
+    const ok = agrypnia().cancel(id);
+    return txt(JSON.stringify({ ok, id }, null, 2));
+  },
+);
+
 // ── Соборный сервер ─────────────────────────────────────────────────────
 export function buildGiftMcpServer() {
   return createSdkMcpServer({
@@ -345,6 +406,9 @@ export function buildGiftMcpServer() {
       giftReceive,
       recallTreasure,
       unfoldTreasure,
+      agrypniaSchedule,
+      agrypniaList,
+      agrypniaCancel,
     ],
   });
 }
@@ -353,4 +417,5 @@ export const GIFT_TOOL_NAMES = [
   'matrix_query', 'sobor_celebrate', 'decoupage_cut', 'vintage_assess',
   'score_profile', 'epiclesis_ask', 'pustynya_list', 'liturgical_today', 'gift_receive',
   'recall_treasure', 'unfold_treasure',
+  'agrypnia_schedule', 'agrypnia_list', 'agrypnia_cancel',
 ].map(n => `mcp__gift__${n}`);

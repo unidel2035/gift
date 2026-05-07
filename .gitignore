@@ -4,6 +4,8 @@ node_modules/
 data/spec-vectors.db
 data/lcm.db
 data/lcm.db-*
+data/dynamic-cron.json
+data/dynamic-cron.json.tmp
 data/.anamnesis-cache.json
 data/.session-heartbeat.json
 data/pulse-pid.txt
