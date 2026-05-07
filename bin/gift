@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// Заглушаем TensorFlow info-логи (oneDNN/cpu_feature_guard) — они печатаются
+// при первом импорте core/GiftMemory.js и засоряют CLI. На функциональность
+// не влияют. Если нужны для отладки — снять переменную окружения.
+process.env.TF_CPP_MIN_LOG_LEVEL = process.env.TF_CPP_MIN_LOG_LEVEL || '3';
+
 /**
  * gift — единый CLI онтологии дара.
  *
@@ -149,7 +154,7 @@ const HELP_SECTIONS = {
   gift chat --resume <id>         — продолжить сессию по id
   gift chat --resume last         — продолжить последнюю сессию
   gift chat --list                — список сохранённых сессий
-  ${C.dim('Внутри REPL: /help /clear /save /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
+  ${C.dim('Внутри REPL: /help /clear /save /title /branch /refresh /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
 
   myslo: () => `${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score

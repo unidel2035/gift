@@ -148,6 +148,54 @@ function buildResumePrompt(session, limit = 20) {
   return `[Резюме сессии ${session.id} (последние ${tail.length} сообщений):]\n${lines}\n\n[Продолжаем:]`;
 }
 
+/**
+ * Анамнетический snapshot: топ-нити W + краткая статистика сокровищницы и бдений.
+ * Пишется в systemPromptExtra при старте chat'а — даёт модели контекст
+ * того, что есть на момент начала разговора.
+ */
+function buildAnamnesisSnapshot() {
+  const lines = ['[Анамнезис на момент начала диалога]'];
+  // W-матрица
+  try {
+    const snapPath = resolve(ROOT, 'data/sacred-history-W.json');
+    if (existsSync(snapPath)) {
+      const W = JSON.parse(readFileSync(snapPath, 'utf8'));
+      const persons = W.persons || [];
+      const acts = W.acts ?? W.actsCount ?? '?';
+      lines.push(`  Матрица: ${persons.length} лиц, ${acts} актов`);
+    }
+  } catch {}
+  // Сокровищница
+  try {
+    const lcmPath = resolve(ROOT, 'data/lcm.db');
+    if (existsSync(lcmPath)) {
+      const store = new LcmStore(lcmPath);
+      const s = store.stats();
+      lines.push(`  Сокровищница: ${s.total} документов`);
+      store.close();
+    }
+  } catch {}
+  // Бдения
+  try {
+    const cronPath = resolve(ROOT, 'data/dynamic-cron.json');
+    if (existsSync(cronPath)) {
+      const j = JSON.parse(readFileSync(cronPath, 'utf8'));
+      const jobs = (j.jobs || []).length;
+      if (jobs) lines.push(`  Бдений активно: ${jobs}`);
+    }
+  } catch {}
+  // Pending proposals
+  try {
+    const propPath = resolve(ROOT, 'data/proposals.json');
+    if (existsSync(propPath)) {
+      const p = JSON.parse(readFileSync(propPath, 'utf8'));
+      const pending = p.filter(x => x.status === 'pending').length;
+      if (pending) lines.push(`  Pending proposals: ${pending}`);
+    }
+  } catch {}
+  return lines.length > 1 ? lines.join('\n') : null;
+}
+
 // ── main ────────────────────────────────────────────────────────────────
 export async function runGiftRepl(opts = {}) {
   const session = opts.resumeId
@@ -160,6 +208,7 @@ export async function runGiftRepl(opts = {}) {
   // banner
   console.log();
   console.log(c('bold', c('gold', 'gift chat')) + c('dim', `  сессия ${session.id}`));
+  if (session.title) console.log(c('dim', `  title: ${session.title}`));
   if (opts.resumeId) {
     console.log(c('dim', `  resumed: ${session.messages.length} сообщений в истории`));
   }
@@ -188,7 +237,10 @@ export async function runGiftRepl(opts = {}) {
     if (trimmed.startsWith('/')) {
       // slash-команды — обрабатываем локально, не уходят в модель
       try {
-        await handleSlash(trimmed, state, rl, () => { done = true; rl.close(); });
+        const r = await handleSlash(trimmed, state, rl, () => { done = true; rl.close(); }, pushToInbox);
+        // Некоторые команды (например /refresh) пушат сообщение в SDK через pushToInbox
+        // и НЕ должны печатать prompt сразу — он напечатается после ответа SDK.
+        if (r?.expectsResponse) return;
       } catch (e) {
         console.error(c('red', `error: ${e.message}`));
       }
@@ -228,8 +280,13 @@ export async function runGiftRepl(opts = {}) {
   const builtins   = ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
   const allowedTools = [...new Set([...builtins, ...GIFT_TOOL_NAMES])];
 
+  const anamnesis = buildAnamnesisSnapshot();
+  const systemPrompt = anamnesis
+    ? `${GIFT_SYSTEM_PROMPT}\n\n--- АНАМНЕЗИС ---\n\n${anamnesis}`
+    : GIFT_SYSTEM_PROMPT;
+
   const queryOptions = {
-    systemPrompt: GIFT_SYSTEM_PROMPT,
+    systemPrompt,
     mcpServers:   { gift: giftServer },
     allowedTools,
     permissionMode: 'bypassPermissions',
@@ -320,7 +377,7 @@ export async function runGiftRepl(opts = {}) {
 function throwIf(msg) { throw new Error(msg); }
 
 // ── slash-команды ───────────────────────────────────────────────────────
-async function handleSlash(line, state, rl, quit) {
+async function handleSlash(line, state, rl, quit, pushToInbox) {
   const [cmd, ...rest] = line.split(/\s+/);
   const arg = rest.join(' ');
   switch (cmd) {
@@ -330,8 +387,11 @@ async function handleSlash(line, state, rl, quit) {
       console.log('  /help                       список slash-команд');
       console.log('  /clear                      очистить историю');
       console.log('  /save                       явный save (auto-save и так каждое сообщение)');
+      console.log('  /title <text>               задать/переименовать заголовок сессии');
+      console.log('  /branch [new-id]            форк: скопировать сессию и продолжить в копии');
+      console.log('  /refresh                    обновить анамнезис матрицы для модели');
       console.log('  /sessions                   последние сессии');
-      console.log('  /resume <id|last>           перейти к сессии');
+      console.log('  /resume <id|last>           перейти к сессии (нужен restart)');
       console.log('  /tools                      список доступных tools');
       console.log('  /status                     gift status inline');
       console.log('  /recall <query>             полнотекстовый поиск (treasure)');
@@ -354,13 +414,47 @@ async function handleSlash(line, state, rl, quit) {
       console.log(c('dim', `✓ saved: ${state.session.id}`));
       break;
 
+    case '/title':
+      if (!arg) { console.log(`title: "${state.session.title || '(пусто)'}"`); break; }
+      state.session.title = arg;
+      saveSession(state.session);
+      console.log(c('dim', `✓ title: ${arg}`));
+      break;
+
+    case '/branch': {
+      const newId = arg || newSessionId();
+      const fork = {
+        id: newId,
+        title: state.session.title ? `${state.session.title} (branch)` : '',
+        startedAt: new Date().toISOString(),
+        branchedFrom: state.session.id,
+        messages: [...state.session.messages],
+      };
+      saveSession(fork);
+      console.log(c('dim', `✓ branched: ${newId}`));
+      console.log(c('yellow', '⚠ форк сохранён, но текущий REPL продолжает в исходной сессии.'));
+      console.log(c('dim',    `  Чтобы продолжить в форке: выйди и запусти gift chat --resume ${newId}`));
+      break;
+    }
+
+    case '/refresh': {
+      const snapshot = buildAnamnesisSnapshot();
+      if (!snapshot) { console.log(c('dim', 'нечего обновлять')); break; }
+      const seed = `[Обновлённый анамнезис (текущее состояние онтологии):]\n${snapshot}`;
+      state.appendUser(seed);
+      pushToInbox(seed);
+      console.log(c('dim', '↻ анамнезис обновлён, шлю модели…'));
+      return { expectsResponse: true };
+    }
+
     case '/sessions': {
       const ls = listSessions(15);
       console.log();
       console.log(c('bold', `Последние сессии (${ls.length}):`));
       for (const s of ls) {
         const mark = s.id === state.session.id ? c('cyan', '●') : ' ';
-        console.log(`  ${mark} ${s.id}  ${c('dim', `${s.turns} turns`)}  ${c('dim', s.updatedAt)}`);
+        const title = s.title ? `  ${c('bold', s.title)}` : '';
+        console.log(`  ${mark} ${s.id}  ${c('dim', `${s.turns} turns`)}  ${c('dim', s.updatedAt)}${title}`);
       }
       console.log();
       break;
