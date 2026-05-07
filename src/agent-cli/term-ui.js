@@ -41,6 +41,7 @@ export class TermUI {
    */
   constructor(opts) {
     this.promptStr     = opts.prompt;
+    this.getPrompt     = opts.getPrompt;     // optional: ()=>string для динамического prompt
     this.slashCommands = opts.slashCommands;
     this.onLine        = opts.onLine;
     this.onClose       = opts.onClose;
@@ -134,8 +135,11 @@ export class TermUI {
     this.historyIdx = -1;
     this.savedCurrent = '';
     this.released = false;
+    // Обновить prompt из getPrompt() если есть (динамический cost)
+    if (this.getPrompt) this.promptStr = this.getPrompt();
     if (this._fallbackRl) {
       process.stdout.write('\n');
+      this._fallbackRl.setPrompt(this.promptStr);
       this._fallbackRl.prompt();
       return;
     }
@@ -335,6 +339,18 @@ export class TermUI {
 
     // Enter
     if (ch === '\r' || ch === '\n') {
+      // Multi-line: если буфер заканчивается '\' — заменить на newline,
+      // продолжить ввод (как bash heredoc или \-continuation).
+      if (this.buffer.endsWith('\\') && !this._menuActive()) {
+        const arr = [...this.buffer];
+        arr.pop(); // убираем '\'
+        arr.push('\n');
+        this.buffer = arr.join('');
+        this.cursor = arr.length;
+        process.stdout.write('\r\n' + c('dim', '... '));
+        return;
+      }
+
       // Если меню активно и есть совпадения — Enter выбирает пункт меню
       if (this._menuActive()) {
         const matches = this._filterMenu();

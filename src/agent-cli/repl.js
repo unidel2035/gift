@@ -223,9 +223,17 @@ export async function runGiftRepl(opts = {}) {
     if (inboxResolve) { const r = inboxResolve; inboxResolve = null; r(); }
   }
 
+  // Динамический prompt: показывает PLAN mode и накопленную стоимость
+  const buildPrompt = () => {
+    const planTag = opts.planMode ? c('yellow', 'plan ') : '';
+    const cost = state.totalCost > 0 ? c('dim', ` $${state.totalCost.toFixed(3)}`) : '';
+    return planTag + c('cyan', 'gift') + cost + c('dim', '> ');
+  };
+
   const ui = new TermUI({
-    prompt: c('cyan', 'gift') + c('dim', '> '),
+    prompt: buildPrompt(),
     slashCommands: SLASH_COMMANDS,
+    getPrompt: buildPrompt,  // вызывается при ui.resume() — обновлённый cost
     onLine: async line => {
       const trimmed = line.trim();
       if (!trimmed) { return; }
@@ -246,10 +254,11 @@ export async function runGiftRepl(opts = {}) {
         }
         return;
       }
-      // обычный turn → пушим в SDK; UI ставится в release-режим до ответа
-      state.appendUser(trimmed);
+      // @file mentions: scan @path в строке, prepend содержимое
+      const expanded = expandFileMentions(trimmed);
+      state.appendUser(expanded);
       ui.release();
-      pushToInbox(trimmed);
+      pushToInbox(expanded);
     },
     onClose: () => {
       done = true;
@@ -310,15 +319,17 @@ export async function runGiftRepl(opts = {}) {
     systemPrompt,
     mcpServers:   { gift: giftServer },
     allowedTools,
-    permissionMode: 'bypassPermissions',
+    permissionMode: opts.planMode ? 'plan' : 'bypassPermissions',
     maxTurns:       999,
     cwd:            ROOT,
     hooks:          GIFT_HOOKS,
+    includePartialMessages: true,  // streaming token-by-token через stream_event
   };
   if (claudeBin) queryOptions.pathToClaudeCodeExecutable = claudeBin;
 
   let pendingAssistantText = '';
   let initShown = false;
+  let streamingActive = false; // получаем ли token-deltas — тогда не дублируем text из 'assistant'
 
   try {
     const gen = query({ prompt: userMessageStream(), options: queryOptions });
@@ -336,12 +347,28 @@ export async function runGiftRepl(opts = {}) {
           }
           break;
 
+        case 'stream_event': {
+          // Partial token streaming. Печатаем text-дельты по мере прихода.
+          // Tool_use deltas пропускаем — они приходят целым блоком в 'assistant'.
+          const ev = message.event;
+          if (ev?.type === 'content_block_delta' && ev?.delta?.type === 'text_delta') {
+            streamingActive = true;
+            const delta = ev.delta.text || '';
+            streamMarkdown(delta);
+            pendingAssistantText += delta;
+          }
+          break;
+        }
+
         case 'assistant': {
           const blocks = message.message?.content ?? [];
           for (const b of blocks) {
             if (b.type === 'text') {
-              streamMarkdown(b.text);
-              pendingAssistantText += b.text;
+              // Если уже получили текст через stream_event — не дублируем
+              if (!streamingActive) {
+                streamMarkdown(b.text);
+                pendingAssistantText += b.text;
+              }
             } else if (b.type === 'thinking') {
               // Размышление модели — приглушённо, ниже spotlight
               const txt = (b.thinking || '').slice(0, 400).trim();
@@ -373,6 +400,7 @@ export async function runGiftRepl(opts = {}) {
           flushMarkdown();
           if (pendingAssistantText.trim()) state.appendAssistant(pendingAssistantText);
           pendingAssistantText = '';
+          streamingActive = false;
           if (typeof message.total_cost_usd === 'number') {
             state.totalCost += message.total_cost_usd;
           }
@@ -406,29 +434,90 @@ export async function runGiftRepl(opts = {}) {
 
 function throwIf(msg) { throw new Error(msg); }
 
+// ── @file mentions ──────────────────────────────────────────────────────
+// Сканирует строку на вхождения @path/to/file (где path — относительный
+// от ROOT путь). Если файл существует, добавляет его содержимое к началу
+// сообщения. Это убирает roundtrip 'модель → Read' для часто упоминаемых
+// файлов.
+const MENTION_RE = /@([\w./\-]+)/g;
+function expandFileMentions(text) {
+  const seen = new Set();
+  const blocks = [];
+  let m;
+  MENTION_RE.lastIndex = 0;
+  while ((m = MENTION_RE.exec(text)) !== null) {
+    const path = m[1];
+    if (seen.has(path)) continue;
+    const full = path.startsWith('/') ? path : resolve(ROOT, path);
+    if (!existsSync(full)) continue;
+    try {
+      const stat = statSync(full);
+      if (!stat.isFile()) continue;
+      if (stat.size > 100 * 1024) {
+        blocks.push(`[@${path} — файл слишком большой (${Math.round(stat.size/1024)}KB), модель пусть прочитает Read'ом]`);
+      } else {
+        const content = readFileSync(full, 'utf8');
+        blocks.push(`[@${path}]\n\`\`\`\n${content}\n\`\`\``);
+      }
+      seen.add(path);
+    } catch {}
+  }
+  if (!blocks.length) return text;
+  return blocks.join('\n\n') + '\n\n' + text;
+}
+
 // ── Streaming Markdown → ANSI ───────────────────────────────────────────
-// Текст модели приходит чанками (text-блоки). Накапливаем в lineBuffer
-// до '\n', потом рендерим строку и flush'им. На границе turn'а — финальный
-// flush через flushMarkdown(). Полные строки → markdown пары (**, _, `)
-// никогда не пересекают \n в практике Claude (с очень редкими edge cases).
 let mdBuffer = '';
+let mdInCode = false;       // сейчас внутри ```code-block```
+let mdCodeLang = '';
+
+// Простая подсветка ключевых слов для популярных языков
+const SYNTAX_KEYWORDS = {
+  js: /\b(const|let|var|function|return|if|else|for|while|class|extends|import|export|from|async|await|new|throw|try|catch|finally|null|undefined|true|false|this|super)\b/g,
+  ts: /\b(const|let|var|function|return|if|else|for|while|class|extends|import|export|from|async|await|new|throw|try|catch|finally|null|undefined|true|false|this|super|interface|type|enum|public|private|protected|readonly|as)\b/g,
+  json: /\b(true|false|null)\b/g,
+  bash: /\b(if|then|else|fi|for|do|done|while|case|esac|function|return|echo|cd|export|local|read)\b/g,
+  python: /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|None|True|False|self|lambda|yield)\b/g,
+  py: /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|None|True|False|self|lambda|yield)\b/g,
+};
+
+function highlightCode(line, lang) {
+  const re = SYNTAX_KEYWORDS[lang];
+  if (!re) return '\x1b[2m' + line + '\x1b[0m'; // dim для неизвестного языка
+  return ('\x1b[2m' + line + '\x1b[0m')
+    .replace(re, '\x1b[35m$&\x1b[0m\x1b[2m')   // keywords magenta
+    .replace(/(["'`])(.*?)\1/g, '\x1b[32m$&\x1b[0m\x1b[2m')  // strings green
+    .replace(/\/\/.*$/, '\x1b[36m$&\x1b[0m\x1b[2m')          // line comments cyan
+    .replace(/\b\d+\b/g, '\x1b[33m$&\x1b[0m\x1b[2m');         // numbers yellow
+}
 
 function renderLine(line) {
+  // Граница code-block
+  const fenceMatch = line.match(/^```(\w*)\s*$/);
+  if (fenceMatch) {
+    if (mdInCode) {
+      mdInCode = false; mdCodeLang = '';
+      return '\x1b[2m└' + '─'.repeat(56) + '\x1b[0m';
+    } else {
+      mdInCode = true;
+      mdCodeLang = (fenceMatch[1] || '').toLowerCase();
+      return '\x1b[2m┌─ ' + (mdCodeLang || 'code') + ' ' + '─'.repeat(50 - mdCodeLang.length) + '\x1b[0m';
+    }
+  }
+  // Внутри code-block — подсветка по языку
+  if (mdInCode) {
+    return '\x1b[2m│ \x1b[0m' + highlightCode(line, mdCodeLang);
+  }
+  // Обычный markdown
   return line
-    // headings (line-start) — порядок: больше # сначала
     .replace(/^#### (.+)$/, '\x1b[1m\x1b[35m$1\x1b[0m')
     .replace(/^### (.+)$/,  '\x1b[1m\x1b[36m$1\x1b[0m')
     .replace(/^## (.+)$/,   '\x1b[1m\x1b[33m$1\x1b[0m')
     .replace(/^# (.+)$/,    '\x1b[1m\x1b[35m$1\x1b[0m')
-    // bold: **text** и __text__
     .replace(/\*\*([^*\n]+?)\*\*/g, '\x1b[1m$1\x1b[0m')
     .replace(/__([^_\n]+?)__/g,     '\x1b[1m$1\x1b[0m')
-    // inline code: `text` (не путать с ```)
     .replace(/`([^`\n]+?)`/g, '\x1b[36m$1\x1b[0m')
-    // italic: *text* (отдельные одиночные звёзды, не входят в **)
-    // Используем lookbehind/lookahead чтобы не ловить ** края
     .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1\x1b[3m$2\x1b[0m')
-    // bullet точки в начале строки делаем «·»
     .replace(/^(\s*)[-*]\s/, '$1• ');
 }
 
@@ -558,6 +647,7 @@ function printToolResult(b) {
 // ── Slash-команды с русскими описаниями (для всплывающего меню) ─────────
 const SLASH_COMMANDS = [
   { cmd: '/help',     desc: 'список всех команд с описанием' },
+  { cmd: '/compact',  desc: 'сжать историю сессии (модель сделает summary)' },
   { cmd: '/clear',    desc: 'очистить историю текущей сессии' },
   { cmd: '/save',     desc: 'явно сохранить (auto-save и так каждое сообщение)' },
   { cmd: '/title',    desc: 'задать или переименовать заголовок сессии', needsArg: true },
@@ -664,6 +754,26 @@ async function handleSlash(line, state, ui, quit, pushToInbox) {
       saveSession(state.session);
       console.log(c('dim', '✓ история очищена'));
       break;
+
+    case '/compact': {
+      // Сжать историю: попросить модель сделать summary последних N сообщений.
+      // SDK будет видеть только summary как первое user-сообщение в next turn.
+      // Текущий run продолжает работать; следующий /resume или новая сессия
+      // получит compact-history.
+      const tail = state.session.messages.slice(-40);
+      if (tail.length < 8) {
+        console.log(c('dim', 'история ещё короткая, сжатие не нужно'));
+        break;
+      }
+      const dump = tail.map(m => `${m.role === 'user' ? 'пользователь' : 'я'}: ${(m.content || '').slice(0, 800)}`).join('\n\n');
+      const compactRequest = `[Сжатие истории — /compact]\n\nНиже расшифровка последних ${tail.length} сообщений нашего диалога. Сделай конспект 200-400 слов: ключевые решения, изменения в коде, текущее состояние, открытые вопросы. Формат — bullet points. Это станет базой для продолжения.\n\n--- ИСТОРИЯ ---\n\n${dump}`;
+      console.log(c('dim', `↳ прошу модель сжать ${tail.length} сообщений…`));
+      state.appendUser(compactRequest);
+      pushToInbox(compactRequest);
+      // После ответа модели вручную /clear, чтобы сократить корпус
+      console.log(c('dim', '   после ответа модели — /clear оставит только summary'));
+      return { expectsResponse: true };
+    }
 
     case '/save':
       saveSession(state.session);

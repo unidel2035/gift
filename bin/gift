@@ -155,8 +155,13 @@ const HELP_SECTIONS = {
   gift chat --resume <id>         — продолжить сессию по id
   gift chat --resume last         — продолжить последнюю сессию
   gift chat --list                — список сохранённых сессий
-  ${C.dim('Внутри REPL: /help /clear /save /title /branch /refresh /plain /glossary')}
-  ${C.dim('             /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
+  gift chat --plan                — plan mode: модель планирует, не выполняет
+  ${C.dim('Внутри REPL:')}
+    ${C.dim('• наберите «/» — всплывает меню команд (стрелки ↑↓ выбирают)')}
+    ${C.dim('• @path/to/file — автоматически приложить содержимое файла к сообщению')}
+    ${C.dim('• \\ + Enter — multi-line ввод')}
+    ${C.dim('• /compact — сжать историю когда контекст переполняется')}
+    ${C.dim('• ↑↓ — история сообщений (когда меню не активно)')}`,
 
   myslo: () => `${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
@@ -603,8 +608,9 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       }
       const resumeIdx = allArgs.indexOf('--resume');
       const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
+      const planMode = allArgs.includes('--plan');
       try {
-        await runGiftRepl({ resumeId });
+        await runGiftRepl({ resumeId, planMode });
       } catch (e) {
         console.error(`Ошибка: ${e.message}`);
         process.exit(1);
