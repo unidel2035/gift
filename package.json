@@ -59,11 +59,8 @@
     "test": "node --test 'tests/*.test.js'",
     "eval": "node utils/gift-eval.mjs",
     "eval:list": "node utils/gift-eval.mjs --list",
-    "lcm": "node utils/lcm-cli.mjs",
-    "lcm:ingest": "node utils/lcm-cli.mjs ingest",
-    "lcm:stats": "node utils/lcm-cli.mjs stats",
-    "agrypnia": "node utils/agrypnia-tick.mjs",
-    "agrypnia:tick": "node utils/agrypnia-tick.mjs tick"
+    "treasure": "node bin/gift treasure",
+    "agrypnia": "node bin/gift agrypnia"
   },
   "keywords": [
     "gift",

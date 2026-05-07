@@ -143,6 +143,20 @@ ${C.b('Мыслебродильня:')}
   gift myslo карты                — все sommelier-карты иконных актов W
   gift myslo бочка                — идеи в ферментации (_pending в W)
 
+${C.b('Сокровищница (θησαυρός):')}
+  gift treasure recall "<query>" ${C.dim('[N]')}     — полнотекстовый поиск (FTS5)
+  gift treasure unfold <source_id> ${C.dim('[N]')}   — развернуть документ/сессию
+  gift treasure ingest             — загрузить корпус (sessions/insights/acts)
+  gift treasure stats              — статистика по источникам
+
+${C.b('Бдение (ἀγρυπνία):')}
+  gift agrypnia tick                — один tick (исполнить due бдения)
+  gift agrypnia list                — все запланированные бдения
+  gift agrypnia cancel <id>         — снять бдение
+  gift agrypnia once "<ISO>" "<prompt>" ${C.dim('[owner]')}     — одноразовое
+  gift agrypnia daily "HH:MM" "<prompt>" ${C.dim('[owner]')}    — каждый день UTC
+  gift agrypnia interval <sec> "<prompt>" ${C.dim('[owner]')}   — каждые N секунд
+
 ${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — открытые пустыни + энергия
@@ -422,6 +436,22 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       console.log(`\n${C.gold('✦')} Скиния Дара открыта`);
       console.log(`  ${C.cyan(`http://localhost:${port}`)}`);
       console.log(`  ${C.dim('gift web --stop  — остановить')}\n`);
+      break;
+    }
+
+    case 'treasure': {
+      // θησαυρός — фасад над utils/lcm-cli.mjs.
+      // Подкоманды: recall | unfold | ingest | stats
+      if (!sub) { help(); process.exit(1); }
+      await run('utils/lcm-cli.mjs', [sub, ...rest]);
+      break;
+    }
+
+    case 'agrypnia': {
+      // ἀγρυπνία — фасад над utils/agrypnia-tick.mjs.
+      // Подкоманды: tick | list | cancel | once | daily | interval
+      if (!sub) { help(); process.exit(1); }
+      await run('utils/agrypnia-tick.mjs', [sub, ...rest]);
       break;
     }
 
