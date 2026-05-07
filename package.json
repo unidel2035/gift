@@ -58,7 +58,10 @@
     "postinstall": "node utils/spec-index.mjs 2>/dev/null || true",
     "test": "node --test 'tests/*.test.js'",
     "eval": "node utils/gift-eval.mjs",
-    "eval:list": "node utils/gift-eval.mjs --list"
+    "eval:list": "node utils/gift-eval.mjs --list",
+    "lcm": "node utils/lcm-cli.mjs",
+    "lcm:ingest": "node utils/lcm-cli.mjs ingest",
+    "lcm:stats": "node utils/lcm-cli.mjs stats"
   },
   "keywords": [
     "gift",

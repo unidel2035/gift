@@ -19,6 +19,7 @@ import { Score } from '../persons/Score.js';
 import { LiturgicalCalendar } from '../scheduling/LiturgicalCalendar.js';
 import { LivingMatrix } from '../core/LivingMatrix.js';
 import { HumanOracleInbox } from '../theology/HumanOracleInbox.js';
+import { LcmStore, defaultDbPath } from '../lcm/store.js';
 
 const SNAP    = '/home/unidel/gift/data/sacred-history-W.json';
 const ACTS_IX = '/home/unidel/gift/data/act-index.json';
@@ -277,6 +278,56 @@ const giftReceive = tool(
   },
 );
 
+// ── θησαυρός: полнотекстовый сосуд анамнезиса ───────────────────────────
+let _lcmStore = null;
+function lcm() {
+  if (!_lcmStore) _lcmStore = new LcmStore(defaultDbPath('/home/unidel/gift'));
+  return _lcmStore;
+}
+
+const recallTreasure = tool(
+  'recall_treasure',
+  'θησαυρός: полнотекстовый поиск по корпусу сессий, инсайтов и актов W. ' +
+  'Возвращает top-N документов со снипетом и source_id. Используй когда ' +
+  'нужно найти конкретный текст из прошлых разговоров — там, где W даёт только вес, ' +
+  'а soul только сжатый смысл. Хозяин выносит из сокровищницы новое и старое (Мф 13:52).',
+  {
+    query:  z.string().min(2).describe('фраза для поиска (ищется как последовательность токенов)'),
+    limit:  z.number().int().min(1).max(50).default(10),
+    source: z.enum(['chat-session', 'insight', 'act', 'manual']).optional()
+              .describe('фильтр по источнику'),
+  },
+  async ({ query, limit, source }) => {
+    const rows = lcm().grep(query, { limit, source: source ?? null });
+    return txt(JSON.stringify({
+      query, count: rows.length,
+      results: rows.map(r => ({
+        source: r.source, source_id: r.source_id, role: r.role, ts: r.ts,
+        rank: Number(r.rank.toFixed(3)), snippet: r.snippet,
+      })),
+    }, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
+const unfoldTreasure = tool(
+  'unfold_treasure',
+  'θησαυρός: разворачивает source_id в полный список документов в хронологическом порядке. ' +
+  'После recall_treasure используй unfold_treasure чтобы получить полный контекст найденного.',
+  {
+    source_id: z.string().min(1).describe('source_id из результата recall_treasure'),
+    limit:     z.number().int().min(1).max(2000).default(500),
+  },
+  async ({ source_id, limit }) => {
+    const rows = lcm().expand(source_id, { limit });
+    return txt(JSON.stringify({
+      source_id, count: rows.length,
+      documents: rows,
+    }, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
 // ── Соборный сервер ─────────────────────────────────────────────────────
 export function buildGiftMcpServer() {
   return createSdkMcpServer({
@@ -292,6 +343,8 @@ export function buildGiftMcpServer() {
       pustynyaList,
       liturgicalToday,
       giftReceive,
+      recallTreasure,
+      unfoldTreasure,
     ],
   });
 }
@@ -299,4 +352,5 @@ export function buildGiftMcpServer() {
 export const GIFT_TOOL_NAMES = [
   'matrix_query', 'sobor_celebrate', 'decoupage_cut', 'vintage_assess',
   'score_profile', 'epiclesis_ask', 'pustynya_list', 'liturgical_today', 'gift_receive',
+  'recall_treasure', 'unfold_treasure',
 ].map(n => `mcp__gift__${n}`);
