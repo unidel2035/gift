@@ -340,7 +340,7 @@ export async function runGiftRepl(opts = {}) {
           const blocks = message.message?.content ?? [];
           for (const b of blocks) {
             if (b.type === 'text') {
-              process.stdout.write(b.text);
+              streamMarkdown(b.text);
               pendingAssistantText += b.text;
             } else if (b.type === 'thinking') {
               // Размышление модели — приглушённо, ниже spotlight
@@ -370,6 +370,7 @@ export async function runGiftRepl(opts = {}) {
         }
 
         case 'result':
+          flushMarkdown();
           if (pendingAssistantText.trim()) state.appendAssistant(pendingAssistantText);
           pendingAssistantText = '';
           if (typeof message.total_cost_usd === 'number') {
@@ -404,6 +405,49 @@ export async function runGiftRepl(opts = {}) {
 }
 
 function throwIf(msg) { throw new Error(msg); }
+
+// ── Streaming Markdown → ANSI ───────────────────────────────────────────
+// Текст модели приходит чанками (text-блоки). Накапливаем в lineBuffer
+// до '\n', потом рендерим строку и flush'им. На границе turn'а — финальный
+// flush через flushMarkdown(). Полные строки → markdown пары (**, _, `)
+// никогда не пересекают \n в практике Claude (с очень редкими edge cases).
+let mdBuffer = '';
+
+function renderLine(line) {
+  return line
+    // headings (line-start) — порядок: больше # сначала
+    .replace(/^#### (.+)$/, '\x1b[1m\x1b[35m$1\x1b[0m')
+    .replace(/^### (.+)$/,  '\x1b[1m\x1b[36m$1\x1b[0m')
+    .replace(/^## (.+)$/,   '\x1b[1m\x1b[33m$1\x1b[0m')
+    .replace(/^# (.+)$/,    '\x1b[1m\x1b[35m$1\x1b[0m')
+    // bold: **text** и __text__
+    .replace(/\*\*([^*\n]+?)\*\*/g, '\x1b[1m$1\x1b[0m')
+    .replace(/__([^_\n]+?)__/g,     '\x1b[1m$1\x1b[0m')
+    // inline code: `text` (не путать с ```)
+    .replace(/`([^`\n]+?)`/g, '\x1b[36m$1\x1b[0m')
+    // italic: *text* (отдельные одиночные звёзды, не входят в **)
+    // Используем lookbehind/lookahead чтобы не ловить ** края
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1\x1b[3m$2\x1b[0m')
+    // bullet точки в начале строки делаем «·»
+    .replace(/^(\s*)[-*]\s/, '$1• ');
+}
+
+function streamMarkdown(text) {
+  mdBuffer += text;
+  let nl;
+  while ((nl = mdBuffer.indexOf('\n')) !== -1) {
+    const line = mdBuffer.slice(0, nl);
+    mdBuffer = mdBuffer.slice(nl + 1);
+    process.stdout.write(renderLine(line) + '\n');
+  }
+}
+
+function flushMarkdown() {
+  if (mdBuffer) {
+    process.stdout.write(renderLine(mdBuffer));
+    mdBuffer = '';
+  }
+}
 
 // ── Pretty-print для tool_use / tool_result ─────────────────────────────
 const ANSI = {
