@@ -318,6 +318,7 @@ export async function runGiftRepl(opts = {}) {
   if (claudeBin) queryOptions.pathToClaudeCodeExecutable = claudeBin;
 
   let pendingAssistantText = '';
+  let initShown = false;
 
   try {
     const gen = query({ prompt: userMessageStream(), options: queryOptions });
@@ -325,9 +326,13 @@ export async function runGiftRepl(opts = {}) {
       switch (message.type) {
         case 'system':
           if (message.subtype === 'init') {
-            const mcps = (message.mcp_servers ?? []).map(s => `${s.name}=${s.status}`).join(', ');
-            // [init] печатается в stderr — не смешивается с UI prompt
-            process.stderr.write(c('dim', `[init] mcp: ${mcps || '(none)'} | tools: ${(message.tools ?? []).length}`) + '\n');
+            // Показываем [init] только в первый раз; SDK иногда реинициализирует
+            // MCP-сервера между turn'ами и засоряет вывод.
+            if (!initShown) {
+              const mcps = (message.mcp_servers ?? []).map(s => `${s.name}=${s.status}`).join(', ');
+              process.stderr.write(c('dim', `[init] mcp: ${mcps || '(none)'} | tools: ${(message.tools ?? []).length}`) + '\n');
+              initShown = true;
+            }
           }
           break;
 
@@ -337,11 +342,18 @@ export async function runGiftRepl(opts = {}) {
             if (b.type === 'text') {
               process.stdout.write(b.text);
               pendingAssistantText += b.text;
+            } else if (b.type === 'thinking') {
+              // Размышление модели — приглушённо, ниже spotlight
+              const txt = (b.thinking || '').slice(0, 400).trim();
+              if (txt) {
+                process.stderr.write('\n' + c('dim', '┌─ мысль ') + c('dim', '─'.repeat(50)) + '\n');
+                for (const line of txt.split('\n').slice(0, 8)) {
+                  process.stderr.write(c('dim', '│ ' + line) + '\n');
+                }
+                process.stderr.write(c('dim', '└') + c('dim', '─'.repeat(58)) + '\n');
+              }
             } else if (b.type === 'tool_use') {
-              const name = b.name.startsWith('mcp__gift__')
-                ? c('magenta', `⚡ ${b.name.replace('mcp__gift__', 'gift::')}`)
-                : c('cyan',    `🔧 ${b.name}`);
-              process.stderr.write(`\n${name} ${c('dim', JSON.stringify(b.input).slice(0, 100))}\n`);
+              printToolUse(b);
             }
           }
           break;
@@ -351,10 +363,7 @@ export async function runGiftRepl(opts = {}) {
           const blocks = message.message?.content ?? [];
           for (const b of blocks) {
             if (b.type === 'tool_result') {
-              const text = typeof b.content === 'string'
-                ? b.content
-                : (b.content?.[0]?.text ?? '');
-              process.stderr.write(c('green', '↪ ') + c('dim', text.slice(0, 120)) + '\n');
+              printToolResult(b);
             }
           }
           break;
@@ -395,6 +404,112 @@ export async function runGiftRepl(opts = {}) {
 }
 
 function throwIf(msg) { throw new Error(msg); }
+
+// ── Pretty-print для tool_use / tool_result ─────────────────────────────
+const ANSI = {
+  reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m',
+  cyan: '\x1b[36m', magenta: '\x1b[35m',
+  red: '\x1b[31m', green: '\x1b[32m',
+  yellow: '\x1b[33m',
+};
+
+function printToolUse(b) {
+  const isGift = b.name.startsWith('mcp__gift__');
+  const isMcp  = b.name.startsWith('mcp__');
+  const niceName = isGift ? b.name.replace('mcp__gift__', 'gift::') : b.name;
+  const icon = isGift ? '⚡' : (isMcp ? '🜂' : '🔧');
+  const colorCode = isGift ? ANSI.magenta : (isMcp ? ANSI.yellow : ANSI.cyan);
+
+  const out = [];
+  out.push('\n');
+  out.push(colorCode + ANSI.bold + icon + ' ' + niceName + ANSI.reset);
+
+  const input = b.input || {};
+  switch (b.name) {
+    case 'Read':
+      out.push(ANSI.dim + '  ' + (input.file_path || '?') + ANSI.reset);
+      if (input.offset || input.limit) out.push(ANSI.dim + ` (${input.offset||0}:+${input.limit||'all'})` + ANSI.reset);
+      out.push('\n');
+      break;
+    case 'Write':
+      out.push(ANSI.dim + '  ' + (input.file_path || '?') + ANSI.reset + '\n');
+      out.push(formatNewBlock(input.content || '', 12));
+      break;
+    case 'Edit': {
+      out.push(ANSI.dim + '  ' + (input.file_path || '?') + ANSI.reset);
+      if (input.replace_all) out.push(ANSI.dim + '  (replace_all)' + ANSI.reset);
+      out.push('\n');
+      out.push(formatDiff(input.old_string || '', input.new_string || '', 12));
+      break;
+    }
+    case 'Bash':
+      out.push('\n');
+      out.push(ANSI.dim + '  $ ' + ANSI.reset + (input.command || '').slice(0, 300));
+      out.push('\n');
+      break;
+    case 'Grep':
+      out.push(ANSI.dim
+        + ` "${input.pattern || '?'}" in ${input.path || '.'}`
+        + (input.glob ? ` glob=${input.glob}` : '')
+        + ANSI.reset + '\n');
+      break;
+    case 'Glob':
+      out.push(ANSI.dim + ` ${input.pattern || '?'}` + ANSI.reset + '\n');
+      break;
+    default: {
+      // Дженерик: краткий dump input
+      const dump = JSON.stringify(input);
+      out.push(ANSI.dim + '  ' + dump.slice(0, 180) + (dump.length > 180 ? '…' : '') + ANSI.reset + '\n');
+    }
+  }
+  process.stderr.write(out.join(''));
+}
+
+function formatDiff(oldStr, newStr, maxLines = 12) {
+  const oldLines = (oldStr || '').split('\n');
+  const newLines = (newStr || '').split('\n');
+  const out = [];
+  for (const l of oldLines.slice(0, maxLines)) {
+    out.push(ANSI.red + '  - ' + l + ANSI.reset + '\n');
+  }
+  if (oldLines.length > maxLines) {
+    out.push(ANSI.dim + `  … +${oldLines.length - maxLines} строк удалено` + ANSI.reset + '\n');
+  }
+  for (const l of newLines.slice(0, maxLines)) {
+    out.push(ANSI.green + '  + ' + l + ANSI.reset + '\n');
+  }
+  if (newLines.length > maxLines) {
+    out.push(ANSI.dim + `  … +${newLines.length - maxLines} строк добавлено` + ANSI.reset + '\n');
+  }
+  return out.join('');
+}
+
+function formatNewBlock(content, maxLines = 12) {
+  const lines = (content || '').split('\n');
+  const out = [];
+  for (const l of lines.slice(0, maxLines)) {
+    out.push(ANSI.green + '  + ' + l + ANSI.reset + '\n');
+  }
+  if (lines.length > maxLines) {
+    out.push(ANSI.dim + `  … +${lines.length - maxLines} строк (всего ${lines.length})` + ANSI.reset + '\n');
+  }
+  return out.join('');
+}
+
+function printToolResult(b) {
+  const text = typeof b.content === 'string'
+    ? b.content
+    : Array.isArray(b.content) ? (b.content[0]?.text ?? '') : '';
+  if (!text.trim()) return;
+  if (b.is_error) {
+    process.stderr.write(ANSI.red + '  ✗ ошибка: ' + ANSI.reset + ANSI.dim + text.slice(0, 300) + ANSI.reset + '\n');
+    return;
+  }
+  // короткий первый кусок результата (без перехода в полный text — он засорит экран)
+  const firstLines = text.split('\n').slice(0, 3).join('\n');
+  const truncated = firstLines.length < text.length ? firstLines + ANSI.dim + ' …' + ANSI.reset : firstLines;
+  process.stderr.write(ANSI.green + '  ↪ ' + ANSI.reset + ANSI.dim + truncated.replace(/\n/g, '\n    ') + ANSI.reset + '\n');
+}
 
 // ── Slash-команды с русскими описаниями (для всплывающего меню) ─────────
 const SLASH_COMMANDS = [

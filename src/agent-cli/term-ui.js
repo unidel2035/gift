@@ -143,41 +143,38 @@ export class TermUI {
     this._renderPrompt();
   }
 
-  // ── рендер ──────────────────────────────────────────────────────────
-  // Стратегия: каждый _renderPrompt() — атомарная отрисовка с ноля.
-  //   1. Стираем старое меню (если было)
-  //   2. Пишем текущий prompt + buffer на текущей строке
-  //   3. Сдвигаем курсор влево если он не в конце буфера
-  //   4. Если буфер начинается с '/' — рисуем меню под prompt
+  // ── рендер (всё батчится в один process.stdout.write) ────────────────
   _renderPrompt() {
+    const out = [];
     // 1) erase old menu
     if (this.menuRowsDrawn > 0) {
-      process.stdout.write(SAVE_CURSOR);
+      out.push(SAVE_CURSOR);
       for (let i = 0; i < this.menuRowsDrawn; i++) {
-        process.stdout.write('\n' + CLEAR_LINE);
+        out.push('\n' + CLEAR_LINE);
       }
-      process.stdout.write(RESTORE_CURS);
+      out.push(RESTORE_CURS);
       this.menuRowsDrawn = 0;
     }
     // 2) prompt + buffer
-    process.stdout.write('\r' + CLEAR_LINE + this.promptStr + this.buffer);
+    out.push('\r' + CLEAR_LINE + this.promptStr + this.buffer);
     // 3) cursor position
     const total = [...this.buffer].length;
     const back = total - this.cursor;
-    if (back > 0) process.stdout.write(`\x1b[${back}D`);
-    // 4) menu (под prompt) — saves/restores cursor через ANSI
+    if (back > 0) out.push(`\x1b[${back}D`);
+    // 4) menu
     if (this.buffer.startsWith('/')) {
-      this._drawMenu();
+      out.push(this._buildMenu());
     }
+    // Один write — никакого мерцания
+    process.stdout.write(out.join(''));
   }
 
-  _drawMenu() {
+  _buildMenu() {
     const matches = this._filterMenu();
-    // clamp selection
     if (this.menuSelection >= matches.length) {
       this.menuSelection = Math.max(0, matches.length - 1);
     }
-    process.stdout.write(SAVE_CURSOR);
+    const out = [SAVE_CURSOR];
     let rows = 0;
     if (matches.length) {
       const widthCmd = Math.max(...this.slashCommands.map(s => s.cmd.length)) + 2;
@@ -191,24 +188,26 @@ export class TermUI {
         const desc  = isSel
           ? '\x1b[33m— ' + item.desc + '\x1b[0m'
           : c('dim', '— ' + item.desc);
-        process.stdout.write('\n' + arrow + cmd + desc);
+        out.push('\n' + arrow + cmd + desc);
         rows++;
       }
     } else {
-      process.stdout.write('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти из меню)'));
+      out.push('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти)'));
       rows = 1;
     }
     this.menuRowsDrawn = rows;
-    process.stdout.write(RESTORE_CURS);
+    out.push(RESTORE_CURS);
+    return out.join('');
   }
 
   _eraseMenu() {
     if (this.menuRowsDrawn === 0) return;
-    process.stdout.write(SAVE_CURSOR);
+    const out = [SAVE_CURSOR];
     for (let i = 0; i < this.menuRowsDrawn; i++) {
-      process.stdout.write('\n' + CLEAR_LINE);
+      out.push('\n' + CLEAR_LINE);
     }
-    process.stdout.write(RESTORE_CURS);
+    out.push(RESTORE_CURS);
+    process.stdout.write(out.join(''));
     this.menuRowsDrawn = 0;
   }
 
