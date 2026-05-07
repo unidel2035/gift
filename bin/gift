@@ -43,16 +43,27 @@ import { existsSync, readFileSync } from 'node:fs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ── WSL/Windows proxy fix ───────────────────────────────────────────────
-// gh и claude CLI в WSL подхватывают Windows system proxy (172.23.x.x:10809),
-// которого нет в NAT-режиме. Отключаем прокси-переменные для всех подпроцессов.
+// В WSL2 process.env подхватывает Windows system proxy (172.23.x.x:10809),
+// которого нет в NAT-режиме. Это ломает три вещи:
+//   1. in-process fetch к localhost (NOUS) — TLS timeout
+//   2. gh CLI к api.github.com — TLS timeout
+//   3. claude CLI / curl в polza-runner — TLS timeout
+//
+// Решение:
+//   - сохраняем proxy в PROXY_ORIG и удаляем из process.env (fixes 1)
+//   - cleanEnv() для подпроцессов, которые НЕ должны использовать proxy (fixes 2)
+//   - runRaw() восстанавливает PROXY_ORIG для agent-режима (egress через polza)
+const PROXY_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'];
+const PROXY_ORIG = Object.fromEntries(
+  PROXY_KEYS.map(k => [k, process.env[k]]).filter(([, v]) => v !== undefined)
+);
+for (const k of PROXY_KEYS) delete process.env[k];
+process.env.NO_PROXY = process.env.NO_PROXY || 'api.github.com,github.com,localhost,127.0.0.1';
+process.env.no_proxy = process.env.no_proxy || process.env.NO_PROXY;
+
 function cleanEnv() {
-  const e = { ...process.env };
-  for (const k of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
-    delete e[k];
-  }
-  e.NO_PROXY = e.NO_PROXY || 'api.github.com,github.com,localhost,127.0.0.1';
-  e.no_proxy = e.no_proxy || e.NO_PROXY;
-  return e;
+  // Уже без proxy (мы их сняли при загрузке) — оставлено для совместимости.
+  return { ...process.env };
 }
 
 // ── Раскраска ───────────────────────────────────────────────────────────
@@ -76,14 +87,14 @@ function run(script, args = []) {
   });
 }
 
-// runRaw — для agent-команд: НЕ снимает HTTP_PROXY/HTTPS_PROXY, потому что
-// Дионисию в WSL2 они могут быть нужны для egress через Windows proxy.
-// curl в polza-runner иначе таймаутит на 120с.
+// runRaw — для agent-команд: ВОССТАНАВЛИВАЕТ HTTP_PROXY/HTTPS_PROXY (из PROXY_ORIG),
+// потому что Дионисию в WSL2 они нужны для egress через Windows proxy
+// (curl в polza-runner иначе таймаутит на 120с).
 function runRaw(script, args = []) {
   return new Promise((res, rej) => {
     const child = spawn('node', [resolve(ROOT, script), ...args], {
       cwd: ROOT, stdio: 'inherit',
-      env: { ...process.env, GIFT_CLI: 'gift' },
+      env: { ...process.env, ...PROXY_ORIG, GIFT_CLI: 'gift' },
     });
     child.on('exit', code => code === 0 ? res() : rej(new Error(`exit ${code}`)));
     child.on('error', rej);
@@ -95,80 +106,148 @@ async function gh(cmd) {
   return execSync(cmd, {
     encoding: 'utf8', cwd: ROOT,
     env: { ...cleanEnv(), GITHUB_TOKEN: '' },
+    stdio: ['ignore', 'pipe', 'ignore'],  // глушим stderr у gh — TLS-шум не нужен
   });
 }
 
-// ── Справка ─────────────────────────────────────────────────────────────
-function help() {
-  console.log(`
-${C.b(C.gold('gift'))} — CLI онтологии дара
-
-${C.b('Собор:')}
+// ── Справка по секциям ──────────────────────────────────────────────────
+const HELP_SECTIONS = {
+  sobor: () => `${C.b('Собор:')}
   gift sobor ask ${C.dim('[--static]')} "вопрос"       — полифония из 3 живых лиц
-  gift swe --issue N ${C.dim('[--dry-run] [--no-commit]')}  — соборный SWE-агент
+  gift swe --issue N ${C.dim('[--dry-run] [--no-commit]')}  — соборный SWE-агент`,
 
-${C.b('Пустыни:')}
+  pustynya: () => `${C.b('Пустыни:')}
   gift pustynya list              — открытые пустыни (#N X→Y)
-  gift pustynya resolve ${C.dim('[--close]')}  — перихорезис: закрыть троичные
+  gift pustynya resolve ${C.dim('[--close]')}  — перихорезис: закрыть троичные`,
 
-${C.b('Эпиклеза (призывание):')}
+  epiclesis: () => `${C.b('Эпиклеза (призывание):')}
   gift epiclesis ask "вопрос" ${C.dim('[--to Дионисий]')}
   gift epiclesis pending
-  gift epiclesis answer <id> "ответ"
+  gift epiclesis answer <id> "ответ"`,
 
-${C.b('Матрица:')}
+  matrix: () => `${C.b('Матрица:')}
   gift matrix                     — сводка W
-  gift matrix commune <from> <to> — история нити
+  gift matrix commune <from> <to> — история нити`,
 
-${C.b('Сессии (персистентная память):')}
+  session: () => `${C.b('Сессии (персистентная память):')}
   gift session list               — прошлые соборы (от новых к старым)
   gift session last               — последний собор целиком
-  gift session show <id>          — собор по id
+  gift session show <id>          — собор по id`,
 
-${C.b('Веб-Скиния:')}
+  web: () => `${C.b('Веб-Скиния:')}
   gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
-  gift web --stop                 — остановить
+  gift web --stop                 — остановить`,
 
-${C.b('Агентный режим (полный CLI):')}
+  agent: () => `${C.b('Агентный режим (полный CLI):')}
   gift agent "промпт"             — агент с tools (Read/Write/Edit/Bash/Grep + mcp__gift__*)
   gift agent --plan "промпт"      — plan mode (не выполнять)
   gift agent --verbose "промпт"   — стрим thinking + tool_result
-  ${C.dim}(требует обычный bash, не Claude Code session — anti-recursion)${C.reset}
+  ${C.dim('(требует обычный bash, не Claude Code session — anti-recursion)')}`,
 
-${C.b('Мыслебродильня:')}
+  myslo: () => `${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
   gift myslo cut "идея"           — διαίρεσις по 4 sphere (Переслегин)
   gift myslo дегустация "идея"    — собор Ollama-агентов + эпиклеза
   gift myslo винтаж               — διάκρισις по плодам (Vintage отчёт)
   gift myslo карты                — все sommelier-карты иконных актов W
-  gift myslo бочка                — идеи в ферментации (_pending в W)
+  gift myslo бочка                — идеи в ферментации (_pending в W)`,
 
-${C.b('Сокровищница (θησαυρός):')}
+  treasure: () => `${C.b('Сокровищница (θησαυρός):')}
   gift treasure recall "<query>" ${C.dim('[N]')}     — полнотекстовый поиск (FTS5)
   gift treasure unfold <source_id> ${C.dim('[N]')}   — развернуть документ/сессию
   gift treasure ingest             — загрузить корпус (sessions/insights/acts)
-  gift treasure stats              — статистика по источникам
+  gift treasure stats              — статистика по источникам`,
 
-${C.b('Бдение (ἀγρυπνία):')}
+  agrypnia: () => `${C.b('Бдение (ἀγρυπνία):')}
   gift agrypnia tick                — один tick (исполнить due бдения)
   gift agrypnia list                — все запланированные бдения
   gift agrypnia cancel <id>         — снять бдение
   gift agrypnia once "<ISO>" "<prompt>" ${C.dim('[owner]')}     — одноразовое
   gift agrypnia daily "HH:MM" "<prompt>" ${C.dim('[owner]')}    — каждый день UTC
-  gift agrypnia interval <sec> "<prompt>" ${C.dim('[owner]')}   — каждые N секунд
+  gift agrypnia interval <sec> "<prompt>" ${C.dim('[owner]')}   — каждые N секунд`,
 
-${C.b('Бенчмарк / статус:')}
+  status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
-  gift status                     — открытые пустыни + энергия
+  gift status                     — состояние онтологии (6 слоёв)`,
+};
 
+const COMMANDS = Object.keys(HELP_SECTIONS).concat(['benchmark', 'completion', 'version']);
+
+function help(section = null) {
+  if (section && HELP_SECTIONS[section]) {
+    console.log('\n' + HELP_SECTIONS[section]() + '\n');
+    return;
+  }
+  if (section) {
+    console.error(`Неизвестная команда: ${section}`);
+    console.log(`Доступно: ${COMMANDS.join(', ')}`);
+    return;
+  }
+  const all = Object.values(HELP_SECTIONS).map(fn => fn()).join('\n\n');
+  console.log(`
+${C.b(C.gold('gift'))} — CLI онтологии дара ${C.dim('v' + readVersion())}
+
+${all}
+
+${C.dim('Подробнее: gift help <команда>      Автодополнение: eval "$(gift completion bash)"')}
 ${C.dim('Философия: язык церковный (собор, пустыня, эпиклеза), под капотом — node + claude subagents.')}
 `);
+}
+
+function readVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
+    return pkg.version || '0';
+  } catch { return '0'; }
+}
+
+function bashCompletion() {
+  const cmds = COMMANDS.join(' ');
+  const subSobor    = 'ask';
+  const subPustynya = 'list resolve';
+  const subEpiclesis= 'ask pending answer';
+  const subMatrix   = 'commune';
+  const subSession  = 'list last show';
+  const subMyslo    = 'полная cut дегустация винтаж карты бочка';
+  const subTreasure = 'recall unfold ingest stats';
+  const subAgrypnia = 'tick list cancel once daily interval';
+  return `# gift bash completion (eval "$(gift completion bash)")
+_gift_completions() {
+  local cur prev cmd
+  COMPREPLY=()
+  cur="\${COMP_WORDS[COMP_CWORD]}"
+  cmd="\${COMP_WORDS[1]}"
+  if [ "\$COMP_CWORD" -eq 1 ]; then
+    COMPREPLY=( $(compgen -W "${cmds} help" -- "\$cur") )
+    return
+  fi
+  case "\$cmd" in
+    sobor)     COMPREPLY=( $(compgen -W "${subSobor}" -- "\$cur") );;
+    pustynya)  COMPREPLY=( $(compgen -W "${subPustynya}" -- "\$cur") );;
+    epiclesis) COMPREPLY=( $(compgen -W "${subEpiclesis}" -- "\$cur") );;
+    matrix)    COMPREPLY=( $(compgen -W "${subMatrix}" -- "\$cur") );;
+    session)   COMPREPLY=( $(compgen -W "${subSession}" -- "\$cur") );;
+    myslo)     COMPREPLY=( $(compgen -W "${subMyslo}" -- "\$cur") );;
+    treasure)  COMPREPLY=( $(compgen -W "${subTreasure}" -- "\$cur") );;
+    agrypnia)  COMPREPLY=( $(compgen -W "${subAgrypnia}" -- "\$cur") );;
+    help)      COMPREPLY=( $(compgen -W "${cmds}" -- "\$cur") );;
+  esac
+}
+complete -F _gift_completions gift
+`;
 }
 
 // ── Обработчики ─────────────────────────────────────────────────────────
 const [cmd, sub, ...rest] = process.argv.slice(2);
 
-if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') { help(); process.exit(0); }
+if (cmd === '--version' || cmd === '-v') { console.log(readVersion()); process.exit(0); }
+if (!cmd || cmd === '--help' || cmd === '-h') { help(); process.exit(0); }
+if (cmd === 'help') { help(sub); process.exit(0); }
+if (cmd === 'completion') {
+  if (sub === 'bash') { console.log(bashCompletion()); process.exit(0); }
+  console.error('usage: gift completion bash');
+  process.exit(1);
+}
 
 try {
   switch (cmd) {
@@ -456,16 +535,16 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
     }
 
     case 'status': {
+      console.log(`\n${C.b('Статус онтологии дара')} ${C.dim('v' + readVersion())}`);
+      console.log(`${C.dim('─'.repeat(46))}`);
       // Открытые пустыни
       try {
         const raw = await gh('gh issue list --state open --label gift-ready --limit 50 --json number,title');
         const issues = JSON.parse(raw);
         const rx = /пустыня\s+([^\s→]+)\s*→\s*([^\s:]+)/;
         const pustynyas = issues.filter(i => rx.test(i.title));
-        console.log(`\n${C.b('Статус онтологии дара')}`);
-        console.log(`${C.dim('─'.repeat(40))}`);
         console.log(`  Открытые пустыни: ${C.gold(pustynyas.length)}`);
-      } catch { console.log('  github недоступен'); }
+      } catch { console.log(`  Открытые пустыни: ${C.dim('github недоступен')}`); }
 
       // Матрица
       const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
@@ -474,7 +553,10 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
         const d = await r.json();
         console.log(`  Лиц в матрице:    ${Object.keys(d.persons || {}).length}`);
         console.log(`  Энергия сети:     ${d.networkEnergy || 'n/a'}`);
-      } catch { console.log('  nous:             ⟨недоступен⟩'); }
+      } catch {
+        console.log(`  Лиц в матрице:    ${C.dim('nous недоступен')}`);
+        console.log(`  Энергия сети:     ${C.dim('nous недоступен')}`);
+      }
 
       // Эпиклеза queue
       const inboxDir = resolve(ROOT, 'data/epiclesis-inbox');
