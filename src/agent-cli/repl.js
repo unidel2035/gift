@@ -217,6 +217,7 @@ export async function runGiftRepl(opts = {}) {
     input: process.stdin, output: process.stdout, terminal: true,
     historySize: 200,
     prompt: c('cyan', 'gift') + c('dim', '> '),
+    completer: slashCompleter,
   });
 
   // inbox of user messages waiting to be sent to SDK
@@ -377,6 +378,33 @@ export async function runGiftRepl(opts = {}) {
 
 function throwIf(msg) { throw new Error(msg); }
 
+// ── TAB-completion для slash-команд ─────────────────────────────────────
+const SLASH_COMMANDS = [
+  '/help', '/clear', '/save',
+  '/title ', '/branch', '/refresh',
+  '/plain ', '/glossary ',
+  '/sessions', '/resume ',
+  '/tools', '/status',
+  '/recall ', '/unfold ',
+  '/matrix', '/pustynya',
+  '/cost', '/quit', '/exit',
+];
+
+/**
+ * readline.completer.
+ * - Если строка не начинается с '/' — ничего не предлагаем (не дополняем
+ *   обычный ввод, чтобы TAB не мешал писать сообщения).
+ * - Если строка начинается с '/' — возвращаем slash-команды по префиксу.
+ *   Если совпадений нет — показываем весь список (TAB после '/' = меню).
+ */
+function slashCompleter(line) {
+  if (!line.startsWith('/')) return [[], line];
+  const matches = SLASH_COMMANDS.filter(cmd => cmd.startsWith(line));
+  if (matches.length) return [matches, line];
+  // Если ничего не совпало (например, опечатка) — покажем все
+  return [SLASH_COMMANDS, line];
+}
+
 // ── Banner (иконка стартового экрана) ────────────────────────────────────
 const GIFT_LOGO = [
   '   ██████╗ ██╗███████╗████████╗',
@@ -429,7 +457,7 @@ function printBanner(session, opts) {
   console.log('  ' + c('dim', `сессия: ${session.id}`));
   if (session.title) console.log('  ' + c('dim', `title:  `) + c('bold', session.title));
   if (opts.resumeId)  console.log('  ' + c('dim', `resumed: ${session.messages.length} сообщений в истории`));
-  console.log('  ' + c('dim', '/help — slash-команды  ·  Ctrl+D — выход'));
+  console.log('  ' + c('dim', '/help — slash-команды  ·  TAB — автодополнение  ·  Ctrl+D — выход'));
   console.log('  ' + c('cyan', '─'.repeat(60)));
 }
 
