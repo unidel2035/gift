@@ -485,6 +485,62 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       } else {
         console.log(`  Эпиклезы в очереди: 0`);
       }
+
+      // Сокровищница (θησαυρός)
+      try {
+        const lcmPath = resolve(ROOT, 'data/lcm.db');
+        if (existsSync(lcmPath)) {
+          const { LcmStore } = await import(resolve(ROOT, 'src/lcm/store.js'));
+          const store = new LcmStore(lcmPath);
+          const s = store.stats();
+          const parts = Object.entries(s.bySource).map(([k, n]) => `${k}:${n}`).join(' ');
+          console.log(`  Сокровищница:     ${C.gold(s.total)} ${C.dim('(' + parts + ')')}`);
+          store.close();
+        } else {
+          console.log(`  Сокровищница:     ${C.dim('пуста (gift treasure ingest)')}`);
+        }
+      } catch { console.log(`  Сокровищница:     ${C.dim('n/a')}`); }
+
+      // Бдения (ἀγρυπνία)
+      try {
+        const cronPath = resolve(ROOT, 'data/dynamic-cron.json');
+        if (existsSync(cronPath)) {
+          const { AgrypniaScheduler } = await import(resolve(ROOT, 'src/scheduling/AgrypniaScheduler.js'));
+          const sched = new AgrypniaScheduler(cronPath);
+          const jobs = sched.list();
+          console.log(`  Бдений активно:   ${C.cyan(jobs.length)}`);
+          if (jobs.length) {
+            const now = Date.now();
+            const due = j => {
+              if (j.type === 'once') return Date.parse(j.schedule);
+              if (j.type === 'interval') {
+                const last = j.lastFiredAt ? Date.parse(j.lastFiredAt) : Date.parse(j.created);
+                return last + Number(j.schedule) * 1000;
+              }
+              if (j.type === 'daily') {
+                const [h, m] = String(j.schedule).split(':').map(Number);
+                const today = new Date();
+                today.setUTCHours(h, m, 0, 0);
+                if (today.getTime() < now ||
+                    (j.lastFiredAt && Date.parse(j.lastFiredAt) >= today.getTime())) {
+                  today.setUTCDate(today.getUTCDate() + 1);
+                }
+                return today.getTime();
+              }
+              return null;
+            };
+            const next = jobs.map(j => ({ j, t: due(j) }))
+                             .filter(x => x.t).sort((a, b) => a.t - b.t)[0];
+            if (next) {
+              const when = new Date(next.t).toISOString().replace('T', ' ').replace(/\..+/, '');
+              console.log(`    ближайшее → ${C.dim(when)} (${next.j.owner}, ${next.j.type})`);
+            }
+          }
+        } else {
+          console.log(`  Бдений активно:   0`);
+        }
+      } catch { console.log(`  Бдений активно:   ${C.dim('n/a')}`); }
+
       console.log();
       break;
     }
