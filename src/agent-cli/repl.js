@@ -588,14 +588,67 @@ async function handleSlash(line, state, ui, quit, pushToInbox) {
       break;
     }
 
-    case '/tools':
+    case '/tools': {
       console.log();
       console.log(c('bold', 'Builtins:'));
-      console.log('  Read Write Edit Bash Grep Glob WebFetch WebSearch');
-      console.log(c('bold', 'Gift MCP-tools:'));
-      for (const t of GIFT_TOOL_NAMES) console.log('  ' + t);
+      const builtins = [
+        ['Read',         'прочитать файл'],
+        ['Write',        'создать/перезаписать файл'],
+        ['Edit',         'точечная замена в файле'],
+        ['Bash',         'выполнить shell-команду'],
+        ['Grep',         'поиск по содержимому файлов'],
+        ['Glob',         'поиск файлов по паттерну'],
+        ['WebFetch',     'загрузить URL и обработать LLM'],
+        ['WebSearch',    'веб-поиск'],
+        ['NotebookEdit', 'правка Jupyter-ноутбука'],
+        ['TodoWrite',    'трекер задач внутри сессии'],
+        ['Task',         'запустить subagent'],
+      ];
+      for (const [n, d] of builtins) {
+        console.log('  ' + c('cyan', n.padEnd(15)) + c('dim', '— ' + d));
+      }
+
+      console.log();
+      console.log(c('bold', 'Gift MCP-tools (онтология дара):'));
+      const giftDesc = {
+        'mcp__gift__matrix_query':       'снимок матрицы W (топ-нити, пустыни, принцип)',
+        'mcp__gift__sobor_celebrate':    'соборное вопрошание (4 голоса + 4 условия иконичности)',
+        'mcp__gift__decoupage_cut':      'различение замысла по 4 сферам (Переслегин)',
+        'mcp__gift__vintage_assess':     'различение по плодам — что родилось через время',
+        'mcp__gift__score_profile':      'sommelier-карта идеи в 16 измерениях',
+        'mcp__gift__epiclesis_ask':      'призывание человека-оракула (вопрос Дионисию)',
+        'mcp__gift__pustynya_list':      'список пустынь сети (нитей с весом ≤ порога)',
+        'mcp__gift__liturgical_today':   'литургический день: σύναξις/δοκιμασία/vintage/ordinary',
+        'mcp__gift__gift_receive':       'записать акт дара в матрицу W (необратим)',
+        'mcp__gift__recall_treasure':    'полнотекстовый поиск по сокровищнице (FTS5)',
+        'mcp__gift__unfold_treasure':    'развернуть документ/сессию по source_id',
+        'mcp__gift__agrypnia_schedule':  'запланировать бдение лица (once/interval/daily)',
+        'mcp__gift__agrypnia_list':      'список запланированных бдений',
+        'mcp__gift__agrypnia_cancel':    'снять запланированное бдение',
+      };
+      for (const t of GIFT_TOOL_NAMES) {
+        const short = t.replace('mcp__gift__', 'gift::');
+        const desc  = giftDesc[t] || '';
+        console.log('  ' + c('cyan', short.padEnd(24)) + c('dim', '— ' + desc));
+      }
+
+      console.log();
+      console.log(c('bold', 'Внешние MCP-сервера (через Claude Code):'));
+      const externals = [
+        ['playwright',                'браузерная автоматизация (click/fill/screenshot/...)'],
+        ['integram',                  'workspace platform (таблицы, документы, отчёты)'],
+        ['telegram',                  'поиск/сканирование Telegram-каналов'],
+        ['anamnesis',                 'мост к серверу анамнезиса (память общины)'],
+        ['claude_ai_Google_Drive',    'доступ к Google Drive (нужна аутентификация)'],
+      ];
+      for (const [n, d] of externals) {
+        console.log('  ' + c('cyan', `mcp__${n}__*`.padEnd(28)) + c('dim', '— ' + d));
+      }
+      console.log();
+      console.log(c('dim', 'Полный список загруженных tools — в [init]-сообщении при старте сессии.'));
       console.log();
       break;
+    }
 
     case '/status': {
       const lcmPath = resolve(ROOT, 'data/lcm.db');

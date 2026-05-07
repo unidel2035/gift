@@ -48,12 +48,16 @@ export class TermUI {
     this.buffer        = '';
     this.cursor        = 0;     // позиция курсора в массиве code points
     this.menuRowsDrawn = 0;
+    this.menuSelection = 0;     // индекс выбранного пункта меню (когда меню активно)
     this.released      = false;
     this.history       = [];    // массив прошлых строк
     this.historyIdx    = -1;    // -1 = свежая строка; 0 = последняя в history
     this.savedCurrent  = '';    // что было набрано до ↑
     this._dataHandler  = this._onData.bind(this);
   }
+
+  // меню "активно" пока буфер начинается с '/' (т.е. виден список команд)
+  _menuActive() { return this.buffer.startsWith('/'); }
 
   start() {
     if (process.stdin.isTTY) {
@@ -128,17 +132,29 @@ export class TermUI {
 
   _drawMenu() {
     const matches = this._filterMenu();
+    // clamp selection
+    if (this.menuSelection >= matches.length) {
+      this.menuSelection = Math.max(0, matches.length - 1);
+    }
     process.stdout.write(SAVE_CURSOR);
     let rows = 0;
     if (matches.length) {
       const widthCmd = Math.max(...this.slashCommands.map(s => s.cmd.length)) + 2;
-      for (const item of matches) {
-        process.stdout.write('\n' + c('cyan', '  ' + item.cmd.padEnd(widthCmd))
-                                  + c('dim', '— ' + item.desc));
+      for (let i = 0; i < matches.length; i++) {
+        const item = matches[i];
+        const isSel = i === this.menuSelection;
+        const arrow = isSel ? c('gold', '▸ ') : '  ';
+        const cmd   = isSel
+          ? '\x1b[1m\x1b[33m' + item.cmd.padEnd(widthCmd) + '\x1b[0m'
+          : c('cyan', item.cmd.padEnd(widthCmd));
+        const desc  = isSel
+          ? '\x1b[33m— ' + item.desc + '\x1b[0m'
+          : c('dim', '— ' + item.desc);
+        process.stdout.write('\n' + arrow + cmd + desc);
         rows++;
       }
     } else {
-      process.stdout.write('\n' + c('dim', '  (нет совпадений)'));
+      process.stdout.write('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти из меню)'));
       rows = 1;
     }
     this.menuRowsDrawn = rows;
@@ -182,8 +198,17 @@ export class TermUI {
         i++;
         continue;
       }
-      // Lone ESC (без [) — игнор
-      if (str.charCodeAt(i) === 27) { i++; continue; }
+      // Lone ESC — закрыть меню/очистить буфер
+      if (str.charCodeAt(i) === 27) {
+        if (this.buffer.length > 0) {
+          this.buffer = '';
+          this.cursor = 0;
+          this.menuSelection = 0;
+          this._renderPrompt();
+        }
+        i++;
+        continue;
+      }
       // Обычный символ (UTF-8 code point — может быть 1-4 byte units in JS string)
       const ch = String.fromCodePoint(str.codePointAt(i));
       this._handleChar(ch);
@@ -193,8 +218,28 @@ export class TermUI {
 
   _handleEscape(seq) {
     switch (seq) {
-      case '\x1b[A':  this._historyPrev(); return;        // ↑
-      case '\x1b[B':  this._historyNext(); return;        // ↓
+      case '\x1b[A':                                      // ↑
+        if (this._menuActive()) {
+          // двигать selection вверх в меню
+          if (this.menuSelection > 0) {
+            this.menuSelection--;
+            this._renderPrompt();
+          }
+        } else {
+          this._historyPrev();
+        }
+        return;
+      case '\x1b[B':                                      // ↓
+        if (this._menuActive()) {
+          const n = this._filterMenu().length;
+          if (this.menuSelection < n - 1) {
+            this.menuSelection++;
+            this._renderPrompt();
+          }
+        } else {
+          this._historyNext();
+        }
+        return;
       case '\x1b[C': {                                    // →
         const total = [...this.buffer].length;
         if (this.cursor < total) { this.cursor++; this._renderPrompt(); }
@@ -216,7 +261,6 @@ export class TermUI {
         }
         return;
       }
-      // Ctrl+стрелки и пр. — игнор
       default: return;
     }
   }
@@ -251,9 +295,38 @@ export class TermUI {
 
     // Enter
     if (ch === '\r' || ch === '\n') {
+      // Если меню активно и есть совпадения — Enter выбирает пункт меню
+      if (this._menuActive()) {
+        const matches = this._filterMenu();
+        if (matches.length) {
+          const sel = matches[Math.min(this.menuSelection, matches.length - 1)];
+          // Если буфер уже совпадает с cmd и команде нужен аргумент —
+          // проваливаемся в обычный Enter (отправить как есть, без аргумента
+          // команда сама покажет usage). Иначе — заполняем буфер и:
+          //   needsArg → ставим space, ждём пока пользователь введёт аргумент
+          //   !needsArg → сразу отправляем команду
+          if (this.buffer !== sel.cmd) {
+            this.buffer = sel.cmd + (sel.needsArg ? ' ' : '');
+            this.cursor = [...this.buffer].length;
+            this.menuSelection = 0;
+            if (sel.needsArg) {
+              this._renderPrompt();
+              return;
+            }
+            // !needsArg — отправляем сразу
+          } else if (sel.needsArg) {
+            // буфер уже = sel.cmd, но нужен аргумент → подсказка
+            this.buffer = sel.cmd + ' ';
+            this.cursor = [...this.buffer].length;
+            this.menuSelection = 0;
+            this._renderPrompt();
+            return;
+          }
+        }
+      }
+
       this._eraseMenu();
       const line = this.buffer;
-      // history (без пустых и без duplicate of last)
       const trimmed = line.trim();
       if (trimmed && this.history[this.history.length - 1] !== line) {
         this.history.push(line);
@@ -263,6 +336,7 @@ export class TermUI {
       this.savedCurrent = '';
       this.buffer = '';
       this.cursor = 0;
+      this.menuSelection = 0;
       process.stdout.write('\r\n');
       Promise.resolve(this.onLine(line)).catch(e => {
         process.stdout.write('\x1b[31merror: ' + (e?.message || e) + '\x1b[0m\n');
@@ -278,6 +352,7 @@ export class TermUI {
         arr.splice(this.cursor - 1, 1);
         this.buffer = arr.join('');
         this.cursor--;
+        this.menuSelection = 0; // фильтр меню изменился
         this._renderPrompt();
       }
       return;
@@ -320,6 +395,7 @@ export class TermUI {
     arr.splice(this.cursor, 0, ch);
     this.buffer = arr.join('');
     this.cursor++;
+    this.menuSelection = 0; // фильтр меню изменился
     this._renderPrompt();
   }
 }
