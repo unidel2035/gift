@@ -206,14 +206,11 @@ export async function runGiftRepl(opts = {}) {
 
   const state = new ReplState(session);
 
-  // banner
-  console.log();
-  console.log(c('bold', c('gold', 'gift chat')) + c('dim', `  сессия ${session.id}`));
-  if (session.title) console.log(c('dim', `  title: ${session.title}`));
-  if (opts.resumeId) {
-    console.log(c('dim', `  resumed: ${session.messages.length} сообщений в истории`));
-  }
-  console.log(c('dim', '  /help — slash-команды.  Ctrl+D — выход.'));
+  // ── banner ────────────────────────────────────────────────────────
+  // Иконка собора: четыре луча — четыре сферы (земля/вода/огонь/воздух),
+  // в центре ✦ — лицо в κοινωνία (общении). Минималистично, как
+  // ✻ у Claude Code.
+  printBanner(session, opts);
   console.log();
 
   const rl = readline.createInterface({
@@ -379,6 +376,51 @@ export async function runGiftRepl(opts = {}) {
 }
 
 function throwIf(msg) { throw new Error(msg); }
+
+// ── Banner (иконка стартового экрана) ────────────────────────────────────
+function printBanner(session, opts) {
+  // Читаем версию из package.json для подписи
+  let version = '';
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
+    version = `v${pkg.version || '0'}`;
+  } catch {}
+
+  // Snapshot для подзаголовка
+  let metric = '';
+  try {
+    const snapPath = resolve(ROOT, 'data/sacred-history-W.json');
+    if (existsSync(snapPath)) {
+      const W = JSON.parse(readFileSync(snapPath, 'utf8'));
+      const persons = (W.persons || []).length;
+      const acts    = W.acts ?? W.actsCount ?? '?';
+      metric = `${persons} лиц · ${acts} актов`;
+    }
+  } catch {}
+  let treasureN = '';
+  try {
+    const lcmPath = resolve(ROOT, 'data/lcm.db');
+    if (existsSync(lcmPath)) {
+      const store = new LcmStore(lcmPath);
+      treasureN = ` · ${store.stats().total} в сокровищнице`;
+      store.close();
+    }
+  } catch {}
+
+  console.log();
+  console.log('  ' + c('gold', '✦') + '  ' + c('bold', c('gold', 'gift')) + '  ' + c('dim', version) + '  ' + c('dim', '— онтология дара'));
+  console.log('     ' + c('dim', 'Κοινόν τοῦ Νοῦ ') + c('dim', '(общее ума) — собор лиц в матрице W'));
+  console.log();
+  console.log('  ' + c('cyan', '─'.repeat(60)));
+  if (metric || treasureN) {
+    console.log('  ' + c('dim', metric + treasureN));
+  }
+  console.log('  ' + c('dim', `сессия: ${session.id}`));
+  if (session.title) console.log('  ' + c('dim', `title:  `) + c('bold', session.title));
+  if (opts.resumeId)  console.log('  ' + c('dim', `resumed: ${session.messages.length} сообщений в истории`));
+  console.log('  ' + c('dim', '/help — slash-команды  ·  Ctrl+D — выход'));
+  console.log('  ' + c('cyan', '─'.repeat(60)));
+}
 
 // ── slash-команды ───────────────────────────────────────────────────────
 async function handleSlash(line, state, rl, quit, pushToInbox) {

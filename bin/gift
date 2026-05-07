@@ -150,11 +150,13 @@ const HELP_SECTIONS = {
   ${C.dim('(требует обычный bash, не Claude Code session — anti-recursion)')}`,
 
   chat: () => `${C.b('Диалог (multi-turn REPL с инструментами):')}
+  gift                            — ${C.dim('alias к')} gift chat ${C.dim('(если запущено в TTY)')}
   gift chat                       — новая интерактивная сессия (persist в data/chat-sessions/)
   gift chat --resume <id>         — продолжить сессию по id
   gift chat --resume last         — продолжить последнюю сессию
   gift chat --list                — список сохранённых сессий
-  ${C.dim('Внутри REPL: /help /clear /save /title /branch /refresh /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
+  ${C.dim('Внутри REPL: /help /clear /save /title /branch /refresh /plain /glossary')}
+  ${C.dim('             /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
 
   myslo: () => `${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
@@ -255,15 +257,27 @@ complete -F _gift_completions gift
 }
 
 // ── Обработчики ─────────────────────────────────────────────────────────
-const [cmd, sub, ...rest] = process.argv.slice(2);
+let [cmd, sub, ...rest] = process.argv.slice(2);
 
 if (cmd === '--version' || cmd === '-v') { console.log(readVersion()); process.exit(0); }
-if (!cmd || cmd === '--help' || cmd === '-h') { help(); process.exit(0); }
+if (cmd === '--help' || cmd === '-h') { help(); process.exit(0); }
 if (cmd === 'help') { help(sub); process.exit(0); }
 if (cmd === 'completion') {
   if (sub === 'bash') { console.log(bashCompletion()); process.exit(0); }
   console.error('usage: gift completion bash');
   process.exit(1);
+}
+
+// Без аргументов:
+//   - в TTY (интерактивный shell) → запускаем chat (как `claude` без args)
+//   - не в TTY (pipe, скрипт) → печатаем help (чтобы не блокировать stdin)
+if (!cmd) {
+  if (process.stdin.isTTY) {
+    cmd = 'chat';
+  } else {
+    help();
+    process.exit(0);
+  }
 }
 
 try {
