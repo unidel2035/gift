@@ -550,32 +550,11 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
 
     case 'chat': {
       // Multi-turn REPL поверх claude-agent-sdk.
-      // ВАЖНО: chat нужен полноценный stdin/stdout с TTY,
-      // и сохранение PROXY_ORIG (как у gift agent) для egress модели.
-      const { runGiftRepl } = await import(resolve(ROOT, 'src/agent-cli/repl.js'));
-      const { giftReplApi } = await import(resolve(ROOT, 'src/agent-cli/repl.js'));
-      // восстанавливаем proxy для SDK (в polza-runner curl нужен proxy WSL2)
-      for (const [k, v] of Object.entries(PROXY_ORIG)) process.env[k] = v;
-
+      // Запускается в child process через runRaw (сохраняет PROXY_ORIG для
+      // egress модели через polza-runner) — это позволяет TF env-переменным
+      // в utils/run-chat.mjs сработать ДО первого импорта tfjs-node.
       const allArgs = [sub, ...rest].filter(Boolean);
-      if (allArgs[0] === '--list') {
-        const ls = giftReplApi.listSessions(20);
-        if (!ls.length) { console.log('Сессий нет.'); break; }
-        console.log(`\n${C.b('Последние REPL-сессии:')}`);
-        for (const s of ls) {
-          console.log(`  ${s.id}  ${C.dim(`${s.turns} turns`)}  ${C.dim(s.updatedAt)}`);
-        }
-        console.log();
-        break;
-      }
-      const resumeIdx = allArgs.indexOf('--resume');
-      const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
-      try {
-        await runGiftRepl({ resumeId });
-      } catch (e) {
-        console.error(`Ошибка: ${e.message}`);
-        process.exit(1);
-      }
+      await runRaw('utils/run-chat.mjs', allArgs);
       break;
     }
 
