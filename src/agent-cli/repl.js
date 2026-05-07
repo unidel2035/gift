@@ -22,7 +22,6 @@
  *   /quit | /exit  — выход (Ctrl+D тоже)
  */
 
-import readline from 'node:readline';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { execSync } from 'node:child_process';
 import {
@@ -33,6 +32,7 @@ import { buildGiftMcpServer, GIFT_TOOL_NAMES } from './gift-tools.js';
 import { GIFT_SYSTEM_PROMPT } from './system-prompt.js';
 import { GIFT_HOOKS } from './hooks.js';
 import { LcmStore, defaultDbPath } from '../lcm/store.js';
+import { TermUI } from './term-ui.js';
 
 const ROOT = '/home/unidel/gift';
 const SESS_DIR = resolve(ROOT, 'data/chat-sessions');
@@ -213,16 +213,6 @@ export async function runGiftRepl(opts = {}) {
   printBanner(session, opts);
   console.log();
 
-  const rl = readline.createInterface({
-    input: process.stdin, output: process.stdout, terminal: true,
-    historySize: 200,
-    prompt: c('cyan', 'gift') + c('dim', '> '),
-    completer: slashCompleter,
-  });
-
-  // (Меню slash-команд показывается через handleSlash при вводе '/' + Enter,
-  // см. case '/' в handleSlash. Также TAB-completion работает как раньше.)
-
   // inbox of user messages waiting to be sent to SDK
   const inbox = [];
   let inboxResolve = null;
@@ -233,28 +223,41 @@ export async function runGiftRepl(opts = {}) {
     if (inboxResolve) { const r = inboxResolve; inboxResolve = null; r(); }
   }
 
-  rl.on('line', async line => {
-    const trimmed = line.trim();
-    if (!trimmed) { rl.prompt(); return; }
-    if (trimmed.startsWith('/')) {
-      // slash-команды — обрабатываем локально, не уходят в модель
-      try {
-        const r = await handleSlash(trimmed, state, rl, () => { done = true; rl.close(); }, pushToInbox);
-        // Некоторые команды (например /refresh) пушат сообщение в SDK через pushToInbox
-        // и НЕ должны печатать prompt сразу — он напечатается после ответа SDK.
-        if (r?.expectsResponse) return;
-      } catch (e) {
-        console.error(c('red', `error: ${e.message}`));
+  const ui = new TermUI({
+    prompt: c('cyan', 'gift') + c('dim', '> '),
+    slashCommands: SLASH_COMMANDS,
+    onLine: async line => {
+      const trimmed = line.trim();
+      if (!trimmed) { return; }
+      if (trimmed.startsWith('/')) {
+        try {
+          const r = await handleSlash(trimmed, state, ui, () => {
+            done = true; ui.stop();
+            if (inboxResolve) inboxResolve();
+          }, pushToInbox);
+          // /refresh пушит обновлённый контекст в SDK — не показываем prompt сразу
+          if (!r?.expectsResponse && !done) {
+            // вернёмся в обычный режим ввода (prompt уже стёрт onLine'ом, рисуем)
+            ui._renderPrompt();
+          }
+        } catch (e) {
+          process.stdout.write(c('red', `error: ${e.message}`) + '\n');
+          ui._renderPrompt();
+        }
+        return;
       }
-      if (!done) rl.prompt();
-      return;
-    }
-    // обычный turn — паузим prompt, пушим в inbox
-    state.appendUser(trimmed);
-    pushToInbox(trimmed);
+      // обычный turn → пушим в SDK; UI ставится в release-режим до ответа
+      state.appendUser(trimmed);
+      ui.release();
+      pushToInbox(trimmed);
+    },
+    onClose: () => {
+      done = true;
+      if (inboxResolve) { const r = inboxResolve; inboxResolve = null; r(); }
+      ui.stop();
+    },
   });
-
-  rl.on('close', () => { done = true; if (inboxResolve) inboxResolve(); });
+  ui.start();
 
   // generator подаёт user messages в SDK по мере готовности
   async function* userMessageStream() {
@@ -301,8 +304,6 @@ export async function runGiftRepl(opts = {}) {
   };
   if (claudeBin) queryOptions.pathToClaudeCodeExecutable = claudeBin;
 
-  rl.prompt();
-
   let pendingAssistantText = '';
 
   try {
@@ -312,7 +313,8 @@ export async function runGiftRepl(opts = {}) {
         case 'system':
           if (message.subtype === 'init') {
             const mcps = (message.mcp_servers ?? []).map(s => `${s.name}=${s.status}`).join(', ');
-            console.error(c('dim', `[init] mcp: ${mcps || '(none)'} | tools: ${(message.tools ?? []).length}`));
+            // [init] печатается в stderr — не смешивается с UI prompt
+            process.stderr.write(c('dim', `[init] mcp: ${mcps || '(none)'} | tools: ${(message.tools ?? []).length}`) + '\n');
           }
           break;
 
@@ -355,8 +357,8 @@ export async function runGiftRepl(opts = {}) {
             state.totalUsage.input_tokens  += message.usage.input_tokens  || 0;
             state.totalUsage.output_tokens += message.usage.output_tokens || 0;
           }
-          process.stdout.write('\n');
-          rl.prompt();
+          // turn окончен — возвращаем prompt
+          if (!done) ui.resume();
           break;
 
         default:
@@ -364,9 +366,9 @@ export async function runGiftRepl(opts = {}) {
       }
     }
   } catch (e) {
-    console.error(c('red', `\n✗ SDK error: ${e?.message || e}`));
+    process.stderr.write(c('red', `\n✗ SDK error: ${e?.message || e}`) + '\n');
   } finally {
-    rl.close();
+    ui.stop();
     saveSession(state.session);
     console.log();
     console.log(c('dim', `сессия сохранена: ${session.id}`));
@@ -381,32 +383,28 @@ export async function runGiftRepl(opts = {}) {
 
 function throwIf(msg) { throw new Error(msg); }
 
-// ── TAB-completion для slash-команд ─────────────────────────────────────
+// ── Slash-команды с русскими описаниями (для всплывающего меню) ─────────
 const SLASH_COMMANDS = [
-  '/help', '/clear', '/save',
-  '/title ', '/branch', '/refresh',
-  '/plain ', '/glossary ',
-  '/sessions', '/resume ',
-  '/tools', '/status',
-  '/recall ', '/unfold ',
-  '/matrix', '/pustynya',
-  '/cost', '/quit', '/exit',
+  { cmd: '/help',     desc: 'список всех команд с описанием' },
+  { cmd: '/clear',    desc: 'очистить историю текущей сессии' },
+  { cmd: '/save',     desc: 'явно сохранить (auto-save и так каждое сообщение)' },
+  { cmd: '/title',    desc: 'задать или переименовать заголовок сессии', needsArg: true },
+  { cmd: '/branch',   desc: 'форк: скопировать сессию в новый id' },
+  { cmd: '/refresh',  desc: 'обновить контекст матрицы W для модели' },
+  { cmd: '/plain',    desc: 'режим без греческих терминов (нужен restart)', needsArg: true },
+  { cmd: '/glossary', desc: 'словарь греческих терминов (греч. → рус.)', needsArg: true },
+  { cmd: '/sessions', desc: 'последние сохранённые сессии' },
+  { cmd: '/resume',   desc: 'перейти к сессии по id', needsArg: true },
+  { cmd: '/tools',    desc: 'список доступных tools (builtins + gift MCP)' },
+  { cmd: '/status',   desc: 'статус текущей сессии (msgs/cost/tokens)' },
+  { cmd: '/recall',   desc: 'полнотекстовый поиск по сокровищнице', needsArg: true },
+  { cmd: '/unfold',   desc: 'развернуть документ/сессию по source_id', needsArg: true },
+  { cmd: '/matrix',   desc: 'топ-нити матрицы W (через nous)' },
+  { cmd: '/pustynya', desc: 'богословские пустыни сети' },
+  { cmd: '/cost',     desc: 'стоимость и использование токенов сессии' },
+  { cmd: '/quit',     desc: 'выход (Ctrl+D работает так же)' },
+  { cmd: '/exit',     desc: 'выход (Ctrl+D работает так же)' },
 ];
-
-/**
- * readline.completer.
- * - Если строка не начинается с '/' — ничего не предлагаем (не дополняем
- *   обычный ввод, чтобы TAB не мешал писать сообщения).
- * - Если строка начинается с '/' — возвращаем slash-команды по префиксу.
- *   Если совпадений нет — показываем весь список (TAB после '/' = меню).
- */
-function slashCompleter(line) {
-  if (!line.startsWith('/')) return [[], line];
-  const matches = SLASH_COMMANDS.filter(cmd => cmd.startsWith(line));
-  if (matches.length) return [matches, line];
-  // Если ничего не совпало (например, опечатка) — покажем все
-  return [SLASH_COMMANDS, line];
-}
 
 // ── Banner (иконка стартового экрана) ────────────────────────────────────
 const GIFT_LOGO = [
@@ -460,53 +458,32 @@ function printBanner(session, opts) {
   console.log('  ' + c('dim', `сессия: ${session.id}`));
   if (session.title) console.log('  ' + c('dim', `title:  `) + c('bold', session.title));
   if (opts.resumeId)  console.log('  ' + c('dim', `resumed: ${session.messages.length} сообщений в истории`));
-  console.log('  ' + c('dim', '/ — меню команд  ·  TAB — автодополнение  ·  Ctrl+D — выход'));
+  console.log('  ' + c('dim', 'наберите «/» — всплывёт меню команд  ·  Ctrl+D — выход'));
   console.log('  ' + c('cyan', '─'.repeat(60)));
 }
 
 // ── slash-команды ───────────────────────────────────────────────────────
-async function handleSlash(line, state, rl, quit, pushToInbox) {
+async function handleSlash(line, state, ui, quit, pushToInbox) {
   const [cmd, ...rest] = line.split(/\s+/);
   const arg = rest.join(' ');
-  // Голый '/' (только слеш и Enter) — показать меню в три колонки
+  // Голый '/' (просто Enter) — fallback: показать /help
+  // (меню должно всплывать в момент набора, но если пользователь дошёл до Enter)
   if (cmd === '/') {
-    console.log();
-    console.log('  ' + c('dim', '── slash-команды ──'));
-    const cols = 3;
-    const width = Math.max(...SLASH_COMMANDS.map(s => s.trim().length)) + 2;
-    for (let i = 0; i < SLASH_COMMANDS.length; i += cols) {
-      const row = SLASH_COMMANDS.slice(i, i + cols)
-        .map(s => '  ' + c('cyan', s.trim().padEnd(width)))
-        .join('');
-      console.log(row);
-    }
-    console.log();
-    console.log(c('dim', '  /help — подробное описание каждой команды'));
-    console.log();
-    return;
+    return handleSlash('/help', state, ui, quit, pushToInbox);
   }
   switch (cmd) {
     case '/help':
       console.log();
-      console.log(c('bold', 'Slash-команды:'));
-      console.log('  /help                       список slash-команд');
-      console.log('  /clear                      очистить историю');
-      console.log('  /save                       явный save (auto-save и так каждое сообщение)');
-      console.log('  /title <text>               задать/переименовать заголовок сессии');
-      console.log('  /branch [new-id]            форк: скопировать сессию и продолжить в копии');
-      console.log('  /refresh                    обновить анамнезис матрицы для модели');
-      console.log('  /plain [on|off]             режим без греческих терминов (нужен restart)');
-      console.log('  /glossary [<слово>]         показать словарь терминов (греч. → рус.)');
-      console.log('  /sessions                   последние сессии');
-      console.log('  /resume <id|last>           перейти к сессии (нужен restart)');
-      console.log('  /tools                      список доступных tools');
-      console.log('  /status                     gift status inline');
-      console.log('  /recall <query>             полнотекстовый поиск (treasure)');
-      console.log('  /unfold <source_id>         развернуть документ/сессию');
-      console.log('  /matrix                     топ-нити W');
-      console.log('  /pustynya                   богословские пустыни');
-      console.log('  /cost                       стоимость текущей сессии');
-      console.log('  /quit | /exit               выход (Ctrl+D)');
+      console.log(c('bold', 'Slash-команды (всё на русском):'));
+      const widthCmd = Math.max(...SLASH_COMMANDS.map(s => s.cmd.length)) + 2;
+      for (const item of SLASH_COMMANDS) {
+        console.log('  ' + c('cyan', item.cmd.padEnd(widthCmd)) + c('dim', '— ' + item.desc));
+      }
+      console.log();
+      console.log(c('dim', '  Подсказки:'));
+      console.log(c('dim', '   • меню всплывает сразу при наборе «/»'));
+      console.log(c('dim', '   • TAB — дополнить, если совпадение одно'));
+      console.log(c('dim', '   • Ctrl+D — выход'));
       console.log();
       break;
 
