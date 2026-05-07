@@ -378,8 +378,17 @@ export async function runGiftRepl(opts = {}) {
 function throwIf(msg) { throw new Error(msg); }
 
 // ── Banner (иконка стартового экрана) ────────────────────────────────────
+const GIFT_LOGO = [
+  '   ██████╗ ██╗███████╗████████╗',
+  '  ██╔════╝ ██║██╔════╝╚══██╔══╝',
+  '  ██║  ███╗██║█████╗     ██║   ',
+  '  ██║   ██║██║██╔══╝     ██║   ',
+  '  ╚██████╔╝██║██║        ██║   ',
+  '   ╚═════╝ ╚═╝╚═╝        ╚═╝   ',
+];
+
 function printBanner(session, opts) {
-  // Читаем версию из package.json для подписи
+  // Версия
   let version = '';
   try {
     const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
@@ -408,7 +417,9 @@ function printBanner(session, opts) {
   } catch {}
 
   console.log();
-  console.log('  ' + c('gold', '✦') + '  ' + c('bold', c('gold', 'gift')) + '  ' + c('dim', version) + '  ' + c('dim', '— онтология дара'));
+  for (const line of GIFT_LOGO) console.log(c('gold', line));
+  console.log();
+  console.log('  ' + c('gold', '✦') + '  ' + c('bold', 'онтология дара') + '  ' + c('dim', version));
   console.log('     ' + c('dim', 'Κοινόν τοῦ Νοῦ ') + c('dim', '(общее ума) — собор лиц в матрице W'));
   console.log();
   console.log('  ' + c('cyan', '─'.repeat(60)));
