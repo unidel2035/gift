@@ -60,8 +60,27 @@ export class TermUI {
   _menuActive() { return this.buffer.startsWith('/'); }
 
   start() {
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
+    const isTTY = !!process.stdin.isTTY;
+    let rawOk = false;
+    if (isTTY) {
+      try {
+        process.stdin.setRawMode(true);
+        rawOk = process.stdin.isRaw === true;
+      } catch (e) {
+        if (process.env.GIFT_DEBUG) {
+          process.stderr.write(`[term-ui] setRawMode failed: ${e.message}\n`);
+        }
+      }
+    }
+    if (process.env.GIFT_DEBUG) {
+      process.stderr.write(`[term-ui] isTTY=${isTTY} rawMode=${rawOk}\n`);
+      process.stderr.write(`[term-ui] platform=${process.platform} TERM=${process.env.TERM || '(none)'}\n`);
+    }
+    if (!rawOk) {
+      // Без raw mode key-by-key handling не работает — переходим на line-by-line
+      // через readline (fallback). Меню '/' будет работать через '/' + Enter.
+      this._fallbackReadline();
+      return;
     }
     process.stdin.setEncoding('utf8');
     process.stdin.resume();
@@ -69,7 +88,31 @@ export class TermUI {
     this._renderPrompt();
   }
 
+  // Если raw mode не работает — фолбэк на line-by-line readline.
+  async _fallbackReadline() {
+    process.stderr.write(
+      '\x1b[33m[term-ui] raw mode недоступен — fallback на line input. ' +
+      'Меню по «/ Enter», без всплывающего/стрелочного UI.\x1b[0m\n'
+    );
+    const readline = await import('node:readline');
+    const rl = readline.createInterface({
+      input: process.stdin, output: process.stdout, terminal: true,
+      historySize: 200,
+      prompt: this.promptStr,
+    });
+    rl.on('line', line => {
+      Promise.resolve(this.onLine(line)).catch(e => {
+        process.stdout.write('\x1b[31merror: ' + (e?.message || e) + '\x1b[0m\n');
+        rl.prompt();
+      }).finally(() => { if (!this.released) rl.prompt(); });
+    });
+    rl.on('close', () => this.onClose?.());
+    this._fallbackRl = rl;
+    rl.prompt();
+  }
+
   stop() {
+    if (this._fallbackRl) { this._fallbackRl.close(); return; }
     this._eraseMenu();
     process.stdin.removeListener('data', this._dataHandler);
     if (process.stdin.isTTY) {
@@ -78,26 +121,24 @@ export class TermUI {
     process.stdin.pause();
   }
 
-  /**
-   * Освободить экран перед потоком assistant output.
-   * Стирает меню и текущий prompt, ставит курсор в начало новой строки.
-   */
   release() {
+    this.released = true;
+    if (this._fallbackRl) return;
     this._eraseMenu();
     process.stdout.write('\r' + CLEAR_LINE);
-    this.released = true;
   }
 
-  /**
-   * Восстановить prompt после assistant output.
-   * Сбрасывает буфер (turn окончен).
-   */
   resume() {
     this.buffer = '';
     this.cursor = 0;
     this.historyIdx = -1;
     this.savedCurrent = '';
     this.released = false;
+    if (this._fallbackRl) {
+      process.stdout.write('\n');
+      this._fallbackRl.prompt();
+      return;
+    }
     process.stdout.write('\n');
     this._renderPrompt();
   }

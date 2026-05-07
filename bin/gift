@@ -567,11 +567,48 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
 
     case 'chat': {
       // Multi-turn REPL поверх claude-agent-sdk.
-      // Запускается в child process через runRaw (сохраняет PROXY_ORIG для
-      // egress модели через polza-runner) — это позволяет TF env-переменным
-      // в utils/run-chat.mjs сработать ДО первого импорта tfjs-node.
+      // ВАЖНО: запускаем в parent process — child через spawn не передаёт
+      // полноценный TTY, и process.stdin.setRawMode(true) проваливается
+      // тихо. Без raw mode keypress events не приходят, и меню '/'
+      // не всплывает. TF noise глушим stderr-redirect-трюком на время
+      // import (ниже).
+      //
+      // Восстанавливаем proxy для SDK egress (polza-runner curl):
+      for (const [k, v] of Object.entries(PROXY_ORIG)) process.env[k] = v;
+      // TF env (на всякий случай — не помогает в parent, но не мешает):
+      process.env.TF_CPP_MIN_LOG_LEVEL  = '3';
+      process.env.TF_ENABLE_ONEDNN_OPTS = '0';
+
+      // Глушим stderr во время import (там tfjs-node native пишет init-логи)
+      const origStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = () => true;
+      let runGiftRepl, giftReplApi;
+      try {
+        ({ runGiftRepl, giftReplApi } = await import(resolve(ROOT, 'src/agent-cli/repl.js')));
+      } finally {
+        process.stderr.write = origStderrWrite;
+      }
+
       const allArgs = [sub, ...rest].filter(Boolean);
-      await runRaw('utils/run-chat.mjs', allArgs);
+      if (allArgs[0] === '--list') {
+        const ls = giftReplApi.listSessions(20);
+        if (!ls.length) { console.log('Сессий нет.'); break; }
+        console.log(`\n${C.b('Последние REPL-сессии:')}`);
+        for (const s of ls) {
+          const title = s.title ? `  ${C.b(s.title)}` : '';
+          console.log(`  ${s.id}  ${C.dim(`${s.turns} turns`)}  ${C.dim(s.updatedAt)}${title}`);
+        }
+        console.log();
+        break;
+      }
+      const resumeIdx = allArgs.indexOf('--resume');
+      const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
+      try {
+        await runGiftRepl({ resumeId });
+      } catch (e) {
+        console.error(`Ошибка: ${e.message}`);
+        process.exit(1);
+      }
       break;
     }
 
