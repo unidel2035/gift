@@ -221,28 +221,41 @@ export async function runGiftRepl(opts = {}) {
   });
 
   // ── Меню при наборе '/' (как в Claude Code) ──────────────────────────
-  // При нажатии '/' в пустой строке — показываем список команд над prompt
-  // и перерисовываем prompt с уже введённым '/'.
+  // При нажатии '/' в пустой строке — показываем список команд над prompt.
+  // setImmediate нужен потому что keypress emit'ится ДО того как readline
+  // обновляет rl.line. Если перерисовать prompt сразу, readline затрёт
+  // меню при следующем рендере. С setImmediate ждём конца текущего tick.
   readline.emitKeypressEvents(process.stdin, rl);
+  let menuShownForSlash = false;
   process.stdin.on('keypress', (str, key) => {
-    if (str === '/' && rl.line === '' && !rl.cursor) {
-      // Очищаем текущую строку с prompt'ом, печатаем меню, восстанавливаем
-      readline.clearLine(process.stdout, 0);
-      readline.cursorTo(process.stdout, 0);
-      console.log();
-      console.log('  ' + c('dim', '── slash-команды ──'));
-      const cols = 3;
-      const width = Math.max(...SLASH_COMMANDS.map(s => s.trim().length)) + 2;
-      for (let i = 0; i < SLASH_COMMANDS.length; i += cols) {
-        const row = SLASH_COMMANDS.slice(i, i + cols)
-          .map(s => '  ' + s.trim().padEnd(width))
-          .join('');
-        console.log(c('cyan', row));
-      }
-      console.log();
-      rl.prompt(true); // перерисовываем prompt — readline сам поставит '/'
+    // Условие на момент keypress: '/' нажата, line ещё пустая
+    if (str === '/' && rl.line === '' && !menuShownForSlash) {
+      menuShownForSlash = true;
+      setImmediate(() => {
+        // Сейчас readline уже добавил '/' в rl.line.
+        // Поднимаемся над текущей строкой prompt'а и пишем меню.
+        readline.clearLine(process.stdout, 0);
+        readline.cursorTo(process.stdout, 0);
+        process.stdout.write('\n  ' + c('dim', '── slash-команды ──') + '\n');
+        const cols = 3;
+        const width = Math.max(...SLASH_COMMANDS.map(s => s.trim().length)) + 2;
+        for (let i = 0; i < SLASH_COMMANDS.length; i += cols) {
+          const row = SLASH_COMMANDS.slice(i, i + cols)
+            .map(s => '  ' + s.trim().padEnd(width))
+            .join('');
+          process.stdout.write(c('cyan', row) + '\n');
+        }
+        process.stdout.write('\n');
+        // Перерисовываем prompt с текущим состоянием (теперь содержит '/')
+        rl._refreshLine();
+      });
+    } else if (rl.line === '' && str !== '/') {
+      // строка снова пустая (Backspace, Enter и т.п.) — сбрасываем флаг
+      menuShownForSlash = false;
     }
   });
+  // После Enter сбрасываем флаг — следующий '/' опять покажет меню
+  rl.on('line', () => { menuShownForSlash = false; });
 
   // inbox of user messages waiting to be sent to SDK
   const inbox = [];
