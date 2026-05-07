@@ -282,8 +282,21 @@ export async function runGiftRepl(opts = {}) {
 
   const giftServer = buildGiftMcpServer();
   const claudeBin  = findClaudeBin();
-  const builtins   = ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
-  const allowedTools = [...new Set([...builtins, ...GIFT_TOOL_NAMES])];
+  // Полный набор инструментов как у Claude Code:
+  //   - builtins: файлы, shell, web
+  //   - gift MCP: матрица, собор, сокровищница, бдение, ...
+  //   - чужие MCP-сервера через wildcards: они подцепляются SDK из
+  //     ~/.claude/settings.json или конфига claude --print автоматически
+  //     (playwright, integram, telegram, anamnesis, и пр.)
+  const builtins = ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch',
+                    'NotebookEdit', 'TodoWrite', 'Task', 'BashOutput', 'KillShell'];
+  const mcpWildcards = [
+    'mcp__playwright__*', 'mcp__integram__*', 'mcp__telegram__*',
+    'mcp__anamnesis__*',  'mcp__claude_ai_Google_Drive__*',
+    // wildcard для любых будущих MCP-серверов:
+    'mcp__*__*',
+  ];
+  const allowedTools = [...new Set([...builtins, ...GIFT_TOOL_NAMES, ...mcpWildcards])];
 
   const anamnesis = buildAnamnesisSnapshot();
   const LANGUAGE_RULE = state.plainMode

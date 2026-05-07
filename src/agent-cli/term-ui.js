@@ -45,10 +45,14 @@ export class TermUI {
     this.onLine        = opts.onLine;
     this.onClose       = opts.onClose;
 
-    this.buffer       = '';
+    this.buffer        = '';
+    this.cursor        = 0;     // позиция курсора в массиве code points
     this.menuRowsDrawn = 0;
-    this.released     = false;
-    this._dataHandler = this._onData.bind(this);
+    this.released      = false;
+    this.history       = [];    // массив прошлых строк
+    this.historyIdx    = -1;    // -1 = свежая строка; 0 = последняя в history
+    this.savedCurrent  = '';    // что было набрано до ↑
+    this._dataHandler  = this._onData.bind(this);
   }
 
   start() {
@@ -86,6 +90,9 @@ export class TermUI {
    */
   resume() {
     this.buffer = '';
+    this.cursor = 0;
+    this.historyIdx = -1;
+    this.savedCurrent = '';
     this.released = false;
     process.stdout.write('\n');
     this._renderPrompt();
@@ -93,9 +100,10 @@ export class TermUI {
 
   // ── рендер ──────────────────────────────────────────────────────────
   // Стратегия: каждый _renderPrompt() — атомарная отрисовка с ноля.
-  //   1. Стираем старое меню (если было) — идём ниже, чистим N строк, возврат
+  //   1. Стираем старое меню (если было)
   //   2. Пишем текущий prompt + buffer на текущей строке
-  //   3. Если буфер начинается с '/' — рисуем меню под prompt (cursor возвращаем)
+  //   3. Сдвигаем курсор влево если он не в конце буфера
+  //   4. Если буфер начинается с '/' — рисуем меню под prompt
   _renderPrompt() {
     // 1) erase old menu
     if (this.menuRowsDrawn > 0) {
@@ -108,7 +116,11 @@ export class TermUI {
     }
     // 2) prompt + buffer
     process.stdout.write('\r' + CLEAR_LINE + this.promptStr + this.buffer);
-    // 3) menu (под prompt)
+    // 3) cursor position
+    const total = [...this.buffer].length;
+    const back = total - this.cursor;
+    if (back > 0) process.stdout.write(`\x1b[${back}D`);
+    // 4) menu (под prompt) — saves/restores cursor через ANSI
     if (this.buffer.startsWith('/')) {
       this._drawMenu();
     }
@@ -149,30 +161,108 @@ export class TermUI {
 
   // ── input handling ──────────────────────────────────────────────────
   _onData(chunk) {
-    // chunk может быть строкой (мы установили UTF-8 encoding) или Buffer
+    if (this.released) return; // ввод во время assistant output игнорим
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    // Многобайтовые символы — итерируем по code points
     let i = 0;
     while (i < str.length) {
+      // Detect CSI escape sequence: ESC [ ... <final byte 0x40-0x7E>
+      if (str.charCodeAt(i) === 27 && i + 1 < str.length && str[i + 1] === '[') {
+        let j = i + 2;
+        while (j < str.length) {
+          const code = str.charCodeAt(j);
+          if (code >= 0x40 && code <= 0x7E) break;
+          j++;
+        }
+        if (j < str.length) {
+          this._handleEscape(str.slice(i, j + 1));
+          i = j + 1;
+          continue;
+        }
+        // незаконченная sequence — съедим как ESC и продолжим
+        i++;
+        continue;
+      }
+      // Lone ESC (без [) — игнор
+      if (str.charCodeAt(i) === 27) { i++; continue; }
+      // Обычный символ (UTF-8 code point — может быть 1-4 byte units in JS string)
       const ch = String.fromCodePoint(str.codePointAt(i));
-      this._handleChar(ch, str, i);
+      this._handleChar(ch);
       i += ch.length;
     }
   }
 
-  _handleChar(ch, full, idx) {
-    if (this.released) {
-      // Игнорируем ввод во время assistant output (попадёт в input после resume)
-      return;
+  _handleEscape(seq) {
+    switch (seq) {
+      case '\x1b[A':  this._historyPrev(); return;        // ↑
+      case '\x1b[B':  this._historyNext(); return;        // ↓
+      case '\x1b[C': {                                    // →
+        const total = [...this.buffer].length;
+        if (this.cursor < total) { this.cursor++; this._renderPrompt(); }
+        return;
+      }
+      case '\x1b[D':                                      // ←
+        if (this.cursor > 0) { this.cursor--; this._renderPrompt(); }
+        return;
+      case '\x1b[H':  this.cursor = 0;                    // Home
+                      this._renderPrompt(); return;
+      case '\x1b[F':  this.cursor = [...this.buffer].length;  // End
+                      this._renderPrompt(); return;
+      case '\x1b[3~': {                                   // Delete
+        const arr = [...this.buffer];
+        if (this.cursor < arr.length) {
+          arr.splice(this.cursor, 1);
+          this.buffer = arr.join('');
+          this._renderPrompt();
+        }
+        return;
+      }
+      // Ctrl+стрелки и пр. — игнор
+      default: return;
     }
+  }
 
+  _historyPrev() {
+    if (!this.history.length) return;
+    if (this.historyIdx === -1) this.savedCurrent = this.buffer;
+    if (this.historyIdx < this.history.length - 1) {
+      this.historyIdx++;
+      this.buffer = this.history[this.history.length - 1 - this.historyIdx];
+      this.cursor = [...this.buffer].length;
+      this._renderPrompt();
+    }
+  }
+
+  _historyNext() {
+    if (this.historyIdx === -1) return;
+    if (this.historyIdx === 0) {
+      this.historyIdx = -1;
+      this.buffer = this.savedCurrent;
+      this.savedCurrent = '';
+    } else {
+      this.historyIdx--;
+      this.buffer = this.history[this.history.length - 1 - this.historyIdx];
+    }
+    this.cursor = [...this.buffer].length;
+    this._renderPrompt();
+  }
+
+  _handleChar(ch) {
     const code = ch.codePointAt(0);
 
     // Enter
     if (ch === '\r' || ch === '\n') {
       this._eraseMenu();
       const line = this.buffer;
+      // history (без пустых и без duplicate of last)
+      const trimmed = line.trim();
+      if (trimmed && this.history[this.history.length - 1] !== line) {
+        this.history.push(line);
+        if (this.history.length > 200) this.history.shift();
+      }
+      this.historyIdx = -1;
+      this.savedCurrent = '';
       this.buffer = '';
+      this.cursor = 0;
       process.stdout.write('\r\n');
       Promise.resolve(this.onLine(line)).catch(e => {
         process.stdout.write('\x1b[31merror: ' + (e?.message || e) + '\x1b[0m\n');
@@ -181,18 +271,14 @@ export class TermUI {
       return;
     }
 
-    // Backspace
+    // Backspace — удаляет символ ПЕРЕД cursor
     if (code === 127 || code === 8) {
-      if (this.buffer.length > 0) {
-        // Удаляем последний code point (UTF-8 safe)
+      if (this.cursor > 0) {
         const arr = [...this.buffer];
-        arr.pop();
+        arr.splice(this.cursor - 1, 1);
         this.buffer = arr.join('');
+        this.cursor--;
         this._renderPrompt();
-        if (this.buffer === '' || !this.buffer.startsWith('/')) {
-          this._eraseMenu();
-          this._renderPrompt();
-        }
       }
       return;
     }
@@ -213,21 +299,13 @@ export class TermUI {
       return;
     }
 
-    // ESC sequence — пропустим всю последовательность (стрелки/функ. клавиши)
-    if (code === 27) {
-      // Если это start of escape sequence (например \x1b[A — стрелка вверх),
-      // в chunk обычно идёт ещё несколько символов. Просто игнорируем — они
-      // обработаются как ничего (low ASCII < 32 → return ниже).
-      return;
-    }
-
-    // TAB — single-completion если ровно одно совпадение
+    // TAB — completion
     if (ch === '\t') {
       if (this.buffer.startsWith('/')) {
         const matches = this._filterMenu();
         if (matches.length === 1) {
           this.buffer = matches[0].cmd + (matches[0].needsArg ? ' ' : '');
-          this._eraseMenu();
+          this.cursor = [...this.buffer].length;
           this._renderPrompt();
         }
       }
@@ -237,8 +315,11 @@ export class TermUI {
     // Контрольные символы — игнор
     if (code < 32) return;
 
-    // Обычный печатный символ — добавляем в буфер
-    this.buffer += ch;
+    // Обычный символ — вставляем в позицию cursor
+    const arr = [...this.buffer];
+    arr.splice(this.cursor, 0, ch);
+    this.buffer = arr.join('');
+    this.cursor++;
     this._renderPrompt();
   }
 }
