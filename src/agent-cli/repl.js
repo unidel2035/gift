@@ -220,6 +220,30 @@ export async function runGiftRepl(opts = {}) {
     completer: slashCompleter,
   });
 
+  // ── Меню при наборе '/' (как в Claude Code) ──────────────────────────
+  // При нажатии '/' в пустой строке — показываем список команд над prompt
+  // и перерисовываем prompt с уже введённым '/'.
+  readline.emitKeypressEvents(process.stdin, rl);
+  process.stdin.on('keypress', (str, key) => {
+    if (str === '/' && rl.line === '' && !rl.cursor) {
+      // Очищаем текущую строку с prompt'ом, печатаем меню, восстанавливаем
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      console.log();
+      console.log('  ' + c('dim', '── slash-команды ──'));
+      const cols = 3;
+      const width = Math.max(...SLASH_COMMANDS.map(s => s.trim().length)) + 2;
+      for (let i = 0; i < SLASH_COMMANDS.length; i += cols) {
+        const row = SLASH_COMMANDS.slice(i, i + cols)
+          .map(s => '  ' + s.trim().padEnd(width))
+          .join('');
+        console.log(c('cyan', row));
+      }
+      console.log();
+      rl.prompt(true); // перерисовываем prompt — readline сам поставит '/'
+    }
+  });
+
   // inbox of user messages waiting to be sent to SDK
   const inbox = [];
   let inboxResolve = null;
