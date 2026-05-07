@@ -139,10 +139,17 @@ const HELP_SECTIONS = {
   gift web --stop                 — остановить`,
 
   agent: () => `${C.b('Агентный режим (полный CLI):')}
-  gift agent "промпт"             — агент с tools (Read/Write/Edit/Bash/Grep + mcp__gift__*)
+  gift agent "промпт"             — single-turn агент с tools (Read/Write/Edit/Bash/Grep + mcp__gift__*)
   gift agent --plan "промпт"      — plan mode (не выполнять)
   gift agent --verbose "промпт"   — стрим thinking + tool_result
   ${C.dim('(требует обычный bash, не Claude Code session — anti-recursion)')}`,
+
+  chat: () => `${C.b('Диалог (multi-turn REPL с инструментами):')}
+  gift chat                       — новая интерактивная сессия (persist в data/chat-sessions/)
+  gift chat --resume <id>         — продолжить сессию по id
+  gift chat --resume last         — продолжить последнюю сессию
+  gift chat --list                — список сохранённых сессий
+  ${C.dim('Внутри REPL: /help /clear /save /sessions /tools /status /recall /unfold /matrix /pustynya /cost /quit')}`,
 
   myslo: () => `${C.b('Мыслебродильня:')}
   gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
@@ -211,6 +218,7 @@ function bashCompletion() {
   const subMyslo    = 'полная cut дегустация винтаж карты бочка';
   const subTreasure = 'recall unfold ingest stats';
   const subAgrypnia = 'tick list cancel once daily interval';
+  const subChat     = '--resume --list last';
   return `# gift bash completion (eval "$(gift completion bash)")
 _gift_completions() {
   local cur prev cmd
@@ -230,6 +238,7 @@ _gift_completions() {
     myslo)     COMPREPLY=( $(compgen -W "${subMyslo}" -- "\$cur") );;
     treasure)  COMPREPLY=( $(compgen -W "${subTreasure}" -- "\$cur") );;
     agrypnia)  COMPREPLY=( $(compgen -W "${subAgrypnia}" -- "\$cur") );;
+    chat)      COMPREPLY=( $(compgen -W "${subChat}" -- "\$cur") );;
     help)      COMPREPLY=( $(compgen -W "${cmds}" -- "\$cur") );;
   esac
 }
@@ -531,6 +540,37 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       // Подкоманды: tick | list | cancel | once | daily | interval
       if (!sub) { help(); process.exit(1); }
       await run('utils/agrypnia-tick.mjs', [sub, ...rest]);
+      break;
+    }
+
+    case 'chat': {
+      // Multi-turn REPL поверх claude-agent-sdk.
+      // ВАЖНО: chat нужен полноценный stdin/stdout с TTY,
+      // и сохранение PROXY_ORIG (как у gift agent) для egress модели.
+      const { runGiftRepl } = await import(resolve(ROOT, 'src/agent-cli/repl.js'));
+      const { giftReplApi } = await import(resolve(ROOT, 'src/agent-cli/repl.js'));
+      // восстанавливаем proxy для SDK (в polza-runner curl нужен proxy WSL2)
+      for (const [k, v] of Object.entries(PROXY_ORIG)) process.env[k] = v;
+
+      const allArgs = [sub, ...rest].filter(Boolean);
+      if (allArgs[0] === '--list') {
+        const ls = giftReplApi.listSessions(20);
+        if (!ls.length) { console.log('Сессий нет.'); break; }
+        console.log(`\n${C.b('Последние REPL-сессии:')}`);
+        for (const s of ls) {
+          console.log(`  ${s.id}  ${C.dim(`${s.turns} turns`)}  ${C.dim(s.updatedAt)}`);
+        }
+        console.log();
+        break;
+      }
+      const resumeIdx = allArgs.indexOf('--resume');
+      const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
+      try {
+        await runGiftRepl({ resumeId });
+      } catch (e) {
+        console.error(`Ошибка: ${e.message}`);
+        process.exit(1);
+      }
       break;
     }
 
