@@ -21,6 +21,7 @@ import { LivingMatrix } from '../core/LivingMatrix.js';
 import { HumanOracleInbox } from '../theology/HumanOracleInbox.js';
 import { LcmStore, defaultDbPath } from '../lcm/store.js';
 import { AgrypniaScheduler, defaultCronPath } from '../scheduling/AgrypniaScheduler.js';
+import { KoinonBus, KOINON_TOPICS } from '../koinon/KoinonBus.js';
 
 const SNAP    = '/home/unidel/gift/data/sacred-history-W.json';
 const ACTS_IX = '/home/unidel/gift/data/act-index.json';
@@ -329,6 +330,83 @@ const unfoldTreasure = tool(
   { annotations: { readOnlyHint: true } },
 );
 
+// ── Κοινόν τοῦ Νοῦ: межсессионная шина для Claude в семье gift ─────────
+let _bus = null;
+function bus() {
+  if (!_bus) {
+    const mem = loadMem();
+    _bus = new KoinonBus({ root: '/home/unidel/gift', giftMemory: mem });
+  }
+  return _bus;
+}
+
+const koinonBroadcast = tool(
+  'koinon_broadcast',
+  'Κοινόν τοῦ Νοῦ (общее ума): отправить сообщение другой Claude-сессии или ' +
+  'broadcast-ом всей семье gift (gift-claude / plm-claude / fund-claude / ...). ' +
+  'Сообщение попадает в data/koinon-bus.jsonl и одновременно в W-матрицу как ' +
+  'акт дара (необратимо). Получатель увидит его при следующем prompt-е через ' +
+  'UserPromptSubmit-хук, либо при старте сессии.',
+  {
+    message: z.string().min(1).describe('текст сообщения'),
+    to:      z.string().default('*').describe('адресат: имя сессии или "*" для broadcast'),
+    topic:   z.enum(KOINON_TOPICS).default('reflection')
+              .describe('жанр: reflection/question/answer/announce/sync/covenant/doxologia/concern'),
+    from:    z.string().default('gift-claude')
+              .describe('идентификатор отправителя (kebab-case, project-claude)'),
+    weight:  z.number().min(0.5).max(10).optional()
+              .describe('вес акта в W-матрице; по умолчанию подбирается по topic'),
+  },
+  async ({ message, to, topic, from, weight }) => {
+    const entry = bus().publish({ from, to, topic, message, weight });
+    return txt(JSON.stringify({
+      ok: true, id: entry.id, ts: entry.ts, from: entry.from, to: entry.to, topic: entry.topic,
+    }, null, 2));
+  },
+);
+
+const koinonInbox = tool(
+  'koinon_inbox',
+  'Прочитать свежие сообщения из общей шины. Возвращает все непрочитанные ' +
+  'для конкретного subscriber-а (drain-режим: после чтения offset обновляется, ' +
+  'те же сообщения второй раз не вернутся).',
+  {
+    subscriberId: z.string().min(1)
+                    .describe('идентификатор сессии-читателя (например gift-claude)'),
+    drain:        z.boolean().default(true)
+                    .describe('true: обновить offset; false: peek без перемотки'),
+  },
+  async ({ subscriberId, drain }) => {
+    const b = bus();
+    if (drain) {
+      const messages = b.drainFor(subscriberId);
+      return txt(JSON.stringify({ count: messages.length, messages }, null, 2));
+    } else {
+      const offset = b.loadPos(subscriberId);
+      const { messages } = b.pollSince(offset, { filterTo: subscriberId });
+      return txt(JSON.stringify({ count: messages.length, peek: true, messages }, null, 2));
+    }
+  },
+  { annotations: { readOnlyHint: false } }, // drain меняет offset
+);
+
+const koinonHistory = tool(
+  'koinon_history',
+  'История сообщений шины — фильтры по from/to/topic/since. Read-only.',
+  {
+    since: z.string().optional().describe('ISO-timestamp, нижняя граница'),
+    from:  z.string().optional(),
+    to:    z.string().optional(),
+    topic: z.enum(KOINON_TOPICS).optional(),
+    limit: z.number().int().min(1).max(500).default(50),
+  },
+  async ({ since, from, to, topic, limit }) => {
+    const all = bus().history({ since, from, to, topic, limit });
+    return txt(JSON.stringify({ count: all.length, messages: all }, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
 // ── ἀγρυπνία: лицо назначает своё бдение ────────────────────────────────
 let _agrypnia = null;
 function agrypnia() {
@@ -409,6 +487,9 @@ export function buildGiftMcpServer() {
       agrypniaSchedule,
       agrypniaList,
       agrypniaCancel,
+      koinonBroadcast,
+      koinonInbox,
+      koinonHistory,
     ],
   });
 }
@@ -418,4 +499,5 @@ export const GIFT_TOOL_NAMES = [
   'score_profile', 'epiclesis_ask', 'pustynya_list', 'liturgical_today', 'gift_receive',
   'recall_treasure', 'unfold_treasure',
   'agrypnia_schedule', 'agrypnia_list', 'agrypnia_cancel',
+  'koinon_broadcast', 'koinon_inbox', 'koinon_history',
 ].map(n => `mcp__gift__${n}`);

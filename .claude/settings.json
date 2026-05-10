@@ -32,6 +32,12 @@
             "command": "node \"$(git rev-parse --show-toplevel)/utils/matrix-context-hook.mjs\" 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Анамнезис матрицы W + сервера..."
+          },
+          {
+            "type": "command",
+            "command": "GIFT_CLAUDE_ID=gift-claude node \"$(git rev-parse --show-toplevel)/utils/koinon-pump.mjs\" 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Свежие сообщения шины Κοινόν..."
           }
         ]
       }

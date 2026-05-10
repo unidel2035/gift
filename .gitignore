@@ -13,3 +13,5 @@ data/lora/
 dist/
 colab/__pycache__/
 colab/gift-colab-package.zip
+data/koinon-bus.jsonl
+data/.koinon-pos.json
