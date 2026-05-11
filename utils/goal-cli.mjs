@@ -15,9 +15,11 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GoalEngine } from '../src/goals/GoalEngine.js';
 import { ClaudeExecutor } from '../src/goals/ClaudeExecutor.js';
+import { MatrixRecorder } from '../src/goals/MatrixRecorder.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const GOALS_DIR = resolve(ROOT, 'data/goals');
+const SNAP_PATH = resolve(ROOT, 'data/sacred-history-W.json');
 
 const C = {
   b:    s => `\x1b[1m${s}\x1b[0m`,
@@ -153,6 +155,7 @@ if (cmd === 'run') {
   const engine = new GoalEngine({
     root: GOALS_DIR,
     executor: new ClaudeExecutor({ cwd: ROOT }),
+    recorder: new MatrixRecorder({ snapPath: SNAP_PATH }),
   });
   const g = engine.get(id);
   if (!g) { console.error(`цель ${id} не найдена`); process.exit(1); }

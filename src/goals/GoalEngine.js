@@ -27,9 +27,10 @@ const STATUS = Object.freeze({
 });
 
 export class GoalEngine {
-  constructor({ root = 'data/goals', executor, clock = Date } = {}) {
+  constructor({ root = 'data/goals', executor, recorder = null, clock = Date } = {}) {
     this.root = root;
     this.executor = executor;
+    this.recorder = recorder;  // опционально: пишет ключевые события в W-матрицу
     this.clock = clock;
     if (!existsSync(root)) mkdirSync(root, { recursive: true });
   }
@@ -103,6 +104,10 @@ export class GoalEngine {
       // Записывается в act-историю чтобы следующий plan его учитывал.
       if (!step.review.satisfied) {
         step.metanoia = await this.executor.metanoia?.(state, step) ?? null;
+        if (this.recorder?.onMetanoia) {
+          try { await this.recorder.onMetanoia(state, step); }
+          catch (e) { step.recorderError = e.message; }
+        }
       }
 
       // tokensUsed суммируется по всем фазам; executor может проставлять его
@@ -119,6 +124,10 @@ export class GoalEngine {
       if (step.review.satisfied) {
         state.status = STATUS.DONE;
         this._save(state);
+        if (this.recorder?.onDone) {
+          try { await this.recorder.onDone(state); }
+          catch (e) { state.recorderError = e.message; this._save(state); }
+        }
         return state;
       }
       if (state.tokenBudget !== null && state.tokensUsed >= state.tokenBudget) {
@@ -135,6 +144,10 @@ export class GoalEngine {
       if (state.status === STATUS.FAILED) state.failReason = 'max-iterations-exceeded';
       else state.pauseReason = 'max-steps-this-run';
       this._save(state);
+    }
+    if (state.status === STATUS.FAILED && this.recorder?.onFailed) {
+      try { await this.recorder.onFailed(state); }
+      catch (e) { state.recorderError = e.message; this._save(state); }
     }
     return state;
   }

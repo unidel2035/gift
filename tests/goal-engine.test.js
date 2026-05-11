@@ -174,6 +174,111 @@ test('clear — удаляет файл', () => {
   }
 });
 
+test('recorder — onMetanoia на каждом провале, onDone при satisfied', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-'));
+  try {
+    const calls = [];
+    const recorder = {
+      onMetanoia: async (s, step) => { calls.push(['metanoia', step.n]); },
+      onDone:     async (s)        => { calls.push(['done', s.iteration]); },
+      onFailed:   async (s)        => { calls.push(['failed', s.iteration]); },
+    };
+    const engine = new GoalEngine({
+      root: dir,
+      executor: mockExecutor({ successOnIteration: 3 }),
+      recorder,
+    });
+    const g = engine.create({ objective: 'O', successCriteria: 'C' });
+    await engine.run(g.id);
+    // 2 провала → 2 metanoia, потом done
+    assert.deepEqual(calls, [['metanoia', 1], ['metanoia', 2], ['done', 3]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('recorder — onFailed при maxIterations', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-'));
+  try {
+    const calls = [];
+    const recorder = {
+      onMetanoia: async () => { calls.push('m'); },
+      onFailed:   async (s) => { calls.push(['failed', s.iteration]); },
+    };
+    const engine = new GoalEngine({
+      root: dir,
+      executor: mockExecutor({ failTest: true }),
+      recorder,
+    });
+    const g = engine.create({ objective: 'O', successCriteria: 'C', maxIterations: 2 });
+    await engine.run(g.id);
+    assert.deepEqual(calls, ['m', 'm', ['failed', 2]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('recorder — исключение не ломает цикл, пишется в state', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'goal-'));
+  try {
+    const recorder = {
+      onMetanoia: async () => { throw new Error('disk full'); },
+    };
+    const engine = new GoalEngine({
+      root: dir,
+      executor: mockExecutor({ successOnIteration: 2 }),
+      recorder,
+    });
+    const g = engine.create({ objective: 'O', successCriteria: 'C' });
+    const final = await engine.run(g.id);
+    // Цель всё равно достигнута
+    assert.equal(final.status, 'done');
+    assert.equal(final.history[0].recorderError, 'disk full');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('MatrixRecorder — пишет акты через инжектируемый GiftMemoryCtor', async () => {
+  const { MatrixRecorder } = await import('../src/goals/MatrixRecorder.js');
+  const dir = mkdtempSync(join(tmpdir(), 'goal-'));
+  try {
+    const acts = [];
+    class FakeMem {
+      constructor(persons) { this.persons = persons; }
+      _idx(id) { if (!this.persons.includes(id)) this.persons.push(id); }
+      receive(act) { acts.push(act); }
+      snapshot() { return { persons: this.persons, acts: acts.length }; }
+      static fromSnapshot(snap) { const m = new FakeMem(snap.persons || []); return m; }
+    }
+    const snapPath = join(dir, 'snap.json');
+    const recorder = new MatrixRecorder({ snapPath, GiftMemoryCtor: FakeMem });
+
+    await recorder.onMetanoia(
+      { id: 'g1' },
+      { n: 1, metanoia: { text: 'I missed test step' } }
+    );
+    await recorder.onDone({ id: 'g1', iteration: 5, objective: 'Build X' });
+    await recorder.onFailed({ id: 'g2', failReason: 'max-iterations-exceeded', objective: 'Build Y' });
+
+    assert.equal(acts.length, 3);
+    assert.equal(acts[0].type, 'kenosis');
+    assert.equal(acts[0].weight, 1);
+    assert.equal(acts[0].receiverId, '_koinon');
+    assert.equal(acts[1].type, 'code');
+    assert.equal(acts[1].weight, 10);
+    assert.equal(acts[1].receiverId, 'Дионисий');
+    assert.equal(acts[2].type, 'kenosis');
+    assert.equal(acts[2].weight, 2);
+    assert.equal(acts[2].receiverId, '_koinon');
+    assert.ok(acts.every(a => a.irreversible === true));
+    // Snapshot тоже сохранился
+    assert.ok(existsSync(snapPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('tokenBudget — приостанавливает по достижении', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'goal-'));
   try {
