@@ -347,22 +347,23 @@ const SESSION_ID = () => process.env.GIFT_CLAUDE_ID || 'gift-claude';
 const koinonBroadcast = tool(
   'koinon_broadcast',
   'Κοινόν τοῦ Νοῦ (общее ума): отправить сообщение другой Claude-сессии или ' +
-  'broadcast-ом всей семье gift (gift-claude / plm-claude / fund-claude / ...). ' +
-  'Сообщение попадает в data/koinon-bus.jsonl и одновременно в W-матрицу как ' +
-  'акт дара (необратимо). Получатель увидит его при следующем prompt-е через ' +
-  'UserPromptSubmit-хук, либо при старте сессии.',
+  'broadcast-ом всей семье gift. Сообщение попадает в data/koinon-bus.jsonl ' +
+  'и в W-матрицу как акт дара (необратимо). Получатель увидит при следующем ' +
+  'prompt-е через UserPromptSubmit-хук или при старте сессии.\n\n' +
+  'ВАЖНО: отправитель определяется автоматически по текущей сессии ' +
+  '(env GIFT_CLAUDE_ID, выставленный bin/gift на основе cwd). НЕ передавай ' +
+  '"from" сам — это служебное поле для редких debug-случаев.',
   {
     message: z.string().min(1).describe('текст сообщения'),
-    to:      z.string().default('*').describe('адресат: имя сессии или "*" для broadcast'),
+    to:      z.string().default('*').describe('адресат: имя сессии (plm-claude/fund-claude/...) или "*" для broadcast всей семье'),
     topic:   z.enum(KOINON_TOPICS).default('reflection')
               .describe('жанр: reflection/question/answer/announce/sync/covenant/doxologia/concern'),
-    from:    z.string().optional()
-              .describe('идентификатор отправителя; по умолчанию из env GIFT_CLAUDE_ID'),
     weight:  z.number().min(0.5).max(10).optional()
-              .describe('вес акта в W-матрице; по умолчанию подбирается по topic'),
+              .describe('вес акта в W; по умолчанию по topic'),
   },
-  async ({ message, to, topic, from, weight }) => {
-    const entry = bus().publish({ from: from || SESSION_ID(), to, topic, message, weight });
+  async ({ message, to, topic, weight }) => {
+    const from = SESSION_ID();
+    const entry = bus().publish({ from, to, topic, message, weight });
     return txt(JSON.stringify({
       ok: true, id: entry.id, ts: entry.ts, from: entry.from, to: entry.to, topic: entry.topic,
     }, null, 2));
@@ -371,17 +372,16 @@ const koinonBroadcast = tool(
 
 const koinonInbox = tool(
   'koinon_inbox',
-  'Прочитать свежие сообщения из общей шины. Возвращает все непрочитанные ' +
-  'для конкретного subscriber-а (drain-режим: после чтения offset обновляется, ' +
-  'те же сообщения второй раз не вернутся).',
+  'Прочитать свежие непрочитанные сообщения шины для ТЕКУЩЕЙ сессии. ' +
+  'Идентификатор сессии берётся автоматически (env GIFT_CLAUDE_ID, ' +
+  'установленный bin/gift по cwd: gift/plm/fund/dronedoc2026/istok → ' +
+  '*-claude). НЕ передавай subscriberId сам — он вычисляется системой.',
   {
-    subscriberId: z.string().optional()
-                    .describe('идентификатор сессии-читателя; по умолчанию из env GIFT_CLAUDE_ID'),
-    drain:        z.boolean().default(true)
-                    .describe('true: обновить offset; false: peek без перемотки'),
+    drain: z.boolean().default(true)
+             .describe('true: обновить offset (сообщения не вернутся); false: peek'),
   },
-  async ({ subscriberId, drain }) => {
-    subscriberId = subscriberId || SESSION_ID();
+  async ({ drain }) => {
+    const subscriberId = SESSION_ID();
     const b = bus();
     if (drain) {
       const messages = b.drainFor(subscriberId);
