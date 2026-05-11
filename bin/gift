@@ -582,9 +582,9 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
         detached: true, stdio: 'ignore', cwd: ROOT,
         // PROXY_ORIG восстанавливает HTTP_PROXY/HTTPS_PROXY — нужны для
         // claude --print, который polyphony-orchestrator вызывает изнутри.
-        // NO_PROXY=localhost уже выставлен, поэтому in-process fetch к
-        // nous на 8089 не пойдёт через proxy.
-        env: { ...cleanEnv(), ...PROXY_ORIG, PORT: port },
+        // GIFT_KEEP_PROXY=1 — чтобы cleanEnv внутри полифонии тоже не стирал
+        // proxy на каждом вызове claude. NO_PROXY=localhost уже выставлен.
+        env: { ...cleanEnv(), ...PROXY_ORIG, GIFT_KEEP_PROXY: '1', PORT: port },
       });
       child.unref();
       writeFileSync(pidFile, String(child.pid));

@@ -9,10 +9,16 @@
 
 export function cleanEnv(extra = {}) {
   const e = { ...process.env, ...extra };
-  for (const k of [
-    'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
-    'http_proxy', 'https_proxy', 'all_proxy',
-  ]) delete e[k];
+  // GIFT_KEEP_PROXY=1 — оставить HTTP_PROXY/HTTPS_PROXY в окружении.
+  // Нужно в WSL2 mirrored-networking, где Windows proxy ВИДЕН изнутри
+  // и без него claude/curl падают (172.23.x:10809 действует). В NAT —
+  // переменную не ставим, и proxy чистится как раньше.
+  if (process.env.GIFT_KEEP_PROXY !== '1') {
+    for (const k of [
+      'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
+      'http_proxy', 'https_proxy', 'all_proxy',
+    ]) delete e[k];
+  }
   e.NO_PROXY = e.NO_PROXY || 'api.github.com,github.com,api.anthropic.com,localhost,127.0.0.1';
   e.no_proxy = e.no_proxy || e.NO_PROXY;
   return e;
