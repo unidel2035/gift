@@ -291,37 +291,85 @@
     const url = '/api/chat/stream?q=' + encodeURIComponent(question);
     const es = new EventSource(url);
     currentStream = es;
+    let gotAnything = false;
 
-    es.addEventListener('token', e => {
-      const t = JSON.parse(e.data);
-      appendToLastGift(t);
-      pendingChunks += t;
-      pendingChunks = flushSentences(pendingChunks, false);
-      speakNext();
-    });
+    // Таймаут: если за 25 секунд не пришло ни одного события — закрываем.
+    const timeout = setTimeout(() => {
+      if (!gotAnything) {
+        es.close();
+        currentStream = null;
+        showError('сервер молчит. возможно polyphony недоступен');
+        setState('IDLE');
+      }
+    }, 25000);
+
+    es.addEventListener('start', e => { gotAnything = true; /* модель думает */ });
+    es.addEventListener('context', e => { gotAnything = true; });
+
+    // Главный канал ответа: voice (реплика собора)
+    // Поле content (не text) — текст реплики, persona — кто говорит
     es.addEventListener('voice', e => {
-      // Сервер может слать целые реплики собора — приклеиваем как один блок
-      const v = JSON.parse(e.data);
-      const block = (v.name ? v.name + ': ' : '') + (v.text || '');
-      appendToLastGift(block + '\n');
-      pendingChunks += block + ' ';
+      gotAnything = true;
+      let v;
+      try { v = JSON.parse(e.data); } catch { return; }
+      const text = v.content || v.text || v.logos || '';
+      if (!text) return;
+      const persona = v.persona || '';
+      const block = (persona ? `[${persona}] ` : '') + text + '\n\n';
+      appendToLastGift(block);
+      pendingChunks += text + '. ';
       pendingChunks = flushSentences(pendingChunks, false);
       speakNext();
     });
+
+    // action — для /команд (stdout, файлы, etc.)
+    es.addEventListener('action', e => {
+      gotAnything = true;
+      let a;
+      try { a = JSON.parse(e.data); } catch { return; }
+      const text = a.text || '';
+      if (!text) return;
+      appendToLastGift(text + '\n');
+      // /команды обычно технические — не читаем голосом
+    });
+
     es.addEventListener('done', () => {
-      // дочитаем хвост
+      clearTimeout(timeout);
       pendingChunks = flushSentences(pendingChunks, true);
       speakNext();
       es.close();
       currentStream = null;
       if (sentenceQueue.length === 0 && !speaking) setState('IDLE');
     });
+
     es.addEventListener('error', e => {
+      // SSE error event может прийти со стороны сервера (с data)
+      // или быть network-error (без data) — обрабатываем оба
+      let msg = 'связь оборвалась';
+      try {
+        if (e.data) { const d = JSON.parse(e.data); msg = d.message || msg; }
+      } catch {}
+      clearTimeout(timeout);
       es.close();
       currentStream = null;
-      showError('связь оборвалась');
+      showError(msg);
       setState('IDLE');
     });
+
+    // Универсальный onmessage — если событие без названия
+    es.onmessage = e => {
+      gotAnything = true;
+      try {
+        const d = JSON.parse(e.data);
+        const text = d.text || d.content || (typeof d === 'string' ? d : '');
+        if (text) {
+          appendToLastGift(text);
+          pendingChunks += text;
+          pendingChunks = flushSentences(pendingChunks, false);
+          speakNext();
+        }
+      } catch {}
+    };
   }
 
   // ── Распознавание речи ─────────────────────────────────────────────
