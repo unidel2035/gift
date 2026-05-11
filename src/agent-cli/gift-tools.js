@@ -11,7 +11,9 @@
 
 import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { GiftMemory } from '../core/GiftMemory.js';
 import { Decoupage } from '../persons/Decoupage.js';
 import { Vintage } from '../persons/Vintage.js';
@@ -22,6 +24,30 @@ import { HumanOracleInbox } from '../theology/HumanOracleInbox.js';
 import { LcmStore, defaultDbPath } from '../lcm/store.js';
 import { AgrypniaScheduler, defaultCronPath } from '../scheduling/AgrypniaScheduler.js';
 import { KoinonBus, KOINON_TOPICS } from '../koinon/KoinonBus.js';
+import { GoalEngine } from '../goals/GoalEngine.js';
+import { ClaudeExecutor } from '../goals/ClaudeExecutor.js';
+import { MatrixRecorder } from '../goals/MatrixRecorder.js';
+import { statSync } from 'node:fs';
+
+const SESS_DIR = '/home/unidel/gift/data/chat-sessions';
+function listSessions(limit = 20) {
+  if (!existsSync(SESS_DIR)) return [];
+  const files = readdirSync(SESS_DIR)
+    .filter(f => f.startsWith('repl-') && f.endsWith('.json'))
+    .map(f => ({ id: f.replace(/\.json$/, ''), path: resolve(SESS_DIR, f), mtime: statSync(resolve(SESS_DIR, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime).slice(0, limit);
+  return files.map(f => {
+    try {
+      const d = JSON.parse(readFileSync(f.path, 'utf8'));
+      return { id: d.id, title: d.title || '', turns: (d.messages ?? []).length, updatedAt: d.updatedAt || new Date(f.mtime).toISOString() };
+    } catch { return { id: f.id, title: '?', turns: 0, updatedAt: '' }; }
+  });
+}
+function loadSession(id) {
+  const p = resolve(SESS_DIR, `${id}.json`);
+  if (!existsSync(p)) throw new Error(`сессия не найдена: ${id}`);
+  return JSON.parse(readFileSync(p, 'utf8'));
+}
 
 const SNAP    = '/home/unidel/gift/data/sacred-history-W.json';
 const ACTS_IX = '/home/unidel/gift/data/act-index.json';
@@ -472,6 +498,263 @@ const agrypniaCancel = tool(
   },
 );
 
+// ── Долгие цели: создать/запустить/посмотреть ───────────────────────────
+const GIFT_ROOT = '/home/unidel/gift';
+const GOALS_DIR = '/home/unidel/gift/data/goals';
+
+let _goalEngine = null;
+function goalEngine() {
+  if (_goalEngine) return _goalEngine;
+  _goalEngine = new GoalEngine({
+    root: GOALS_DIR,
+    executor: new ClaudeExecutor({ cwd: GIFT_ROOT }),
+    recorder: new MatrixRecorder({ snapPath: SNAP }),
+  });
+  return _goalEngine;
+}
+
+const goalTool = tool(
+  'goal',
+  'Долгие задачи с проверкой готовности и поворотом ума на провале. ' +
+  'Действия: create (создать), run (выполнить N шагов; по умолчанию 1), ' +
+  'list (все цели), status (детали одной), pause, cancel, clear. ' +
+  'Используй когда задача требует много шагов и явное условие готовности.',
+  {
+    action: z.enum(['create', 'run', 'list', 'status', 'pause', 'cancel', 'clear']),
+    objective:       z.string().optional().describe('для create: что должно получиться, на языке пользователя'),
+    successCriteria: z.string().optional().describe('для create: чем проверим что готово (тест/команда/наблюдаемое состояние)'),
+    maxIterations:   z.number().int().min(1).max(64).default(32).optional(),
+    tokenBudget:     z.number().int().min(100).optional(),
+    id:              z.string().optional().describe('id цели для run/status/pause/cancel/clear'),
+    steps:           z.number().int().min(1).max(5).default(1).optional().describe('сколько шагов выполнить за один вызов (макс 5)'),
+    statusFilter:    z.enum(['pending', 'running', 'paused', 'done', 'failed', 'cancelled']).optional(),
+  },
+  async (args) => {
+    const e = goalEngine();
+    try {
+      if (args.action === 'create') {
+        if (!args.objective || !args.successCriteria) {
+          return txt(JSON.stringify({ error: 'objective и successCriteria обязательны' }));
+        }
+        const g = e.create({
+          objective: args.objective,
+          successCriteria: args.successCriteria,
+          maxIterations: args.maxIterations ?? 32,
+          tokenBudget: args.tokenBudget ?? null,
+        });
+        return txt(JSON.stringify({ ok: true, id: g.id, status: g.status, hint: `goal run id=${g.id} чтобы выполнить шаги` }, null, 2));
+      }
+      if (args.action === 'list') {
+        const all = e.list({ status: args.statusFilter ?? null });
+        return txt(JSON.stringify({
+          count: all.length,
+          goals: all.map(g => ({
+            id: g.id, status: g.status,
+            iter: `${g.iteration}/${g.maxIterations}`,
+            objective: g.objective.slice(0, 80),
+          })),
+        }, null, 2));
+      }
+      if (!args.id) return txt(JSON.stringify({ error: 'id обязателен для этого действия' }));
+      if (args.action === 'status') {
+        const g = e.get(args.id);
+        if (!g) return txt(JSON.stringify({ error: `цель ${args.id} не найдена` }));
+        return txt(JSON.stringify({
+          id: g.id, status: g.status,
+          objective: g.objective, successCriteria: g.successCriteria,
+          iteration: g.iteration, maxIterations: g.maxIterations,
+          tokensUsed: g.tokensUsed,
+          lastSteps: g.history.slice(-3).map(h => ({
+            n: h.n, satisfied: h.review?.satisfied, testPassed: h.test?.passed,
+            planHead: (h.plan?.text || '').slice(0, 120),
+            metanoiaHead: (h.metanoia?.text || '').slice(0, 120),
+          })),
+        }, null, 2));
+      }
+      if (args.action === 'run') {
+        const steps = args.steps ?? 1;
+        const final = await e.run(args.id, { maxSteps: steps });
+        return txt(JSON.stringify({
+          id: final.id, status: final.status,
+          iteration: final.iteration, maxIterations: final.maxIterations,
+          lastReview: final.history.at(-1)?.review,
+          lastMetanoia: final.history.at(-1)?.metanoia?.text?.slice(0, 200),
+        }, null, 2));
+      }
+      if (args.action === 'pause')  { return txt(JSON.stringify({ ok: true, status: e.pause(args.id).status })); }
+      if (args.action === 'cancel') { return txt(JSON.stringify({ ok: true, status: e.cancel(args.id).status })); }
+      if (args.action === 'clear')  { e.clear(args.id); return txt(JSON.stringify({ ok: true })); }
+    } catch (err) {
+      return txt(JSON.stringify({ error: err.message }));
+    }
+  },
+);
+
+// ── swe: реализовать одну задачу (issue или task) ───────────────────────
+const sweTool = tool(
+  'swe',
+  'Соборный агент для одной задачи: план → реализация → проверка. ' +
+  'Указывай issue (номер с гитхаба) ИЛИ task (свободная формулировка). ' +
+  'По умолчанию dryRun=false, noCommit=false (то есть коммитит). ' +
+  'Тяжёлая операция — может занять 5-10 минут.',
+  {
+    issue:    z.number().int().optional().describe('номер задачи на гитхабе'),
+    task:     z.string().optional().describe('формулировка задачи без issue'),
+    dryRun:   z.boolean().default(false).describe('без вызовов агентов — только показать что бы сделал'),
+    noCommit: z.boolean().default(false).describe('остановиться перед коммитом'),
+    timeoutSeconds: z.number().int().min(60).max(900).default(600),
+  },
+  async ({ issue, task, dryRun, noCommit, timeoutSeconds }) => {
+    if (!issue && !task) return txt(JSON.stringify({ error: 'нужен issue или task' }));
+    const args = [];
+    if (issue) args.push('--issue', String(issue));
+    if (task)  args.push('--task', task);
+    if (dryRun) args.push('--dry-run');
+    if (noCommit) args.push('--no-commit');
+    const r = spawnSync('node', [resolve(GIFT_ROOT, 'utils/conciliar-swe.mjs'), ...args], {
+      cwd: GIFT_ROOT, timeout: timeoutSeconds * 1000,
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return txt(JSON.stringify({
+      exitCode: r.status,
+      ok: r.status === 0,
+      stdout: (r.stdout || '').slice(-3000),
+      stderr: (r.stderr || '').slice(-1000),
+    }, null, 2));
+  },
+);
+
+// ── status: сводка состояния проекта ────────────────────────────────────
+const statusTool = tool(
+  'status',
+  'Одна короткая сводка состояния проекта: открытые задачи на гитхабе, ' +
+  'состояние матрицы (лиц, актов, энергия), очередь вопросов к человеку, ' +
+  'размер сокровищницы, активные бдения.',
+  {},
+  async () => {
+    const out = { ts: new Date().toISOString() };
+    // Матрица
+    try {
+      const mem = loadMem();
+      const lm = new LivingMatrix(mem);
+      out.matrix = {
+        persons: mem.persons.length,
+        acts: mem.actsCount,
+        topThreads: mem.heaviest(5).map(e => ({ from: e.from, to: e.to, weight: Number(e.weight.toFixed(1)) })),
+        principle: lm.dominantPrinciple()?.principle ?? null,
+      };
+    } catch (e) { out.matrix = { error: e.message }; }
+    // Эпиклеза
+    try {
+      const inboxDir = '/home/unidel/gift/data/epiclesis-inbox';
+      const queue = existsSync(inboxDir) ? readdirSync(inboxDir).filter(f => f.endsWith('.question.json')).length : 0;
+      out.questionsToHuman = queue;
+    } catch (e) { out.questionsToHuman = null; }
+    // Сокровищница
+    try {
+      const s = lcm().stats();
+      out.treasure = { total: s.total, bySource: s.bySource };
+    } catch (e) { out.treasure = { error: e.message }; }
+    // Цели
+    try {
+      const goals = goalEngine().list();
+      out.goals = {
+        total: goals.length,
+        running: goals.filter(g => g.status === 'running' || g.status === 'paused').length,
+        done: goals.filter(g => g.status === 'done').length,
+      };
+    } catch (e) { out.goals = { error: e.message }; }
+    // Бдения
+    try {
+      const jobs = agrypnia().list();
+      out.agrypnia = { active: jobs.length };
+    } catch (e) { out.agrypnia = { error: e.message }; }
+    // Гитхаб (короткая попытка)
+    try {
+      const r = spawnSync('gh', ['issue', 'list', '--state', 'open', '--label', 'gift-ready', '--limit', '50', '--json', 'number'], {
+        cwd: GIFT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, GITHUB_TOKEN: '' }, timeout: 5000,
+      });
+      if (r.status === 0) out.openIssues = JSON.parse(r.stdout).length;
+    } catch (e) {}
+    return txt(JSON.stringify(out, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
+// ── session: прошлые сессии чата ────────────────────────────────────────
+const sessionTool = tool(
+  'session',
+  'Прошлые сессии диалога с gift chat. ' +
+  'list — список с заголовками и количеством сообщений; ' +
+  'show — содержимое одной сессии по id (последние N сообщений).',
+  {
+    action: z.enum(['list', 'show']),
+    id:     z.string().optional().describe('id сессии (для show)'),
+    limit:  z.number().int().min(1).max(50).default(15).describe('для list: сколько сессий; для show: сколько последних сообщений'),
+  },
+  async ({ action, id, limit }) => {
+    if (action === 'list') {
+      const sessions = listSessions(limit);
+      return txt(JSON.stringify({
+        count: sessions.length,
+        sessions: sessions.map(s => ({
+          id: s.id,
+          title: s.title || '(без заголовка)',
+          turns: s.turns,
+          updatedAt: s.updatedAt,
+        })),
+      }, null, 2));
+    }
+    if (action === 'show') {
+      if (!id) return txt(JSON.stringify({ error: 'id обязателен для show' }));
+      try {
+        const s = loadSession(id);
+        const tail = (s.messages || []).slice(-limit);
+        return txt(JSON.stringify({
+          id: s.id, title: s.title, totalTurns: (s.messages || []).length,
+          createdAt: s.createdAt, updatedAt: s.updatedAt,
+          messages: tail.map(m => ({ role: m.role, text: (m.text || m.content || '').slice(0, 600) })),
+        }, null, 2));
+      } catch (e) { return txt(JSON.stringify({ error: e.message })); }
+    }
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
+// ── glossary: словарь терминов ──────────────────────────────────────────
+let _glossary = null;
+function loadGlossary() {
+  if (_glossary) return _glossary;
+  const r = spawnSync('node', [resolve(GIFT_ROOT, 'utils/gift-glossary.mjs'), '--json'], {
+    cwd: GIFT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+  });
+  if (r.status !== 0) return [];
+  try { _glossary = JSON.parse(r.stdout); } catch { _glossary = []; }
+  return _glossary;
+}
+
+const glossaryTool = tool(
+  'glossary',
+  'Словарь греческих/латинских терминов проекта с русским объяснением. ' +
+  'Без term — вернёт все термины; с term — найдёт совпадения по греч/лат/рус полям.',
+  {
+    term: z.string().optional().describe('слово или фрагмент для поиска (русский, греческий, латинский)'),
+  },
+  async ({ term }) => {
+    const all = loadGlossary();
+    if (!term) return txt(JSON.stringify({ count: all.length, terms: all }, null, 2));
+    const q = term.toLowerCase();
+    const matches = all.filter(t =>
+      (t.gr || '').toLowerCase().includes(q) ||
+      (t.lat || '').toLowerCase().includes(q) ||
+      (t.ru || '').toLowerCase().includes(q),
+    );
+    return txt(JSON.stringify({ query: term, count: matches.length, matches }, null, 2));
+  },
+  { annotations: { readOnlyHint: true } },
+);
+
 // ── Соборный сервер ─────────────────────────────────────────────────────
 export function buildGiftMcpServer() {
   return createSdkMcpServer({
@@ -495,6 +778,11 @@ export function buildGiftMcpServer() {
       koinonBroadcast,
       koinonInbox,
       koinonHistory,
+      goalTool,
+      sweTool,
+      statusTool,
+      sessionTool,
+      glossaryTool,
     ],
   });
 }
@@ -505,4 +793,5 @@ export const GIFT_TOOL_NAMES = [
   'recall_treasure', 'unfold_treasure',
   'agrypnia_schedule', 'agrypnia_list', 'agrypnia_cancel',
   'koinon_broadcast', 'koinon_inbox', 'koinon_history',
+  'goal', 'swe', 'status', 'session', 'glossary',
 ].map(n => `mcp__gift__${n}`);
