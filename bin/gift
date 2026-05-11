@@ -213,6 +213,14 @@ const HELP_SECTIONS = {
   gift koinon stats                              счётчики
   gift koinon tail                               live-режим (poll 1s)`,
 
+  goal: () => `${C.b('Long-horizon цели')} ${C.dim('(gift-аналог Codex /goal + μετάνοια)')}:
+  gift goal create "<objective>" --success "<criteria>" ${C.dim('[--max 32] [--budget T]')}
+  gift goal run <id> ${C.dim('[--steps N]')}     запустить/возобновить (Ctrl+C → пауза)
+  gift goal list ${C.dim('[--status X]')}        все цели
+  gift goal status <id>                  деталь + последние итерации
+  gift goal pause|cancel|clear <id>
+  ${C.dim('Цикл: plan → act → test → review → μετάνοια. State в data/goals/.')}`,
+
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — состояние онтологии (6 слоёв)
@@ -657,6 +665,15 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       // Шина межсессионной коммуникации Claude в семье gift
       const allArgs = [sub, ...rest].filter(Boolean);
       await run('utils/koinon-cli.mjs', allArgs);
+      break;
+    }
+
+    case 'goal': {
+      // Long-horizon цели: gift-аналог Codex /goal с μετάνοια-шагом.
+      // runRaw — потому что внутри ClaudeExecutor вызывается `claude --print`,
+      // которому нужен Windows proxy для egress (как и agent-режиму).
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await runRaw('utils/goal-cli.mjs', allArgs);
       break;
     }
 
