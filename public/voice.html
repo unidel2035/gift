@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>gift — голос</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --fg: #e8e8e8;
+    --dim: #888;
+    --gold: #d4a017;
+    --cyan: #4ac4d4;
+    --red: #c9484c;
+    --green: #5cb85c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; min-height: 100vh;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2rem 1rem;
+  }
+  h1 { font-size: 1.4rem; font-weight: 400; margin: 0 0 0.2rem 0; }
+  .sub { color: var(--dim); font-size: 0.9rem; margin-bottom: 2rem; }
+
+  .orb-wrap {
+    width: 220px; height: 220px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 1.5rem;
+  }
+  .orb {
+    width: 160px; height: 160px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #2a2a2a, #0d0d0d);
+    border: 2px solid #2a2a2a;
+    transition: all 0.18s ease;
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+  }
+  .orb.listening {
+    border-color: var(--red);
+    background: radial-gradient(circle at 40% 35%, #4a2024, #2a0a0c);
+    box-shadow: 0 0 40px var(--red);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .orb.thinking {
+    border-color: var(--gold);
+    background: radial-gradient(circle at 40% 35%, #3a3020, #1a1410);
+    box-shadow: 0 0 40px var(--gold);
+    animation: spin 2s linear infinite;
+  }
+  .orb.speaking {
+    border-color: var(--cyan);
+    background: radial-gradient(circle at 40% 35%, #1a3a44, #0a2228);
+    box-shadow: 0 0 40px var(--cyan);
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .state { font-size: 1.1rem; color: var(--dim); margin-bottom: 0.5rem; min-height: 1.5em; }
+  .hint {
+    color: var(--dim); font-size: 0.85rem; margin-bottom: 1.5rem;
+    max-width: 420px; text-align: center; line-height: 1.5;
+  }
+  .hint kbd {
+    display: inline-block; padding: 1px 6px; border: 1px solid #444;
+    border-radius: 3px; background: #1a1a1a; font-family: monospace;
+  }
+
+  .transcript {
+    width: 100%; max-width: 600px;
+    background: #141414; border: 1px solid #222; border-radius: 8px;
+    padding: 1rem; margin-bottom: 1rem;
+    max-height: 50vh; overflow-y: auto;
+    font-size: 0.95rem; line-height: 1.55;
+  }
+  .transcript:empty { display: none; }
+  .turn { margin-bottom: 0.8rem; }
+  .turn:last-child { margin-bottom: 0; }
+  .role-user { color: var(--cyan); font-weight: 600; }
+  .role-gift { color: var(--gold); font-weight: 600; }
+
+  .controls { display: flex; gap: 0.5rem; max-width: 600px; width: 100%; }
+  .btn {
+    flex: 1; padding: 0.6rem; background: #1a1a1a;
+    border: 1px solid #333; color: var(--fg);
+    border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+  }
+  .btn:hover { border-color: #555; }
+  .btn:active { background: #0a0a0a; }
+
+  .voice-pick {
+    margin-top: 1rem; max-width: 600px; width: 100%;
+    color: var(--dim); font-size: 0.85rem;
+    display: flex; gap: 0.5rem; align-items: center;
+  }
+  .voice-pick select {
+    flex: 1; background: #141414; color: var(--fg);
+    border: 1px solid #333; border-radius: 4px; padding: 0.3rem;
+  }
+
+  .error {
+    color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; text-align: center;
+  }
+</style>
+</head>
+<body>
+  <h1>gift — голос</h1>
+  <div class="sub">общение голосом · push-to-talk пробелом</div>
+
+  <div class="orb-wrap">
+    <div id="orb" class="orb"></div>
+  </div>
+  <div id="state" class="state">готов</div>
+  <div class="hint">
+    Зажми <kbd>пробел</kbd> — говори — отпусти.
+    Чтобы прервать ответ — заговори снова.
+  </div>
+
+  <div id="transcript" class="transcript"></div>
+
+  <div class="controls">
+    <button class="btn" id="btnClear">очистить</button>
+    <button class="btn" id="btnStop">остановить речь</button>
+  </div>
+
+  <div class="voice-pick">
+    <span>голос:</span>
+    <select id="voiceSel"></select>
+  </div>
+
+  <div id="error" class="error"></div>
+
+<script>
+(() => {
+  // ── Состояние ──────────────────────────────────────────────────────
+  const STATE = {
+    IDLE:      ['готов',          ''],
+    LISTENING: ['слушаю…',        'listening'],
+    THINKING:  ['думаю…',         'thinking'],
+    SPEAKING:  ['отвечаю',        'speaking'],
+  };
+  const orb = document.getElementById('orb');
+  const stateEl = document.getElementById('state');
+  const transcript = document.getElementById('transcript');
+  const errorEl = document.getElementById('error');
+  const voiceSel = document.getElementById('voiceSel');
+
+  let recognition = null;
+  let recognizing = false;
+  let synth = window.speechSynthesis;
+  let voices = [];
+  let chosenVoice = null;
+  let currentStream = null;        // EventSource
+  let pendingChunks = '';          // буфер ответа для нарезки на предложения
+  let spaceHeld = false;
+
+  function setState(s) {
+    const [label, cls] = STATE[s];
+    stateEl.textContent = label;
+    orb.className = 'orb' + (cls ? ' ' + cls : '');
+  }
+  function showError(msg) {
+    errorEl.textContent = msg;
+    if (msg) setTimeout(() => { errorEl.textContent = ''; }, 5000);
+  }
+  function addTurn(role, text) {
+    const div = document.createElement('div');
+    div.className = 'turn';
+    const r = document.createElement('span');
+    r.className = role === 'user' ? 'role-user' : 'role-gift';
+    r.textContent = role === 'user' ? 'ты:  ' : 'gift: ';
+    div.appendChild(r);
+    const t = document.createElement('span');
+    t.id = role === 'gift' ? 'last-gift' : '';
+    t.textContent = text;
+    div.appendChild(t);
+    transcript.appendChild(div);
+    transcript.scrollTop = transcript.scrollHeight;
+    return t;
+  }
+  function appendToLastGift(text) {
+    const last = document.getElementById('last-gift');
+    if (last) {
+      last.textContent += text;
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+  }
+
+  // ── Голоса для TTS ─────────────────────────────────────────────────
+  function loadVoices() {
+    voices = synth.getVoices();
+    // Только русские, чтобы не мешать список
+    const ru = voices.filter(v => v.lang.toLowerCase().startsWith('ru'));
+    const list = ru.length ? ru : voices;
+    voiceSel.innerHTML = '';
+    for (const v of list) {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSel.appendChild(opt);
+    }
+    // Предпочесть русский Microsoft Irina если есть
+    const irina = list.find(v => /irina|natasha|pavel/i.test(v.name));
+    chosenVoice = irina || list[0] || null;
+    if (chosenVoice) voiceSel.value = chosenVoice.name;
+  }
+  voiceSel.addEventListener('change', () => {
+    chosenVoice = voices.find(v => v.name === voiceSel.value) || null;
+  });
+  loadVoices();
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  // ── TTS со стримингом по предложениям ──────────────────────────────
+  // sentenceQueue заполняется по мере поступления ответа; speakNext
+  // вытягивает по одному предложению — speechSynthesis читает их по
+  // очереди, между ними ~50мс паузы.
+  const sentenceQueue = [];
+  let speaking = false;
+
+  function flushSentences(buffer, isFinal) {
+    // Режем по концу предложения: . ! ? … ;
+    const re = /[^.!?…;]+[.!?…;]+(?=\s|$)/g;
+    const sentences = buffer.match(re) || [];
+    const consumed = sentences.join('');
+    const rest = buffer.slice(consumed.length);
+    for (const s of sentences) sentenceQueue.push(s.trim());
+    // в конце ответа — дочитываем хвост даже без терминатора
+    if (isFinal && rest.trim()) {
+      sentenceQueue.push(rest.trim());
+      return '';
+    }
+    return rest;
+  }
+
+  function speakNext() {
+    if (speaking) return;
+    const s = sentenceQueue.shift();
+    if (!s) {
+      if (currentStream === null) setState('IDLE');
+      return;
+    }
+    speaking = true;
+    setState('SPEAKING');
+    const utt = new SpeechSynthesisUtterance(s);
+    if (chosenVoice) utt.voice = chosenVoice;
+    utt.lang = chosenVoice?.lang || 'ru-RU';
+    utt.rate = 1.05;
+    utt.pitch = 1.0;
+    utt.onend = () => { speaking = false; speakNext(); };
+    utt.onerror = () => { speaking = false; speakNext(); };
+    synth.speak(utt);
+  }
+
+  function stopSpeech() {
+    sentenceQueue.length = 0;
+    speaking = false;
+    if (synth.speaking || synth.pending) synth.cancel();
+  }
+
+  // ── SSE стрим ответа ───────────────────────────────────────────────
+  function streamAnswer(question) {
+    if (currentStream) { currentStream.close(); currentStream = null; }
+    pendingChunks = '';
+    addTurn('gift', '');
+    setState('THINKING');
+
+    const url = '/api/chat/stream?q=' + encodeURIComponent(question);
+    const es = new EventSource(url);
+    currentStream = es;
+
+    es.addEventListener('token', e => {
+      const t = JSON.parse(e.data);
+      appendToLastGift(t);
+      pendingChunks += t;
+      pendingChunks = flushSentences(pendingChunks, false);
+      speakNext();
+    });
+    es.addEventListener('voice', e => {
+      // Сервер может слать целые реплики собора — приклеиваем как один блок
+      const v = JSON.parse(e.data);
+      const block = (v.name ? v.name + ': ' : '') + (v.text || '');
+      appendToLastGift(block + '\n');
+      pendingChunks += block + ' ';
+      pendingChunks = flushSentences(pendingChunks, false);
+      speakNext();
+    });
+    es.addEventListener('done', () => {
+      // дочитаем хвост
+      pendingChunks = flushSentences(pendingChunks, true);
+      speakNext();
+      es.close();
+      currentStream = null;
+      if (sentenceQueue.length === 0 && !speaking) setState('IDLE');
+    });
+    es.addEventListener('error', e => {
+      es.close();
+      currentStream = null;
+      showError('связь оборвалась');
+      setState('IDLE');
+    });
+  }
+
+  // ── Распознавание речи ─────────────────────────────────────────────
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Rec) {
+    showError('браузер не поддерживает голосовой ввод. нужен Chrome или Edge');
+  } else {
+    recognition = new Rec();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => { recognizing = true; setState('LISTENING'); };
+    recognition.onresult = e => {
+      const text = e.results[0]?.[0]?.transcript || '';
+      if (!text.trim()) return;
+      addTurn('user', text);
+      streamAnswer(text);
+    };
+    recognition.onerror = e => {
+      recognizing = false;
+      if (e.error === 'no-speech') return setState('IDLE');
+      showError('ошибка распознавания: ' + e.error);
+      setState('IDLE');
+    };
+    recognition.onend = () => {
+      recognizing = false;
+      if (currentStream === null && sentenceQueue.length === 0 && !speaking) {
+        setState('IDLE');
+      }
+    };
+  }
+
+  function startListening() {
+    if (!recognition || recognizing) return;
+    // Прерывание текущего ответа
+    stopSpeech();
+    if (currentStream) { currentStream.close(); currentStream = null; }
+    try { recognition.start(); } catch {}
+  }
+  function stopListening() {
+    if (recognition && recognizing) {
+      try { recognition.stop(); } catch {}
+    }
+  }
+
+  // ── Push-to-talk: пробел ───────────────────────────────────────────
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'Space' || e.repeat) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    spaceHeld = true;
+    startListening();
+  });
+  window.addEventListener('keyup', e => {
+    if (e.code !== 'Space' || !spaceHeld) return;
+    spaceHeld = false;
+    e.preventDefault();
+    stopListening();
+  });
+
+  // ── Тач-эквивалент: тап по шару — toggle прослушки ─────────────────
+  orb.addEventListener('click', () => {
+    if (recognizing) stopListening();
+    else startListening();
+  });
+
+  // ── Кнопки ─────────────────────────────────────────────────────────
+  document.getElementById('btnClear').addEventListener('click', () => {
+    transcript.innerHTML = '';
+    stopSpeech();
+  });
+  document.getElementById('btnStop').addEventListener('click', stopSpeech);
+
+  setState('IDLE');
+})();
+</script>
+</body>
+</html>

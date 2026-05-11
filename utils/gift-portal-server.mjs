@@ -196,6 +196,10 @@ const server = createServer(async (req, res) => {
   if (url.startsWith('/api/chat/stream')) {
     return streamChat(req, res);
   }
+  // Голосовой режим — push-to-talk + Web Speech API в браузере
+  if (url === '/voice' || url === '/voice.html') {
+    return serveHTML(res, join(ROOT, 'public', 'voice.html'));
+  }
   // FPGA visualizers
   if (url === '/field-toroid.html') {
     return serveHTML(res, join(ROOT, '../fpga/simulator/field-toroid.html'));
@@ -1295,6 +1299,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  /api/acts      — лента актов`);
   console.log(`  /api/anamnesis — сервер памяти`);
   console.log(`  /sic           — дашборд СИЦ`);
+  console.log(`  /voice         — голосовой режим (push-to-talk)`);
   console.log(`  /api/sic/list  — список СИЦ-сессий`);
   console.log(`  /field-toroid.html — поле Лосинца\n`);
 });
