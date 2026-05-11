@@ -580,7 +580,11 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
 
       const child = spawn('node', [resolve(ROOT, 'utils/gift-portal-server.mjs')], {
         detached: true, stdio: 'ignore', cwd: ROOT,
-        env: { ...cleanEnv(), PORT: port },
+        // PROXY_ORIG восстанавливает HTTP_PROXY/HTTPS_PROXY — нужны для
+        // claude --print, который polyphony-orchestrator вызывает изнутри.
+        // NO_PROXY=localhost уже выставлен, поэтому in-process fetch к
+        // nous на 8089 не пойдёт через proxy.
+        env: { ...cleanEnv(), ...PROXY_ORIG, PORT: port },
       });
       child.unref();
       writeFileSync(pidFile, String(child.pid));

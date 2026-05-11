@@ -292,6 +292,8 @@
     const es = new EventSource(url);
     currentStream = es;
     let gotAnything = false;
+    let voicesSpoken = 0;
+    let voicesSilent = 0;
 
     // Таймаут: если за 25 секунд не пришло ни одного события — закрываем.
     const timeout = setTimeout(() => {
@@ -313,8 +315,18 @@
       let v;
       try { v = JSON.parse(e.data); } catch { return; }
       const text = v.content || v.text || v.logos || '';
-      if (!text) return;
       const persona = v.persona || '';
+      // Молчание голоса (silenceReason / [молчит: ...]) — НЕ озвучиваем,
+      // показываем коротко в transcript, серым
+      const isSilence = v.silent || v.silenceReason ||
+                        /^\s*\[молчит[:\s]/.test(text);
+      if (isSilence) {
+        voicesSilent++;
+        appendToLastGift(`(${persona || 'голос'} молчит)\n`);
+        return;
+      }
+      if (!text) return;
+      voicesSpoken++;
       const block = (persona ? `[${persona}] ` : '') + text + '\n\n';
       appendToLastGift(block);
       pendingChunks += text + '. ';
@@ -335,6 +347,12 @@
 
     es.addEventListener('done', () => {
       clearTimeout(timeout);
+      // Если ВСЕ голоса молчат — озвучить честное «не получилось»
+      if (voicesSpoken === 0 && voicesSilent > 0) {
+        const msg = 'голоса собора молчат. возможно claude недоступен';
+        appendToLastGift(`\n${msg}\n`);
+        pendingChunks += msg;
+      }
       pendingChunks = flushSentences(pendingChunks, true);
       speakNext();
       es.close();
