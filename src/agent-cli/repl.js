@@ -197,8 +197,39 @@ function buildAnamnesisSnapshot() {
   return lines.length > 1 ? lines.join('\n') : null;
 }
 
+// ── автопредложение продолжить недавнюю сессию ──────────────────────────
+// Если пользователь не указал --resume явно, но есть свежая (≤6 часов)
+// сессия с непустой историей — спрашиваем хочет ли продолжить.
+async function maybeAutoResume(opts) {
+  if (opts.resumeId) return null;          // явный --resume уже выбран
+  if (opts.noAutoResume) return null;
+  if (!process.stdin.isTTY) return null;   // в пайпе/скрипте не спрашиваем
+  const recent = listSessions(1);
+  if (!recent.length) return null;
+  const last = recent[0];
+  if (!last.turns || last.turns === 0) return null;
+  const ageMs = Date.now() - new Date(last.updatedAt).getTime();
+  if (ageMs > 6 * 60 * 60 * 1000) return null;   // старше 6 часов — не предлагаем
+  const ageMin = Math.round(ageMs / 60000);
+  const ageStr = ageMin < 60 ? `${ageMin} мин назад` : `${Math.round(ageMin/60)} ч назад`;
+  const title = last.title ? ` — «${last.title}»` : '';
+  process.stdout.write('\n');
+  process.stdout.write(`  ${c('gold', '⤺')}  прошлая сессия${title} (${last.turns} сообщ., ${ageStr})\n`);
+  process.stdout.write(`  ${c('dim', 'продолжить? [Y/n] ')}`);
+  const answer = await new Promise(res => {
+    process.stdin.setEncoding('utf8');
+    process.stdin.once('data', d => res(String(d).trim().toLowerCase()));
+  });
+  if (answer === '' || answer === 'y' || answer === 'д' || answer === 'да') return last.id;
+  return null;
+}
+
 // ── main ────────────────────────────────────────────────────────────────
 export async function runGiftRepl(opts = {}) {
+  // авто-resume срабатывает только без явного --resume
+  const autoResumeId = await maybeAutoResume(opts);
+  if (autoResumeId && !opts.resumeId) opts = { ...opts, resumeId: autoResumeId };
+
   const session = opts.resumeId
     ? loadSession(opts.resumeId === 'last' ? (lastSessionId() ?? throwIf('нет сессий')) : opts.resumeId)
     : { id: newSessionId(), title: '', startedAt: new Date().toISOString(), messages: [] };
@@ -686,8 +717,8 @@ function printBanner(session, opts) {
     version = `v${pkg.version || '0'}`;
   } catch {}
 
-  // Snapshot для подзаголовка
-  let metric = '';
+  // Snapshot: лица, акты, главная нить, энергия сети
+  let metric = '', topThread = '', energy = '';
   try {
     const snapPath = resolve(ROOT, 'data/sacred-history-W.json');
     if (existsSync(snapPath)) {
@@ -695,6 +726,28 @@ function printBanner(session, opts) {
       const persons = (W.persons || []).length;
       const acts    = W.acts ?? W.actsCount ?? '?';
       metric = `${persons} лиц · ${acts} актов`;
+      // Главная нить — самая тяжёлая из W.edges (если есть)
+      try {
+        const edges = W.edges || W.W || null;
+        if (edges && typeof edges === 'object') {
+          let best = null;
+          for (const fromId of Object.keys(edges)) {
+            const row = edges[fromId];
+            if (!row) continue;
+            for (const toId of Object.keys(row)) {
+              const w = Number(row[toId]) || 0;
+              if (!best || w > best.w) best = { from: fromId, to: toId, w };
+            }
+          }
+          if (best && best.w > 1) {
+            topThread = `${best.from} → ${best.to} (вес ${best.w.toFixed(0)})`;
+          }
+        }
+      } catch {}
+      if (typeof W.networkEnergy === 'number') {
+        const sign = W.networkEnergy < 0 ? '−' : '+';
+        energy = `энергия сети: ${sign}${Math.abs(W.networkEnergy).toFixed(0)}`;
+      }
     }
   } catch {}
   let treasureN = '';
@@ -702,8 +755,45 @@ function printBanner(session, opts) {
     const lcmPath = resolve(ROOT, 'data/lcm.db');
     if (existsSync(lcmPath)) {
       const store = new LcmStore(lcmPath);
-      treasureN = ` · ${store.stats().total} в сокровищнице`;
+      treasureN = `${store.stats().total} в сокровищнице`;
       store.close();
+    }
+  } catch {}
+
+  // Шина: непрочитанные для текущей сессии
+  let inboxN = '';
+  try {
+    const myId = process.env.GIFT_CLAUDE_ID || 'gift-claude';
+    const busLog = resolve(ROOT, 'data/koinon-bus.jsonl');
+    const posFile = resolve(ROOT, 'data/koinon-pos.json');
+    if (existsSync(busLog) && existsSync(posFile)) {
+      const positions = JSON.parse(readFileSync(posFile, 'utf8'));
+      const myPos = positions[myId] ?? 0;
+      const allBytes = statSync(busLog).size;
+      if (allBytes > myPos) {
+        // грубая оценка: сколько строк после позиции
+        const tail = readFileSync(busLog, 'utf8').slice(myPos);
+        const n = tail.split('\n').filter(l => l.trim()).length;
+        if (n > 0) inboxN = `${n} непрочитанных в шине`;
+      }
+    }
+  } catch {}
+
+  // Цели в работе
+  let goalsN = '';
+  try {
+    const goalsDir = resolve(ROOT, 'data/goals');
+    if (existsSync(goalsDir)) {
+      const files = readdirSync(goalsDir).filter(f => f.endsWith('.json'));
+      let active = 0, done = 0;
+      for (const f of files) {
+        try {
+          const g = JSON.parse(readFileSync(resolve(goalsDir, f), 'utf8'));
+          if (g.status === 'running' || g.status === 'paused' || g.status === 'pending') active++;
+          if (g.status === 'done') done++;
+        } catch {}
+      }
+      if (active) goalsN = `${active} ${active === 1 ? 'цель' : 'целей'} в работе`;
     }
   } catch {}
 
@@ -714,13 +804,23 @@ function printBanner(session, opts) {
   console.log('     ' + c('dim', 'Κοινόν τοῦ Νοῦ ') + c('dim', '(общее ума) — собор лиц в матрице W'));
   console.log();
   console.log('  ' + c('cyan', '─'.repeat(60)));
-  if (metric || treasureN) {
-    console.log('  ' + c('dim', metric + treasureN));
-  }
+  // Состояние общины — главное, что видит человек на входе
+  if (metric) console.log('  ' + c('dim', metric));
+  if (topThread) console.log('  ' + c('dim', 'главная нить: ') + c('bold', topThread));
+  if (energy)    console.log('  ' + c('dim', energy));
+  const extras = [treasureN, inboxN, goalsN].filter(Boolean);
+  if (extras.length) console.log('  ' + c('dim', extras.join(' · ')));
+  console.log();
   console.log('  ' + c('dim', `сессия: ${session.id}`));
   if (session.title) console.log('  ' + c('dim', `title:  `) + c('bold', session.title));
-  if (opts.resumeId)  console.log('  ' + c('dim', `resumed: ${session.messages.length} сообщений в истории`));
-  console.log('  ' + c('dim', 'наберите «/» — всплывёт меню команд  ·  Ctrl+D — выход'));
+  if (opts.resumeId) console.log('  ' + c('dim', `продолжаем: ${session.messages.length} сообщений в истории`));
+  // Подсказка для тех, кто впервые
+  if (!opts.resumeId && (!session.messages || session.messages.length === 0)) {
+    console.log();
+    console.log('  ' + c('dim', 'просто говори со мной обычным языком — я сам зову нужные инструменты.'));
+    console.log('  ' + c('dim', '«покажи матрицу», «закрой #72», «что у нас сейчас», «нужно три мнения насчёт X»'));
+  }
+  console.log('  ' + c('dim', 'наберите «/» — меню команд  ·  Ctrl+D — выход'));
   console.log('  ' + c('cyan', '─'.repeat(60)));
 }
 
