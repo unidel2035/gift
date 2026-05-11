@@ -85,6 +85,17 @@
   .role-user { color: var(--cyan); font-weight: 600; }
   .role-gift { color: var(--gold); font-weight: 600; }
 
+  .ptt {
+    width: 100%; max-width: 600px; padding: 1rem;
+    background: #2a1a1a; border: 2px solid #663033;
+    color: #ffaaaa; border-radius: 8px; cursor: pointer;
+    font-size: 1.05rem; font-weight: 500; margin-bottom: 1rem;
+    user-select: none; touch-action: none;
+  }
+  .ptt:hover { border-color: var(--red); }
+  .ptt.active { background: #4a2024; border-color: var(--red); color: #fff; }
+  .ptt .key { color: var(--dim); font-size: 0.85rem; margin-left: 0.4rem; font-weight: 400; }
+
   .controls { display: flex; gap: 0.5rem; max-width: 600px; width: 100%; }
   .btn {
     flex: 1; padding: 0.6rem; background: #1a1a1a;
@@ -121,6 +132,11 @@
     Зажми <kbd>пробел</kbd> — говори — отпусти.
     Чтобы прервать ответ — заговори снова.
   </div>
+
+  <button id="ptt" class="ptt">
+    🎙  удерживай чтобы говорить
+    <span class="key">или зажми пробел</span>
+  </button>
 
   <div id="transcript" class="transcript"></div>
 
@@ -354,19 +370,49 @@
   }
 
   // ── Push-to-talk: пробел ───────────────────────────────────────────
-  window.addEventListener('keydown', e => {
-    if (e.code !== 'Space' || e.repeat) return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  // capture-фаза + preventDefault до того, как пробел дойдёт до любого
+  // элемента (кнопка/селект). Иначе пробел может вылиться в клик кнопки
+  // или открытие селекта и попадёт в фокус как пробел.
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space') return;
     e.preventDefault();
+    e.stopPropagation();
+    if (e.repeat || spaceHeld) return;
     spaceHeld = true;
+    pttBtn.classList.add('active');
     startListening();
-  });
-  window.addEventListener('keyup', e => {
-    if (e.code !== 'Space' || !spaceHeld) return;
-    spaceHeld = false;
+  }, true);
+  document.addEventListener('keyup', e => {
+    if (e.code !== 'Space') return;
     e.preventDefault();
+    e.stopPropagation();
+    if (!spaceHeld) return;
+    spaceHeld = false;
+    pttBtn.classList.remove('active');
     stopListening();
+  }, true);
+
+  // ── Большая push-to-talk кнопка (мышь / тач, фолбэк к пробелу) ─────
+  const pttBtn = document.getElementById('ptt');
+  function pttDown(e) {
+    e.preventDefault();
+    if (recognizing) return;
+    pttBtn.classList.add('active');
+    startListening();
+  }
+  function pttUp(e) {
+    e.preventDefault();
+    pttBtn.classList.remove('active');
+    stopListening();
+  }
+  pttBtn.addEventListener('mousedown', pttDown);
+  pttBtn.addEventListener('mouseup', pttUp);
+  pttBtn.addEventListener('mouseleave', e => {
+    if (recognizing) { pttBtn.classList.remove('active'); stopListening(); }
   });
+  pttBtn.addEventListener('touchstart', pttDown, { passive: false });
+  pttBtn.addEventListener('touchend', pttUp, { passive: false });
+  pttBtn.addEventListener('touchcancel', pttUp);
 
   // ── Тач-эквивалент: тап по шару — toggle прослушки ─────────────────
   orb.addEventListener('click', () => {
