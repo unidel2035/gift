@@ -27,7 +27,11 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { KoinonBus } from '../src/koinon/KoinonBus.js';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// Когда хук вызывается из другого проекта (plm, fund, dronedoc, ...) —
+// bus-файл всё равно один общий, лежит в gift-репо. Можно переопределить
+// через env KOINON_BUS_ROOT.
+const ROOT = process.env.KOINON_BUS_ROOT
+  || resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SUBSCRIBER = process.env.GIFT_CLAUDE_ID || 'gift-claude';
 
 const bus = new KoinonBus({ root: ROOT });
