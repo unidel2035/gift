@@ -241,7 +241,7 @@ export async function runGiftRepl(opts = {}) {
   // Иконка собора: четыре луча — четыре сферы (земля/вода/огонь/воздух),
   // в центре ✦ — лицо в κοινωνία (общении). Минималистично, как
   // ✻ у Claude Code.
-  printBanner(session, opts);
+  await printBanner(session, opts);
   console.log();
 
   // inbox of user messages waiting to be sent to SDK
@@ -709,7 +709,7 @@ const GIFT_LOGO = [
   '   ╚═════╝ ╚═╝╚═╝        ╚═╝   ',
 ];
 
-function printBanner(session, opts) {
+async function printBanner(session, opts) {
   // Версия
   let version = '';
   try {
@@ -723,31 +723,39 @@ function printBanner(session, opts) {
     const snapPath = resolve(ROOT, 'data/sacred-history-W.json');
     if (existsSync(snapPath)) {
       const W = JSON.parse(readFileSync(snapPath, 'utf8'));
-      const persons = (W.persons || []).length;
+      const personsArr = W.persons || [];
       const acts    = W.acts ?? W.actsCount ?? '?';
-      metric = `${persons} лиц · ${acts} актов`;
-      // Главная нить — самая тяжёлая из W.edges (если есть)
+      metric = `${personsArr.length} лиц · ${acts} актов`;
+      // W.W — 2D массив весов, индексы соответствуют personsArr
       try {
-        const edges = W.edges || W.W || null;
-        if (edges && typeof edges === 'object') {
+        const matrix = W.W;
+        if (Array.isArray(matrix) && Array.isArray(matrix[0])) {
           let best = null;
-          for (const fromId of Object.keys(edges)) {
-            const row = edges[fromId];
-            if (!row) continue;
-            for (const toId of Object.keys(row)) {
-              const w = Number(row[toId]) || 0;
-              if (!best || w > best.w) best = { from: fromId, to: toId, w };
+          let sum = 0;
+          for (let i = 0; i < matrix.length; i++) {
+            for (let j = 0; j < matrix[i].length; j++) {
+              const w = Number(matrix[i][j]) || 0;
+              sum += w;
+              if (!best || w > best.w) best = { i, j, w };
             }
           }
-          if (best && best.w > 1) {
-            topThread = `${best.from} → ${best.to} (вес ${best.w.toFixed(0)})`;
+          if (best && best.w > 1 && personsArr[best.i] && personsArr[best.j]) {
+            topThread = `${personsArr[best.i]} → ${personsArr[best.j]} (вес ${best.w.toFixed(0)})`;
           }
         }
       } catch {}
-      if (typeof W.networkEnergy === 'number') {
-        const sign = W.networkEnergy < 0 ? '−' : '+';
-        energy = `энергия сети: ${sign}${Math.abs(W.networkEnergy).toFixed(0)}`;
-      }
+      // Энергия сети — спросить у nous с коротким таймаутом; если нет — не показывать
+      try {
+        const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+        const r = await fetch(`${NOUS}/summary`, { signal: AbortSignal.timeout(400) });
+        if (r.ok) {
+          const data = await r.json();
+          if (typeof data.networkEnergy === 'number') {
+            const sign = data.networkEnergy < 0 ? '−' : '+';
+            energy = `энергия сети: ${sign}${Math.abs(data.networkEnergy).toFixed(0)}`;
+          }
+        }
+      } catch {}
     }
   } catch {}
   let treasureN = '';
