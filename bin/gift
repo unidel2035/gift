@@ -47,6 +47,27 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// ── Autodetect GIFT_CLAUDE_ID по pwd ────────────────────────────────────
+// Если уже задан в env — оставляем. Иначе определяем по тому, в каком
+// проекте семьи gift находимся. Это нужно чтобы MCP-tools шины
+// koinon_inbox/broadcast по умолчанию работали с правильным subscriberId.
+if (!process.env.GIFT_CLAUDE_ID) {
+  const PROJECT_ID_MAP = [
+    ['/home/unidel/plm',          'plm-claude'],
+    ['/home/unidel/fund',         'fund-claude'],
+    ['/home/unidel/dronedoc2026', 'drone-claude'],
+    ['/home/unidel/istok',        'istok-claude'],
+    ['/home/unidel/gift',         'gift-claude'],
+  ];
+  const pwd = process.cwd();
+  for (const [prefix, id] of PROJECT_ID_MAP) {
+    if (pwd === prefix || pwd.startsWith(prefix + '/')) {
+      process.env.GIFT_CLAUDE_ID = id;
+      break;
+    }
+  }
+}
+
 // ── WSL/Windows proxy fix ───────────────────────────────────────────────
 // В WSL2 process.env подхватывает Windows system proxy (172.23.x.x:10809),
 // которого нет в NAT-режиме. Это ломает три вещи:

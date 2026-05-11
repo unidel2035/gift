@@ -340,6 +340,10 @@ function bus() {
   return _bus;
 }
 
+// Идентификатор текущей сессии — берётся из env GIFT_CLAUDE_ID (его выставляет
+// bin/gift autodetect'ом по pwd). По умолчанию gift-claude.
+const SESSION_ID = () => process.env.GIFT_CLAUDE_ID || 'gift-claude';
+
 const koinonBroadcast = tool(
   'koinon_broadcast',
   'Κοινόν τοῦ Νοῦ (общее ума): отправить сообщение другой Claude-сессии или ' +
@@ -352,13 +356,13 @@ const koinonBroadcast = tool(
     to:      z.string().default('*').describe('адресат: имя сессии или "*" для broadcast'),
     topic:   z.enum(KOINON_TOPICS).default('reflection')
               .describe('жанр: reflection/question/answer/announce/sync/covenant/doxologia/concern'),
-    from:    z.string().default('gift-claude')
-              .describe('идентификатор отправителя (kebab-case, project-claude)'),
+    from:    z.string().optional()
+              .describe('идентификатор отправителя; по умолчанию из env GIFT_CLAUDE_ID'),
     weight:  z.number().min(0.5).max(10).optional()
               .describe('вес акта в W-матрице; по умолчанию подбирается по topic'),
   },
   async ({ message, to, topic, from, weight }) => {
-    const entry = bus().publish({ from, to, topic, message, weight });
+    const entry = bus().publish({ from: from || SESSION_ID(), to, topic, message, weight });
     return txt(JSON.stringify({
       ok: true, id: entry.id, ts: entry.ts, from: entry.from, to: entry.to, topic: entry.topic,
     }, null, 2));
@@ -371,12 +375,13 @@ const koinonInbox = tool(
   'для конкретного subscriber-а (drain-режим: после чтения offset обновляется, ' +
   'те же сообщения второй раз не вернутся).',
   {
-    subscriberId: z.string().min(1)
-                    .describe('идентификатор сессии-читателя (например gift-claude)'),
+    subscriberId: z.string().optional()
+                    .describe('идентификатор сессии-читателя; по умолчанию из env GIFT_CLAUDE_ID'),
     drain:        z.boolean().default(true)
                     .describe('true: обновить offset; false: peek без перемотки'),
   },
   async ({ subscriberId, drain }) => {
+    subscriberId = subscriberId || SESSION_ID();
     const b = bus();
     if (drain) {
       const messages = b.drainFor(subscriberId);
