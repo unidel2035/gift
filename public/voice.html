@@ -209,25 +209,45 @@
   }
 
   // ── Голоса для TTS ─────────────────────────────────────────────────
+  // Edge neural voices — нейросетевые, заметно человечнее Web Speech.
+  // Запрашиваются через /api/tts. Если 503 — фолбэк на Web Speech.
+  const EDGE_VOICES = [
+    { id: 'edge:ru-RU-SvetlanaNeural', label: '🌟 Светлана (Edge нейро, ж)' },
+    { id: 'edge:ru-RU-DariyaNeural',   label: '🌟 Дария (Edge нейро, ж)' },
+    { id: 'edge:ru-RU-DmitryNeural',   label: '🌟 Дмитрий (Edge нейро, м)' },
+  ];
+  let chosenVoiceId = 'edge:ru-RU-SvetlanaNeural';
+
   function loadVoices() {
     voices = synth.getVoices();
-    // Только русские, чтобы не мешать список
+    voiceSel.innerHTML = '';
+    // Сначала Edge — это лучший вариант
+    for (const v of EDGE_VOICES) {
+      const opt = document.createElement('option');
+      opt.value = v.id; opt.textContent = v.label;
+      voiceSel.appendChild(opt);
+    }
+    // Потом — нативные Web Speech (фолбэк)
     const ru = voices.filter(v => v.lang.toLowerCase().startsWith('ru'));
     const list = ru.length ? ru : voices;
-    voiceSel.innerHTML = '';
+    if (list.length) {
+      const sep = document.createElement('option');
+      sep.disabled = true; sep.textContent = '── системные ──';
+      voiceSel.appendChild(sep);
+    }
     for (const v of list) {
       const opt = document.createElement('option');
-      opt.value = v.name;
+      opt.value = 'native:' + v.name;
       opt.textContent = `${v.name} (${v.lang})`;
       voiceSel.appendChild(opt);
     }
-    // Предпочесть русский Microsoft Irina если есть
-    const irina = list.find(v => /irina|natasha|pavel/i.test(v.name));
-    chosenVoice = irina || list[0] || null;
-    if (chosenVoice) voiceSel.value = chosenVoice.name;
+    voiceSel.value = chosenVoiceId;
   }
   voiceSel.addEventListener('change', () => {
-    chosenVoice = voices.find(v => v.name === voiceSel.value) || null;
+    chosenVoiceId = voiceSel.value;
+    chosenVoice = chosenVoiceId.startsWith('native:')
+      ? voices.find(v => v.name === chosenVoiceId.slice(7))
+      : null;
   });
   loadVoices();
   if (typeof speechSynthesis !== 'undefined') {
@@ -256,6 +276,40 @@
     return rest;
   }
 
+  let currentAudio = null;
+  let edgeFailedOnce = false;  // если Edge упал — переключаемся на Web Speech
+
+  function speakViaWebSpeech(s, onEnd) {
+    const utt = new SpeechSynthesisUtterance(s);
+    if (chosenVoice) utt.voice = chosenVoice;
+    utt.lang = chosenVoice?.lang || 'ru-RU';
+    utt.rate = 1.05;
+    utt.pitch = 1.0;
+    utt.onend = onEnd;
+    utt.onerror = onEnd;
+    synth.speak(utt);
+  }
+
+  function speakViaEdge(s, voiceName, onEnd) {
+    const url = '/api/tts?voice=' + encodeURIComponent(voiceName) +
+                '&text=' + encodeURIComponent(s);
+    const audio = new Audio(url);
+    currentAudio = audio;
+    audio.onended = onEnd;
+    audio.onerror = () => {
+      edgeFailedOnce = true;
+      showError('Edge TTS недоступен — переключился на системный голос');
+      currentAudio = null;
+      // фолбэк на Web Speech прямо для этой реплики
+      speakViaWebSpeech(s, onEnd);
+    };
+    audio.play().catch(() => {
+      edgeFailedOnce = true;
+      currentAudio = null;
+      speakViaWebSpeech(s, onEnd);
+    });
+  }
+
   function speakNext() {
     if (speaking) return;
     const s = sentenceQueue.shift();
@@ -265,20 +319,25 @@
     }
     speaking = true;
     setState('SPEAKING');
-    const utt = new SpeechSynthesisUtterance(s);
-    if (chosenVoice) utt.voice = chosenVoice;
-    utt.lang = chosenVoice?.lang || 'ru-RU';
-    utt.rate = 1.05;
-    utt.pitch = 1.0;
-    utt.onend = () => { speaking = false; speakNext(); };
-    utt.onerror = () => { speaking = false; speakNext(); };
-    synth.speak(utt);
+    const onEnd = () => { speaking = false; currentAudio = null; speakNext(); };
+
+    const useEdge = chosenVoiceId.startsWith('edge:') && !edgeFailedOnce;
+    if (useEdge) {
+      const voiceName = chosenVoiceId.slice(5);
+      speakViaEdge(s, voiceName, onEnd);
+    } else {
+      speakViaWebSpeech(s, onEnd);
+    }
   }
 
   function stopSpeech() {
     sentenceQueue.length = 0;
     speaking = false;
     if (synth.speaking || synth.pending) synth.cancel();
+    if (currentAudio) {
+      try { currentAudio.pause(); currentAudio.src = ''; } catch {}
+      currentAudio = null;
+    }
   }
 
   // ── SSE стрим ответа ───────────────────────────────────────────────

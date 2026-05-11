@@ -200,6 +200,11 @@ const server = createServer(async (req, res) => {
   if (url === '/voice' || url === '/voice.html') {
     return serveHTML(res, join(ROOT, 'public', 'voice.html'));
   }
+  // Edge TTS: бесплатные нейро-голоса Microsoft Azure
+  // /api/tts?text=...&voice=ru-RU-SvetlanaNeural → audio/mpeg
+  if (url.startsWith('/api/tts')) {
+    return streamEdgeTts(req, res);
+  }
   // FPGA visualizers
   if (url === '/field-toroid.html') {
     return serveHTML(res, join(ROOT, '../fpga/simulator/field-toroid.html'));
@@ -1290,6 +1295,36 @@ function serveKingdomAPI(res) {
   } catch {}
 
   return serveJSON_data(res, out);
+}
+
+// ── Edge TTS: Microsoft Azure нейро-голоса (бесплатно, без ключа) ─────────
+// На фронте: fetch('/api/tts?text=...&voice=ru-RU-SvetlanaNeural') → audio/mpeg.
+// При ошибке отдаём 503, чтобы фронт упал в Web Speech API.
+async function streamEdgeTts(req, res) {
+  const u = new NodeURL(req.url, `http://${req.headers.host}`);
+  const text = u.searchParams.get('text') || '';
+  const voice = u.searchParams.get('voice') || 'ru-RU-SvetlanaNeural';
+  if (!text.trim()) { res.writeHead(400); return res.end('text required'); }
+  if (text.length > 2000) { res.writeHead(413); return res.end('too long'); }
+  try {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(text);
+    res.writeHead(200, {
+      'Content-Type': 'audio/mpeg',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+    });
+    audioStream.on('data', c => res.write(c));
+    audioStream.on('end',  () => res.end());
+    audioStream.on('error', e => {
+      try { res.end(); } catch {}
+    });
+  } catch (e) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' });
+    res.end('tts unavailable: ' + e.message);
+  }
 }
 
 server.listen(PORT, '0.0.0.0', () => {
