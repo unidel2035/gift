@@ -261,16 +261,37 @@
   const sentenceQueue = [];
   let speaking = false;
 
+  // Markdown и служебные символы Edge TTS читает буквально — звёздочка,
+  // нижнее подчёркивание, бэктики. Убираем перед синтезом.
+  function cleanForTts(s) {
+    return s
+      .replace(/\*\*([^*]+)\*\*/g, '$1')          // **жирный**
+      .replace(/\*([^*]+)\*/g, '$1')               // *курсив*
+      .replace(/__([^_]+)__/g, '$1')               // __подчёркивание__
+      .replace(/`([^`]+)`/g, '$1')                 // `inline-код`
+      .replace(/```[\s\S]*?```/g, '')              // блоки кода — не озвучиваем
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')     // [текст](url) → текст
+      .replace(/^\s*\[[^\]]+\]\s*/g, '')           // [Старший] в начале реплики
+      .replace(/[*_`#~|\\<>]/g, '')                // одиночные служебные символы
+      .replace(/—/g, ' — ')                        // тире с пробелами
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function flushSentences(buffer, isFinal) {
     // Режем по концу предложения: . ! ? … ;
     const re = /[^.!?…;]+[.!?…;]+(?=\s|$)/g;
     const sentences = buffer.match(re) || [];
     const consumed = sentences.join('');
     const rest = buffer.slice(consumed.length);
-    for (const s of sentences) sentenceQueue.push(s.trim());
+    for (const s of sentences) {
+      const cleaned = cleanForTts(s);
+      if (cleaned) sentenceQueue.push(cleaned);
+    }
     // в конце ответа — дочитываем хвост даже без терминатора
     if (isFinal && rest.trim()) {
-      sentenceQueue.push(rest.trim());
+      const cleaned = cleanForTts(rest);
+      if (cleaned) sentenceQueue.push(cleaned);
       return '';
     }
     return rest;
