@@ -1297,15 +1297,47 @@ function serveKingdomAPI(res) {
   return serveJSON_data(res, out);
 }
 
-// ── Edge TTS: Microsoft Azure нейро-голоса (бесплатно, без ключа) ─────────
-// На фронте: fetch('/api/tts?text=...&voice=ru-RU-SvetlanaNeural') → audio/mpeg.
-// При ошибке отдаём 503, чтобы фронт упал в Web Speech API.
+// ── TTS прокси: silero:<voice> → локальный сервер, остальное → Edge ───────
+// На фронте: fetch('/api/tts?text=...&voice=silero:baya' | 'ru-RU-...') → audio
+// При ошибке отдаём 503, фронт фолбэкается на Web Speech API.
 async function streamEdgeTts(req, res) {
   const u = new NodeURL(req.url, `http://${req.headers.host}`);
   const text = u.searchParams.get('text') || '';
   const voice = u.searchParams.get('voice') || 'ru-RU-SvetlanaNeural';
   if (!text.trim()) { res.writeHead(400); return res.end('text required'); }
   if (text.length > 2000) { res.writeHead(413); return res.end('too long'); }
+
+  // Silero — локальный сервер
+  if (voice.startsWith('silero:')) {
+    const sileroVoice = voice.slice('silero:'.length);
+    const sileroUrl = (process.env.SILERO_URL || 'http://127.0.0.1:8091')
+      + '/tts?voice=' + encodeURIComponent(sileroVoice)
+      + '&text=' + encodeURIComponent(text);
+    try {
+      const r = await fetch(sileroUrl);
+      if (!r.ok) {
+        res.writeHead(503, { 'Content-Type': 'text/plain' });
+        return res.end(`silero ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      }
+      res.writeHead(200, {
+        'Content-Type': r.headers.get('content-type') || 'audio/wav',
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*',
+      });
+      const reader = r.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+      return res.end();
+    } catch (e) {
+      res.writeHead(503, { 'Content-Type': 'text/plain' });
+      return res.end('silero unavailable: ' + e.message);
+    }
+  }
+
+  // Edge TTS
   try {
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
     const tts = new MsEdgeTTS();

@@ -211,17 +211,30 @@
   // ── Голоса для TTS ─────────────────────────────────────────────────
   // Edge neural voices — нейросетевые, заметно человечнее Web Speech.
   // Запрашиваются через /api/tts. Если 503 — фолбэк на Web Speech.
+  const SILERO_VOICES = [
+    { id: 'silero:baya',    label: '🟢 Байя (Silero, ж — спокойный)' },
+    { id: 'silero:kseniya', label: '🟢 Ксения (Silero, ж — мягкий)' },
+    { id: 'silero:xenia',   label: '🟢 Ксения 2 (Silero, ж — живой)' },
+    { id: 'silero:aidar',   label: '🟢 Айдар (Silero, м — глубокий)' },
+    { id: 'silero:eugene',  label: '🟢 Евгений (Silero, м — нейтральный)' },
+  ];
   const EDGE_VOICES = [
     { id: 'edge:ru-RU-SvetlanaNeural', label: '🌟 Светлана (Edge нейро, ж)' },
     { id: 'edge:ru-RU-DariyaNeural',   label: '🌟 Дария (Edge нейро, ж)' },
     { id: 'edge:ru-RU-DmitryNeural',   label: '🌟 Дмитрий (Edge нейро, м)' },
   ];
-  let chosenVoiceId = 'edge:ru-RU-SvetlanaNeural';
+  let chosenVoiceId = 'silero:baya';
 
   function loadVoices() {
     voices = synth.getVoices();
     voiceSel.innerHTML = '';
-    // Сначала Edge — это лучший вариант
+    // Сначала Silero — локальный, быстрый, нейро
+    for (const v of SILERO_VOICES) {
+      const opt = document.createElement('option');
+      opt.value = v.id; opt.textContent = v.label;
+      voiceSel.appendChild(opt);
+    }
+    // Edge — облачный фолбэк
     for (const v of EDGE_VOICES) {
       const opt = document.createElement('option');
       opt.value = v.id; opt.textContent = v.label;
@@ -311,17 +324,17 @@
     synth.speak(utt);
   }
 
-  function speakViaEdge(s, voiceName, onEnd) {
-    const url = '/api/tts?voice=' + encodeURIComponent(voiceName) +
+  function speakViaServer(s, voiceParam, kind, onEnd) {
+    // voiceParam передаём как есть; kind — 'Silero' / 'Edge' — для текста ошибки
+    const url = '/api/tts?voice=' + encodeURIComponent(voiceParam) +
                 '&text=' + encodeURIComponent(s);
     const audio = new Audio(url);
     currentAudio = audio;
     audio.onended = onEnd;
     audio.onerror = () => {
       edgeFailedOnce = true;
-      showError('Edge TTS недоступен — переключился на системный голос');
+      showError(`${kind} недоступен — переключился на системный голос`);
       currentAudio = null;
-      // фолбэк на Web Speech прямо для этой реплики
       speakViaWebSpeech(s, onEnd);
     };
     audio.play().catch(() => {
@@ -342,10 +355,12 @@
     setState('SPEAKING');
     const onEnd = () => { speaking = false; currentAudio = null; speakNext(); };
 
-    const useEdge = chosenVoiceId.startsWith('edge:') && !edgeFailedOnce;
-    if (useEdge) {
+    if (chosenVoiceId.startsWith('silero:') && !edgeFailedOnce) {
+      // На сервере /api/tts принимает 'silero:<имя>' напрямую
+      speakViaServer(s, chosenVoiceId, 'Silero', onEnd);
+    } else if (chosenVoiceId.startsWith('edge:') && !edgeFailedOnce) {
       const voiceName = chosenVoiceId.slice(5);
-      speakViaEdge(s, voiceName, onEnd);
+      speakViaServer(s, voiceName, 'Edge TTS', onEnd);
     } else {
       speakViaWebSpeech(s, onEnd);
     }

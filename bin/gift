@@ -590,7 +590,50 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       writeFileSync(pidFile, String(child.pid));
       console.log(`\n${C.gold('✦')} Скиния Дара открыта`);
       console.log(`  ${C.cyan(`http://localhost:${port}`)}`);
-      console.log(`  ${C.dim('gift web --stop  — остановить')}\n`);
+      console.log(`  ${C.dim('gift web --stop  — остановить')}`);
+      console.log(`  ${C.dim('gift silero start — для качественного голоса на /voice')}\n`);
+      break;
+    }
+
+    case 'silero': {
+      // Локальный Silero TTS сервер для /voice (порт 8091).
+      // Модель скачивается один раз ~120МБ в data/silero/.
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.silero.pid');
+
+      if (sub === 'stop' || rest.includes('--stop')) {
+        if (ex(pidFile)) {
+          try { process.kill(parseInt(rf(pidFile, 'utf8'))); console.log('Silero остановлен.'); }
+          catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Silero не запущен.'); }
+        break;
+      }
+      if (sub === 'status') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid, 0); console.log(`Silero работает (pid ${pid}, порт 8091)`); }
+          catch { console.log('pid-файл есть, но процесс мёртв. Удали data/.silero.pid'); }
+        } else { console.log('Silero не запущен. gift silero start'); }
+        break;
+      }
+      // start (по умолчанию)
+      if (ex(pidFile)) {
+        const pid = parseInt(rf(pidFile, 'utf8'));
+        try { process.kill(pid, 0); console.log(`Silero уже работает (pid ${pid})`); break; } catch {}
+      }
+      const logPath = resolve(ROOT, 'data/silero.log');
+      const { openSync } = await import('node:fs');
+      const out = openSync(logPath, 'a');
+      const child = spawn('python3', [resolve(ROOT, 'utils/silero-tts-server.py'), '--preload'], {
+        detached: true, stdio: ['ignore', out, out], cwd: ROOT,
+        env: { ...cleanEnv() },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Silero TTS запущен (pid ${child.pid})`);
+      console.log(`  ${C.dim('первая загрузка модели ~30 сек, потом мгновенно')}`);
+      console.log(`  ${C.dim('лог: data/silero.log  ·  gift silero stop  — остановить')}\n`);
       break;
     }
 
