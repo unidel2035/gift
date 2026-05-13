@@ -71,6 +71,44 @@ export const VoiceSource = {
   },
 
   /**
+   * Локальная модель через Ollama API (http://localhost:11434).
+   * Бесплатный, приватный, независимый от Anthropic путь.
+   * Подходит для DeepSeek-R1 (reasoning), Qwen, Llama и др. локальных моделей.
+   * @param {string} model    — имя модели в Ollama, напр. 'deepseek-r1:8b'
+   * @param {Object} opts     — { persona, logos, promptWrap?, timeout?, host? }
+   */
+  ollama(model, { persona, logos, promptWrap, timeout = 180_000,
+                  host = process.env.OLLAMA_URL || 'http://localhost:11434' } = {}) {
+    return {
+      persona,
+      logos,
+      async collect(question) {
+        const prompt = promptWrap
+          ? promptWrap(question)
+          : `[Голос для собора — лицо «${persona}», logos «${logos}»]\n\n${question}\n\nОтвечай кратко (1-3 предложения), в духе своего лица.`;
+        try {
+          const r = await fetch(`${host}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, prompt, stream: false }),
+            signal: AbortSignal.timeout(timeout),
+          });
+          if (!r.ok) {
+            return { persona, logos, content: `[молчит: ollama ${r.status}]` };
+          }
+          const data = await r.json();
+          // DeepSeek-R1 пишет рассуждения в <think>…</think> — отрезаем
+          let content = (data.response || '').trim();
+          content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+          return { persona, logos, content: content || '[молчит: пустой ответ]' };
+        } catch (e) {
+          return { persona, logos, content: `[молчит: ${e.message}]` };
+        }
+      },
+    };
+  },
+
+  /**
    * Внешний HTTP-оракул. endpoint получает POST {question}, возвращает {content}.
    */
   http({ persona, logos, endpoint, apiKey, timeout = 30_000 }) {

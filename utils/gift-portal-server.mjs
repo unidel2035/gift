@@ -276,18 +276,21 @@ async function streamChat(req, res) {
       o.addSource(VoiceSource.static({ persona: 'Старший', logos: 'hyper',
         content: '[static] техническое или богословское — ответ зависит от уровня.' }));
     } else {
-      o.addSource(VoiceSource.claudeSubagent('Explore', {
-        persona: 'Разведчик', logos: 'para', timeout: 120_000,
-        promptWrap: groundedWrap(q => `Ты — Разведчик. Logos para. Вопрос: ${q}\nОтвет 2-4 предложения, используй контекст общины, если релевантен.`),
-      }));
-      o.addSource(VoiceSource.claudeSubagent('code-reviewer', {
-        persona: 'Критик', logos: 'kata', timeout: 120_000,
-        promptWrap: groundedWrap(q => `Ты — Критик. Logos kata. Вопрос: ${q}\nОспорь очевидное, опираясь на прошлые решения общины. 2-4 предложения.`),
-      }));
-      o.addSource(VoiceSource.claudeSubagent('Plan', {
-        persona: 'Старший', logos: 'hyper', timeout: 120_000,
-        promptWrap: groundedWrap(q => `Ты — Старший. Logos hyper. Вопрос: ${q}\nРазличи, соотнеси с контекстом общины. 2-4 предложения.`),
-      }));
+      // GIFT_OLLAMA_MODEL=deepseek-r1:8b → собор идёт через локальную модель
+      // (бесплатно, приватно, без зависимости от Anthropic API).
+      // По умолчанию — Claude (claudeSubagent).
+      const ollamaModel = process.env.GIFT_OLLAMA_MODEL;
+      const makeVoice = (persona, logos, agentType, wrap) =>
+        ollamaModel
+          ? VoiceSource.ollama(ollamaModel, { persona, logos, promptWrap: wrap, timeout: 180_000 })
+          : VoiceSource.claudeSubagent(agentType, { persona, logos, promptWrap: wrap, timeout: 120_000 });
+
+      o.addSource(makeVoice('Разведчик', 'para', 'Explore',
+        groundedWrap(q => `Ты — Разведчик. Logos para. Вопрос: ${q}\nОтвет 2-4 предложения, используй контекст общины, если релевантен.`)));
+      o.addSource(makeVoice('Критик', 'kata', 'code-reviewer',
+        groundedWrap(q => `Ты — Критик. Logos kata. Вопрос: ${q}\nОспорь очевидное, опираясь на прошлые решения общины. 2-4 предложения.`)));
+      o.addSource(makeVoice('Старший', 'hyper', 'Plan',
+        groundedWrap(q => `Ты — Старший. Logos hyper. Вопрос: ${q}\nРазличи, соотнеси с контекстом общины. 2-4 предложения.`)));
     }
 
     const t0 = Date.now();
