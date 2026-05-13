@@ -111,20 +111,19 @@ export class GoalEngine {
       if (this.valueProbe) {
         try { step.V_after = (await this.valueProbe())?.V ?? null; }
         catch (e) { step.V_after = null; }
-        // Если ключевая компонента просела заметно — это сигнал μετάνοια,
-        // даже если review.satisfied. Цель НЕ достигнута, если она сломала
-        // ценность сети.
+        // Просто фиксируем delta — НЕ отменяем satisfied.
+        // Причина: матрица меняется параллельно (другие пользователи пишут
+        // через бота), и абсолютный delta не различает «мой goal сломал»
+        // от «фоновый шум». valueDrop — только сигнал к рефлексии.
         if (step.V_before && step.V_after) {
           const dE = (step.V_after.E ?? 0) - (step.V_before.E ?? 0);
           const dD = (step.V_after.D ?? 0) - (step.V_before.D ?? 0);
           const dT = (step.V_after.T ?? 0) - (step.V_before.T ?? 0);
           step.V_delta = { dE, dD, dT };
-          if (dE < -20 || dD < -0.01 || dT < -10) {
-            step.review = step.review || {};
-            step.review.valueDrop = true;
-            step.review.satisfied = false;
-            step.review.reason = (step.review.reason || '') +
-              ` [V просела: ΔE=${dE.toFixed(1)} ΔD=${dD.toFixed(3)} ΔT=${dT.toFixed(1)}]`;
+          // Метим как «просели», но satisfied не трогаем — это даст
+          // материал на post-mortem (см. step.V_delta в истории goal).
+          if (dE < -50 || dD < -0.02 || dT < -20) {
+            step.V_drop_warning = true;
           }
         }
       }

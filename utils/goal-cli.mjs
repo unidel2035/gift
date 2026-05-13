@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { GoalEngine } from '../src/goals/GoalEngine.js';
 import { ClaudeExecutor } from '../src/goals/ClaudeExecutor.js';
 import { MatrixRecorder } from '../src/goals/MatrixRecorder.js';
+import { computeValue } from './compute-value.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const GOALS_DIR = resolve(ROOT, 'data/goals');
@@ -156,6 +157,11 @@ if (cmd === 'run') {
     root: GOALS_DIR,
     executor: new ClaudeExecutor({ cwd: ROOT }),
     recorder: new MatrixRecorder({ snapPath: SNAP_PATH }),
+    // valueProbe записывает V_before/V_after для каждой итерации — это
+    // даёт post-mortem на конкретный шаг. Но фоновый шум от tg-актов
+    // может сместить V между измерениями, поэтому проверка в GoalEngine
+    // только информативная, satisfied не отменяет.
+    valueProbe: () => computeValue(),
   });
   const g = engine.get(id);
   if (!g) { console.error(`цель ${id} не найдена`); process.exit(1); }
