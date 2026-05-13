@@ -18,9 +18,17 @@
  */
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const EVA_MODEL  = process.env.EVA_MODEL  || 'eva';
+// Раньше дефолт был 'eva' (qwen2.5:3b+LoRA). Маленькая модель
+// «протекала» терминами из обучения (LCM-плагин и т.п.). DeepSeek-R1:8b
+// держит system-промпт строже.
+const EVA_MODEL  = process.env.EVA_MODEL  || 'deepseek-r1:8b';
 // PULSE_NO_OLLAMA=1 — шаблонный режим без Ollama
 const NO_OLLAMA  = process.env.PULSE_NO_OLLAMA === '1';
+
+// DeepSeek-R1 пишет рассуждения в <think>…</think>, отрезаем до парсинга
+function stripThink(s) {
+  return String(s || '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+}
 
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
@@ -150,7 +158,7 @@ export async function evaCheck(proposal, existing = []) {
 
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = data.message?.content ?? '';
+    const text = stripThink(data.message?.content ?? '');
 
     // Парсим структурированный ответ
     const verdictM  = text.match(/\[ВЕРДИКТ\]\s*(.+?)(?:\n|$)/);

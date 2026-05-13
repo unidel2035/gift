@@ -9,9 +9,19 @@
  */
 
 const OLLAMA_URL    = process.env.OLLAMA_URL  || 'http://localhost:11434';
-const ADAM_MODEL    = process.env.ADAM_MODEL  || 'adam';
+// Раньше дефолт был 'adam' (qwen2.5:3b+LoRA). 3B-модель путала нашу
+// сложившуюся лексику (κενозис/λήψις/doxologia) с обучающим шумом и
+// иногда выдавала «LCM-плагин» или «язычество». Переключили на DeepSeek-R1:8b
+// — он умнее и понимает богословский контекст из system-промпта.
+const ADAM_MODEL    = process.env.ADAM_MODEL  || 'deepseek-r1:8b';
 // PULSE_NO_OLLAMA=1 — отключить Ollama, использовать шаблонный режим
 const NO_OLLAMA     = process.env.PULSE_NO_OLLAMA === '1';
+
+// DeepSeek-R1 пишет рассуждения в <think>…</think> — отрезаем
+// перед поиском маркера «вопрошание:»
+function stripThink(s) {
+  return String(s || '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+}
 
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
@@ -116,7 +126,7 @@ export async function adamGenerate(desertDesc, context = []) {
 
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = (data.message?.content ?? '').trim();
+    const text = stripThink(data.message?.content ?? '');
 
     // Нормализуем: «вопрос:», «вопрошание:», «вопрос — » → единый префикс
     const m = text.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
@@ -214,7 +224,7 @@ export async function adamCodeTask(desertDesc, desertType = 'silent', context = 
 
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = (data.message?.content ?? '').trim();
+    const text = stripThink(data.message?.content ?? '');
     // Берём первую строку, убираем маркеры
     const line = text.split('\n')[0].trim()
       .replace(/^[-*•]\s*/, '')
