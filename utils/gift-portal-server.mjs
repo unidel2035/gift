@@ -200,6 +200,58 @@ const server = createServer(async (req, res) => {
   if (url === '/voice' || url === '/voice.html') {
     return serveHTML(res, join(ROOT, 'public', 'voice.html'));
   }
+  // Дашборд для общины (без греческого сленга, для не-программистов)
+  if (url === '/team' || url === '/team.html') {
+    return serveHTML(res, join(ROOT, 'public', 'team.html'));
+  }
+  // API: текущий V-вектор (для /team)
+  if (url === '/api/value') {
+    try {
+      const path = join(ROOT, 'data/value-history.json');
+      if (!existsSync(path)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end('{"error":"нет value-history.json — запусти ontology-pulse"}');
+      }
+      const hist = JSON.parse(readFileSync(path, 'utf8'));
+      const last = hist[hist.length - 1] || null;
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      return res.end(JSON.stringify(last));
+    } catch (e) {
+      res.writeHead(500); return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  // API: список целей (для /team)
+  if (url === '/api/goals') {
+    try {
+      const goalsDir = join(ROOT, 'data/goals');
+      const list = [];
+      if (existsSync(goalsDir)) {
+        for (const f of readdirSync(goalsDir)) {
+          if (!f.endsWith('.json')) continue;
+          try {
+            const g = JSON.parse(readFileSync(join(goalsDir, f), 'utf8'));
+            list.push({
+              id: g.id, status: g.status, objective: g.objective,
+              successCriteria: g.successCriteria,
+              iteration: g.iteration, maxIterations: g.maxIterations,
+              createdAt: g.createdAt, updatedAt: g.updatedAt,
+            });
+          } catch {}
+        }
+        list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      return res.end(JSON.stringify(list));
+    } catch (e) {
+      res.writeHead(500); return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
   // Edge TTS: бесплатные нейро-голоса Microsoft Azure
   // /api/tts?text=...&voice=ru-RU-SvetlanaNeural → audio/mpeg
   if (url.startsWith('/api/tts')) {

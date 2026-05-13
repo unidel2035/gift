@@ -17,6 +17,7 @@ import { GoalEngine } from '../src/goals/GoalEngine.js';
 import { ClaudeExecutor } from '../src/goals/ClaudeExecutor.js';
 import { MatrixRecorder } from '../src/goals/MatrixRecorder.js';
 import { computeValue } from './compute-value.mjs';
+import { TEMPLATES, listTemplates, substitute } from '../src/goals/templates.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const GOALS_DIR = resolve(ROOT, 'data/goals');
@@ -73,6 +74,44 @@ const [cmd, ...args] = process.argv.slice(2);
 
 if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
   help();
+  process.exit(0);
+}
+
+// ── templates: список и создание по шаблону ────────────────────────────────
+if (cmd === 'templates' || cmd === 'шаблоны') {
+  const list = listTemplates();
+  console.log();
+  for (const t of list) {
+    const params = t.params.length ? ` ${C.dim('(' + t.params.join(', ') + ')')}` : '';
+    console.log(`  ${C.cyan(t.key.padEnd(18))} ${t.title}${params}`);
+    console.log(`  ${' '.repeat(20)}${C.dim(t.description)}\n`);
+  }
+  console.log(C.dim('  Запуск: gift goal from-template <ключ> [param=value ...]\n'));
+  process.exit(0);
+}
+
+if (cmd === 'from-template') {
+  const key = args[0];
+  if (!key || !TEMPLATES[key]) {
+    console.error(`нужен ключ шаблона. gift goal templates — список`);
+    process.exit(1);
+  }
+  // param=value...
+  const params = {};
+  for (const a of args.slice(1)) {
+    const m = a.match(/^([^=]+)=(.*)$/);
+    if (m) params[m[1]] = m[2];
+  }
+  let prepared;
+  try { prepared = substitute(key, params); }
+  catch (e) { console.error(C.red(e.message)); process.exit(1); }
+
+  const engine = new GoalEngine({ root: GOALS_DIR });
+  const g = engine.create(prepared);
+  console.log(`${C.green('✦')} цель создана: ${C.cyan(g.id)} ${C.dim('(шаблон: ' + key + ')')}`);
+  console.log(`  objective:  ${g.objective}`);
+  console.log(`  success:    ${g.successCriteria}`);
+  console.log(C.dim(`\n  запусти: gift goal run ${g.id}`));
   process.exit(0);
 }
 

@@ -595,6 +595,48 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       break;
     }
 
+    case 'autonomy': {
+      // Daemon, который каждую минуту дёргает agrypnia tick.
+      // Без него запланированные бдения (pulse, dev-loop) не сработают.
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync, openSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.autonomy.pid');
+
+      if (sub === 'stop' || rest.includes('--stop')) {
+        if (ex(pidFile)) {
+          try { process.kill(parseInt(rf(pidFile, 'utf8'))); console.log('Автономия остановлена.'); }
+          catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Автономия не запущена.'); }
+        break;
+      }
+      if (sub === 'status') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid, 0); console.log(`Автономия работает (pid ${pid})`); }
+          catch { console.log('pid-файл есть, но процесс мёртв.'); }
+        } else { console.log('Автономия не запущена. gift autonomy start'); }
+        break;
+      }
+      // start
+      if (ex(pidFile)) {
+        try { process.kill(parseInt(rf(pidFile, 'utf8')), 0);
+          console.log(`Уже работает (pid ${rf(pidFile, 'utf8')})`); break;
+        } catch {}
+      }
+      const logPath = resolve(ROOT, 'data/autonomy.log');
+      const out = openSync(logPath, 'a');
+      const child = spawn('node', [resolve(ROOT, 'utils/autonomy-daemon.mjs')], {
+        detached: true, stdio: ['ignore', out, out], cwd: ROOT,
+        env: { ...cleanEnv(), ...PROXY_ORIG, GIFT_KEEP_PROXY: '1' },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Автономия запущена (pid ${child.pid})`);
+      console.log(`  ${C.dim('каждую минуту dёргает agrypnia tick')}`);
+      console.log(`  ${C.dim('лог: data/autonomy.log  ·  gift autonomy stop')}\n`);
+      break;
+    }
+
     case 'silero': {
       // Локальный Silero TTS сервер для /voice (порт 8091).
       // Модель скачивается один раз ~120МБ в data/silero/.
