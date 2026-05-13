@@ -63,7 +63,7 @@ const mem      = GiftMemory.fromSnapshot(nowSnap);
 // other      — всё остальное
 
 const DIVINE    = new Set(['Отец', 'Сын', 'Дух', 'Христос']);
-const COMMUNITY = new Set(['ОтецСергий', 'Дионисий', 'Адам', 'Ева', 'Падший', 'Змей']);
+const COMMUNITY = new Set(['ОтецСергий', 'Дионисий', 'Адам', 'Ева', 'Человек', 'Змей']);
 const KOINON    = new Set(['_koinon', '_abyss', '_witness', '_ci']);
 
 function classify(personId) {

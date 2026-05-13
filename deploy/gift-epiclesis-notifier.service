@@ -1,0 +1,23 @@
+[Unit]
+Description=Gift Epiclesis Notifier — TG pings on new epiclesis
+After=network.target gift-portal.service
+
+[Service]
+Type=simple
+User=hive
+Group=hive
+WorkingDirectory=/home/hive/gift
+ExecStart=/usr/bin/node /home/hive/gift/utils/epiclesis-notifier.mjs --daemon
+Restart=on-failure
+RestartSec=10s
+Environment=GIFT_PUBLIC=http://173.249.2.184:3701
+# TG_BOT_TOKEN читается из файла /etc/gift.env (если есть) или хардкод-fallback
+EnvironmentFile=-/etc/gift.env
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

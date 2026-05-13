@@ -1,0 +1,39 @@
+{
+  "_comment": "W_slava — второй тензор: явленность актов перед Лицом Христа",
+  "_source": "specs/theology/kingdom-of-glory.gift",
+  "manifestedness": {
+    "demo-widow": 0.52,
+    "лит-Сергия": 22
+  },
+  "lastUpdated": "2026-04-20T12:19:53.518Z",
+  "witnesses": [
+    {
+      "actId": "demo-widow",
+      "at": "2026-04-20T12:19:53.513Z",
+      "weight": 0.5,
+      "manifestedness": 0.52,
+      "delta": 0.02,
+      "voices": [
+        {
+          "persona": "ОтецСергий",
+          "logos": "hyper",
+          "authority": 1
+        },
+        {
+          "persona": "Дионисий",
+          "logos": "hyper",
+          "authority": 1
+        }
+      ],
+      "apophatic": false
+    },
+    {
+      "source": "TheosisWitnessBridge",
+      "persona": "святой-Сергий",
+      "progress": 1,
+      "coefficient": 0.1,
+      "updated": 1,
+      "at": "2026-04-20T12:19:53.517Z"
+    }
+  ]
+}

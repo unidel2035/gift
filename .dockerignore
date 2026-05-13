@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+dist
+*.log
+.env
+data/.portal.pid
+data/horizons/horizon-*
+data/conciliar-swe/sobor-*.json
+data/chat-sessions
+data/benchmarks
+tmp

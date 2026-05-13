@@ -64,7 +64,7 @@ function parseSpec(filename) {
 
 function buildMem(specs) {
   const acts = specs.flatMap(s => parseSpec(s));
-  const persons = new Set(['Отец','Сын','Дух','Христос','Дионисий','_claude','ОтецСергий','Адам','Ева','_koinon','_abyss','Небо','Падший']);
+  const persons = new Set(['Отец','Сын','Дух','Христос','Дионисий','_claude','ОтецСергий','Адам','Ева','_koinon','_abyss','Небо','Человек']);
   for (const a of acts) { persons.add(a.giverId); persons.add(a.receiverId); }
   const mem = new GiftMemory([...persons]);
   for (const a of acts) mem.receive(a);
@@ -154,8 +154,8 @@ test('koinon-doxologia: соборность = дар времени (вес 10)
 test('fallen-hope: pending акты не в energeia', () => {
   const mem = buildMem(['fallen-hope.gift']);
   // Все три акта — reception:pending → _declined, energeia = 0
-  const e = mem.thread('Отец', 'Падший');
-  assert.strictEqual(e.weight, 0, `energeia[Отец→Падший] = ${e} (pending → не в energeia)`);
+  const e = mem.thread('Отец', 'Человек');
+  assert.strictEqual(e.weight, 0, `energeia[Отец→Человек] = ${e} (pending → не в energeia)`);
 });
 
 test('fallen-hope: pending акты в _pending (эсхатологическое ожидание)', () => {
@@ -165,11 +165,11 @@ test('fallen-hope: pending акты в _pending (эсхатологическо�
   assert.ok(p.length >= 3, `_pending = ${p.length} (ожидается ≥3)`);
 });
 
-test('fallen-hope: μετάνοια Падшего через repent() открывает energeia', () => {
+test('fallen-hope: μετάνοια Человека через repent() открывает energeia', () => {
   const mem = buildMem(['fallen-hope.gift']);
-  assert.strictEqual(mem.thread('Отец', 'Падший').weight, 0, 'до repent: 0');
-  mem.repent('Отец', 'Падший');
-  assert.ok(mem.thread('Отец', 'Падший') > 0, 'после repent: > 0');
+  assert.strictEqual(mem.thread('Отец', 'Человек').weight, 0, 'до repent: 0');
+  mem.repent('Отец', 'Человек');
+  assert.ok(mem.thread('Отец', 'Человек').weight > 0, 'после repent: > 0');
 });
 
 // ── 5. Ева и Небо выходят из стазиса ─────────────────────────────────────
