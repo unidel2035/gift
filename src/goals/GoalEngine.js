@@ -27,10 +27,13 @@ const STATUS = Object.freeze({
 });
 
 export class GoalEngine {
-  constructor({ root = 'data/goals', executor, recorder = null, clock = Date } = {}) {
+  constructor({ root = 'data/goals', executor, recorder = null, valueProbe = null, clock = Date } = {}) {
     this.root = root;
     this.executor = executor;
     this.recorder = recorder;  // опционально: пишет ключевые события в W-матрицу
+    // valueProbe — функция () => {V:{E,D,M,T,S},...} для замера ценности
+    // до и после итерации. Если просела — это сигнал к μετάνοια.
+    this.valueProbe = valueProbe;
     this.clock = clock;
     if (!existsSync(root)) mkdirSync(root, { recursive: true });
   }
@@ -86,6 +89,12 @@ export class GoalEngine {
       stepsThisRun += 1;
       const step = { n: state.iteration, ts: new Date(this.clock.now()).toISOString() };
 
+      // V_before: снимок ценности до итерации
+      if (this.valueProbe) {
+        try { step.V_before = (await this.valueProbe())?.V ?? null; }
+        catch (e) { step.V_before = null; }
+      }
+
       // plan: что делаю на этой итерации
       step.plan = await this.executor.plan(state, step);
 
@@ -97,6 +106,28 @@ export class GoalEngine {
 
       // review: судит достигнута ли смысловая цель (success criteria)
       step.review = await this.executor.review(state, step);
+
+      // V_after: после действий
+      if (this.valueProbe) {
+        try { step.V_after = (await this.valueProbe())?.V ?? null; }
+        catch (e) { step.V_after = null; }
+        // Если ключевая компонента просела заметно — это сигнал μετάνοια,
+        // даже если review.satisfied. Цель НЕ достигнута, если она сломала
+        // ценность сети.
+        if (step.V_before && step.V_after) {
+          const dE = (step.V_after.E ?? 0) - (step.V_before.E ?? 0);
+          const dD = (step.V_after.D ?? 0) - (step.V_before.D ?? 0);
+          const dT = (step.V_after.T ?? 0) - (step.V_before.T ?? 0);
+          step.V_delta = { dE, dD, dT };
+          if (dE < -20 || dD < -0.01 || dT < -10) {
+            step.review = step.review || {};
+            step.review.valueDrop = true;
+            step.review.satisfied = false;
+            step.review.reason = (step.review.reason || '') +
+              ` [V просела: ΔE=${dE.toFixed(1)} ΔD=${dD.toFixed(3)} ΔT=${dT.toFixed(1)}]`;
+          }
+        }
+      }
 
       // μετάνοια: если не достигнута — переосмыслить.
       // Это НЕ просто retry. Это шаг, на котором execitor рефлексирует

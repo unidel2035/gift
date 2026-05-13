@@ -1,0 +1,23 @@
+[
+  {
+    "ts": "2026-05-13T07:18:00.864Z",
+    "persons": 59,
+    "acts": 871,
+    "V": {
+      "E": -1111.15,
+      "D": 0.0149,
+      "M": null,
+      "T": 687.23,
+      "S": 1
+    },
+    "T_per": {
+      "Дионисий": 1764.61,
+      "_koinon": 108.92,
+      "_claude": 188.16
+    },
+    "liveThreads": 51,
+    "possiblePairs": 3422,
+    "goalsTotal": 0,
+    "goalsWithMetanoia": 0
+  }
+]
