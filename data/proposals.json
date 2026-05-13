@@ -635,9 +635,9 @@
     "cat": "code",
     "source": "pulse:leksis_pending",
     "kind": "code-task",
-    "status": "pending",
+    "status": "done",
     "created": "2026-05-05T01:16:16.807Z",
-    "done_at": null,
+    "done_at": "2026-05-13T08:30:00.000Z",
     "issue_number": null
   },
   {
