@@ -33,14 +33,19 @@ function stripThink(s) {
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 
-// Вызвать claude CLI как user `new` — fallback когда Ollama недоступен
+// claude --print через подписку. На сервере — su к 'new', на ноуте Дионисия — прямо.
 function callClaudeCLI(systemPrompt, userPrompt) {
+  const asUser = process.env.GIFT_CLAUDE_AS_USER;
   const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
     ? '/home/new/.local/bin/claude' : 'claude';
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-  const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
-    input: fullPrompt, encoding: 'utf8', timeout: 90_000,
-  });
+  const r = asUser
+    ? spawnSync('su', ['-', asUser, '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
+        input: fullPrompt, encoding: 'utf8', timeout: 120_000,
+      })
+    : spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
+        input: fullPrompt, encoding: 'utf8', timeout: 120_000,
+      });
   if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
   return null;
 }
@@ -141,56 +146,54 @@ export async function evaCheck(proposal, existing = []) {
     'Проверь и усиль.',
   ].join('\n').trim();
 
+  function parseEvaResp(text) {
+    const t = stripThink(text);
+    const verdictM = t.match(/\[ВЕРДИКТ\]\s*(.+?)(?:\n|$)/);
+    const enhanceM = t.match(/\[УСИЛЕНИЕ\]\s*([\s\S]+?)(?:\[|$)/);
+    const telosM   = t.match(/\[ТЕЛОС\]\s*(.+?)(?:\n|$)/);
+    if (!verdictM && !enhanceM && !telosM) return null;
+    const verdictLine = verdictM?.[1]?.trim() ?? '';
+    const verdict = verdictLine.startsWith('ПРИНЯТО')   ? 'принято'
+                  : verdictLine.startsWith('ОТКЛОНЕНО') ? 'отклонено'
+                  : 'доработать';
+    return {
+      verdict,
+      enhanced: enhanceM?.[1]?.trim() ?? proposal,
+      telos:    telosM?.[1]?.trim()   ?? '',
+      evaResponse: t,
+    };
+  }
+
+  // 1) Claude (подписка) — основной голос
+  try {
+    const claudeText = callClaudeCLI(EVA_SYSTEM, question);
+    const parsed = claudeText && parseEvaResp(claudeText);
+    if (parsed) return parsed;
+  } catch {}
+
+  // 2) Fallback — Ollama (DeepSeek-R1)
   try {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal:  AbortSignal.timeout(90_000),
+      signal:  AbortSignal.timeout(120_000),
       body:    JSON.stringify({
         model:  EVA_MODEL,
         stream: false,
         messages: [
-          { role: 'system',    content: EVA_SYSTEM },
-          { role: 'user',      content: question   },
+          { role: 'system', content: EVA_SYSTEM },
+          { role: 'user',   content: question   },
         ],
       }),
     });
-
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = stripThink(data.message?.content ?? '');
+    const parsed = parseEvaResp(data.message?.content);
+    if (parsed) return parsed;
+  } catch {}
 
-    // Парсим структурированный ответ
-    const verdictM  = text.match(/\[ВЕРДИКТ\]\s*(.+?)(?:\n|$)/);
-    const enhanceM  = text.match(/\[УСИЛЕНИЕ\]\s*([\s\S]+?)(?:\[|$)/);
-    const telosM    = text.match(/\[ТЕЛОС\]\s*(.+?)(?:\n|$)/);
-
-    const verdictLine = verdictM?.[1]?.trim() ?? '';
-    const verdict = verdictLine.startsWith('ПРИНЯТО')    ? 'принято'
-                  : verdictLine.startsWith('ОТКЛОНЕНО')  ? 'отклонено'
-                  : 'доработать';
-
-    const enhanced = enhanceM?.[1]?.trim() ?? proposal;
-    const telos    = telosM?.[1]?.trim()   ?? '';
-
-    return { verdict, enhanced, telos, evaResponse: text };
-
-  } catch (e) {
-    // Ollama недоступна → пробуем claude CLI
-    const claudeText = callClaudeCLI(EVA_SYSTEM, question);
-    if (claudeText) {
-      const verdictM = claudeText.match(/\[ВЕРДИКТ\]\s*(.+?)(?:\n|$)/);
-      const enhanceM = claudeText.match(/\[УСИЛЕНИЕ\]\s*([\s\S]+?)(?:\[|$)/);
-      const telosM   = claudeText.match(/\[ТЕЛОС\]\s*(.+?)(?:\n|$)/);
-      const verdictLine = verdictM?.[1]?.trim() ?? '';
-      const verdict = verdictLine.startsWith('ПРИНЯТО')   ? 'принято'
-                    : verdictLine.startsWith('ОТКЛОНЕНО') ? 'отклонено'
-                    : 'доработать';
-      return { verdict, enhanced: enhanceM?.[1]?.trim() ?? proposal, telos: telosM?.[1]?.trim() ?? '', evaResponse: claudeText };
-    }
-    // Ева полностью недоступна — пропускаем без блокировки
-    return { verdict: 'принято', enhanced: proposal, telos: '', evaResponse: `[Eva offline: ${e.message}]` };
-  }
+  // 3) Ни Claude, ни Ollama не ответили — пропускаем без блокировки
+  return { verdict: 'принято', enhanced: proposal, telos: '', evaResponse: '[Eva offline]' };
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────
