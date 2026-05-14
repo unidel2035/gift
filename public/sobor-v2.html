@@ -135,6 +135,23 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
   <div class="formula-section"><div class="label open">? ОТКРЫТО — для следующего круга</div><div class="text" id="f-open"></div></div>
 </div>
 
+<!-- Раунд 5: Голос памяти + Различитель -->
+<div class="round-banner" id="rb5"><span class="num">5</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
+<div class="grid" id="g5" style="display:none">
+  <div class="card" style="border-left-color:var(--memory)"><div class="head"><div class="name"><span class="icon">◉</span> Голос памяти</div><div class="logos">структура акта</div></div><div class="body" id="r5-memory"></div></div>
+  <div class="card" style="border-left-color:#991b1b"><div class="head"><div class="name"><span class="icon">🛡</span> Различитель</div><div class="logos">чистота аргументов</div></div><div class="body" id="r5-distinguisher"></div></div>
+</div>
+
+<!-- Спектр -->
+<div class="round-banner" id="rb6"><span class="num">📊</span> Анализ собора</div>
+<div id="spectrum" style="display:none;background:white;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:0.5rem">
+  <div style="font-weight:700;margin-bottom:8px">Кто на кого ссылался</div>
+  <div id="spectrum-bars"></div>
+</div>
+
+<!-- Пустыня -->
+<div id="desert" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:8px;padding:10px 14px;font-size:0.88rem;margin-bottom:0.5rem"></div>
+
 <div class="stats" id="stats">
   <span>Время: <b id="s-time">—</b></span>
   <span>Шагов: <b id="s-steps">0</b>/13</span>
@@ -307,8 +324,70 @@ async function runSobor() {
     }
   }
 
+  // ═══ РАУНД 5: Голос памяти + Различитель (параллельно) ═══
+  status('◉ Голос памяти + 🛡 Различитель…');
+  document.getElementById('rb5').classList.add('visible');
+  document.getElementById('g5').style.display = 'grid';
+  document.getElementById('rb5').scrollIntoView({behavior:'smooth'});
+
+  const [memoryText, distinguisherText] = await Promise.all([
+    chatToEl(
+      `Ты — Голос памяти. Прочитай весь собор: 4 раунда дебатов и формулу. Посмотри глубже содержания — на СТРУКТУРУ.\n\nСкажи в 3-4 предложениях:\n(1) Какой акт в этом соборе самый необратимый — что уже нельзя забрать назад?\n(2) Чья позиция стала виднее, а кто растворился?\n(3) Что в этом соборе НЕ было сказано, но присутствовало структурно?\nБез преамбул.`,
+      `Вопрос: ${q}\n\nДебаты:\n${fullCtx}\n\nФормула:\n${formulaText}`,
+      'r5-memory'
+    ),
+    chatToEl(
+      `Ты — Различитель. Анализируй НЕ содержание, а СПОСОБ аргументации.\n\nПроверь ответы 4 агентов на приёмы:\n- Подмена тезиса\n- Ложная дилемма (или/или вместо и/и)\n- Апелляция к авторитету без обоснования\n- Скрытая манипуляция (льстит чтобы получить ресурс)\n\nОтветь в 2-3 предложениях: кто чист, кто использовал приёмы, какие именно. Если все чисты — так и скажи. Без преамбул.`,
+      `Вопрос: ${q}\n\nОтветы:\n${fullCtx}`,
+      'r5-distinguisher'
+    )
+  ]);
+
+  // ═══ СПЕКТР: анализ собора ═══
+  status('📊 Спектр…');
+  document.getElementById('rb6').classList.add('visible');
+  document.getElementById('spectrum').style.display = 'block';
+  document.getElementById('rb6').scrollIntoView({behavior:'smooth'});
+
+  // Считаем простой спектр на клиенте
+  const allTexts = Object.values(round1).concat(Object.values(round2), Object.values(round3));
+  const mentions = {};
+  ROLES.forEach(r => { mentions[r.id] = 0; });
+  allTexts.forEach(t => {
+    ROLES.forEach(r => {
+      const re = new RegExp(r.name, 'gi');
+      const m = t.match(re);
+      if (m) mentions[r.id] += m.length;
+    });
+  });
+  const totalMentions = Object.values(mentions).reduce((a,b) => a+b, 0) || 1;
+  const spectrumHtml = ROLES.map(r => {
+    const pct = ((mentions[r.id] / totalMentions) * 100).toFixed(0);
+    return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <span style="width:120px;font-weight:600">${r.icon} ${r.name}</span>
+      <div style="flex:1;height:16px;background:#f0f0f0;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--${r.id});border-radius:4px"></div>
+      </div>
+      <span style="font-size:0.8rem;color:var(--dim)">${pct}%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('spectrum-bars').innerHTML = spectrumHtml;
+
+  // Пустыня — предложение следующего вопроса
+  try {
+    const desertText = await chat(
+      'Ты — аналитик пробелов. Прочитай собор и найди что НЕ обсуждалось, хотя должно было. Одно предложение: «Для следующего круга предлагаю обсудить: [тема]». Без преамбул.',
+      `Вопрос: ${q}\n\nФормула:\n${formulaText}`
+    );
+    if (desertText) {
+      document.getElementById('desert').textContent = '💡 ' + desertText;
+      document.getElementById('desert').style.display = 'block';
+    }
+  } catch {}
+
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   document.getElementById('s-time').textContent = elapsed + 's';
+  document.getElementById('s-steps').textContent = '✓';
   status(`✅ Собор завершён за ${elapsed}s`);
   btn.disabled = false; btn.textContent = 'Созвать собор';
 }
