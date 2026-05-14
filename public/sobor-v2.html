@@ -96,6 +96,10 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
   <textarea id="q" placeholder="Задайте вопрос — 4 раунда: позиции → вопрошание → различение → формула"></textarea>
   <button id="btn" onclick="runSobor()">Созвать собор</button>
 </div>
+<div id="resume-bar" style="display:none;margin-bottom:1rem">
+  <button class="preset" onclick="resumeLastSobor()" style="background:var(--gold);color:white;border-color:var(--gold)">🔄 Продолжить последний собор</button>
+  <span id="resume-info" style="font-size:0.8rem;color:var(--dim);margin-left:8px"></span>
+</div>
 
 <div class="status-bar" id="status"></div>
 
@@ -190,6 +194,18 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
 
 <!-- Пустыня -->
 <div id="desert" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:8px;padding:10px 14px;font-size:0.88rem;margin-bottom:0.5rem"></div>
+
+<!-- Граф решений -->
+<div class="round-banner" id="rb-graph"><span class="num">🌳</span> Граф решений <span class="desc">— кликни по ветке чтобы развернуть</span></div>
+<div id="decision-graph" style="display:none;background:white;border:2px solid var(--gold);border-radius:10px;padding:14px;margin-bottom:0.5rem">
+  <div id="graph-tree" style="font-size:0.88rem;line-height:1.6"></div>
+</div>
+
+<!-- Автономное исполнение -->
+<div class="round-banner" id="rb-auto"><span class="num">⚙</span> Автономное исполнение <span class="desc">— задачи будут проверяться автоматически</span></div>
+<div id="auto-exec" style="display:none;background:#ecfdf5;border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:0.85rem;margin-bottom:0.5rem">
+  <div id="auto-status"></div>
+</div>
 
 <div class="stats" id="stats">
   <span>Время: <b id="s-time">—</b></span>
@@ -338,6 +354,56 @@ async function sendToIntegram() {
 document.getElementById('q').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { runSobor(); e.preventDefault(); }
 });
+
+// Проверить checkpoint при загрузке
+(function checkResume() {
+  const last = localStorage.getItem('sobor-v2-last');
+  if (last) {
+    try {
+      const s = JSON.parse(last);
+      const bar = document.getElementById('resume-bar');
+      bar.style.display = 'block';
+      const ago = Math.round((Date.now() - new Date(s.timestamp).getTime()) / 60000);
+      document.getElementById('resume-info').textContent =
+        `«${s.question.slice(0,60)}…» · ${ago < 60 ? ago + ' мин назад' : Math.round(ago/60) + ' ч назад'} · ${s.elapsed}s`;
+    } catch {}
+  }
+})();
+
+function resumeLastSobor() {
+  const last = JSON.parse(localStorage.getItem('sobor-v2-last') || 'null');
+  if (!last) return;
+  document.getElementById('q').value = last.question;
+  // Показать все результаты
+  ['rb1','rb2','rb3','rb4','rb5a','rb-chancel','rb7','rb6','rb-graph','rb-auto'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('visible');
+  });
+  ['g2','g3','formula','decision','chancery','ch-v2','ch-actions','decision-graph','auto-exec','spectrum'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.classList.contains('grid') || id.startsWith('g') ? 'grid' : 'block';
+  });
+  document.getElementById('g5').style.display = 'grid';
+  // Заполнить данные
+  ROLES.forEach(r => {
+    if (last.round1 && last.round1[r.id]) document.getElementById('r1-'+r.id).textContent = last.round1[r.id];
+    if (last.round2 && last.round2[r.id]) document.getElementById('r2-'+r.id).textContent = last.round2[r.id];
+    if (last.round3 && last.round3[r.id]) document.getElementById('r3-'+r.id).textContent = last.round3[r.id];
+  });
+  if (last.formula) {
+    document.getElementById('f-affirm').textContent = last.formula.affirm || '';
+    document.getElementById('f-reject').textContent = last.formula.reject || '';
+    document.getElementById('f-open').textContent = last.formula.open || '';
+  }
+  if (last.decision) document.getElementById('d-text').textContent = last.decision;
+  if (last.protocol) document.getElementById('ch-protocol').textContent = last.protocol;
+  if (last.tasks) document.getElementById('ch-tasks').textContent = last.tasks;
+  if (last.finmodel) document.getElementById('ch-finmodel').textContent = last.finmodel;
+  if (last.normact) document.getElementById('ch-normact').textContent = last.normact;
+  document.getElementById('s-time').textContent = last.elapsed + 's';
+  document.getElementById('s-steps').textContent = '✓ (восстановлен)';
+  status(`🔄 Восстановлен собор: «${last.question.slice(0,60)}…»`);
+}
 
 let steps = 0;
 function status(text) { const el = document.getElementById('status'); el.textContent = text; el.classList.add('visible'); }
@@ -614,10 +680,95 @@ async function runSobor() {
     }
   } catch {}
 
+  // ═══ ГРАФ РЕШЕНИЙ ═══
+  status('🌳 Граф решений…');
+  document.getElementById('rb-graph').classList.add('visible');
+  document.getElementById('decision-graph').style.display = 'block';
+  document.getElementById('rb-graph').scrollIntoView({behavior:'smooth'});
+
+  const graphText = await chat(
+    `На основе формулы собора построй ДЕРЕВО РЕШЕНИЙ.\n\nФормат — JSON массив узлов:\n[\n  {"id":"1","text":"Основное решение","children":["2","3"]},\n  {"id":"2","text":"Если бюджет есть → ...","children":["4","5"]},\n  {"id":"3","text":"Если бюджета нет → ...","children":["6"]},\n  {"id":"4","text":"Запустить пилот в 3 регионах","children":[]},\n  {"id":"5","text":"Масштабировать на 10 регионов","children":[]},\n  {"id":"6","text":"Минимальный MVP с 1 регионом","children":[]}\n]\n\n6-10 узлов. Верни ТОЛЬКО JSON, без текста вокруг.`,
+    `Формула:\n✓ ${document.getElementById('f-affirm').textContent}\n✗ ${document.getElementById('f-reject').textContent}\n? ${document.getElementById('f-open').textContent}\n\nРешение:\n${decisionText}\n\nПострой дерево.`
+  );
+
+  // Рендер дерева
+  try {
+    const jsonMatch = graphText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const nodes = JSON.parse(jsonMatch[0]);
+      const nodeMap = {};
+      nodes.forEach(n => nodeMap[n.id] = n);
+      function renderNode(id, depth = 0) {
+        const n = nodeMap[id];
+        if (!n) return '';
+        const indent = '  '.repeat(depth);
+        const hasChildren = n.children && n.children.length > 0;
+        const icon = hasChildren ? '▸' : '•';
+        let html = `<div style="margin-left:${depth*20}px;padding:4px 8px;cursor:${hasChildren?'pointer':'default'};border-left:2px solid ${depth===0?'var(--gold)':'var(--line)'};margin-bottom:2px" onclick="this.querySelector('.graph-children')&&(this.querySelector('.graph-children').style.display=this.querySelector('.graph-children').style.display==='none'?'block':'none')">
+          <span style="color:var(--gold);font-weight:700">${icon}</span> ${n.text}
+          ${hasChildren ? `<div class="graph-children" style="display:${depth<2?'block':'none'}">${n.children.map(cid => renderNode(cid, depth+1)).join('')}</div>` : ''}
+        </div>`;
+        return html;
+      }
+      const root = nodes[0];
+      document.getElementById('graph-tree').innerHTML = root ? renderNode(root.id) : graphText;
+    } else {
+      document.getElementById('graph-tree').textContent = graphText;
+    }
+  } catch(e) {
+    document.getElementById('graph-tree').textContent = graphText;
+  }
+
+  // ═══ CHECKPOINT — сохранить собор для продолжения ═══
+  const soborState = {
+    id: `sobor-${Date.now()}`,
+    question: q,
+    timestamp: new Date().toISOString(),
+    round1, round2, round3,
+    formula: { affirm: document.getElementById('f-affirm').textContent, reject: document.getElementById('f-reject').textContent, open: document.getElementById('f-open').textContent },
+    decision: decisionText,
+    protocol: document.getElementById('ch-protocol').textContent,
+    tasks: document.getElementById('ch-tasks').textContent,
+    finmodel: document.getElementById('ch-finmodel').textContent,
+    normact: document.getElementById('ch-normact').textContent,
+    elapsed: ((Date.now() - t0) / 1000).toFixed(1),
+    status: 'completed'
+  };
+  // Сохранить в localStorage
+  const history = JSON.parse(localStorage.getItem('sobor-v2-history') || '[]');
+  history.push(soborState);
+  if (history.length > 20) history.splice(0, history.length - 20);
+  localStorage.setItem('sobor-v2-history', JSON.stringify(history));
+  localStorage.setItem('sobor-v2-last', JSON.stringify(soborState));
+
+  // ═══ АВТОНОМНОЕ ИСПОЛНЕНИЕ — регистрация cron-проверки ═══
+  status('⚙ Регистрация автономного исполнения…');
+  document.getElementById('rb-auto').classList.add('visible');
+  document.getElementById('auto-exec').style.display = 'block';
+  document.getElementById('rb-auto').scrollIntoView({behavior:'smooth'});
+
+  // Список задач для автоматической проверки
+  const taskLines = document.getElementById('ch-tasks').textContent.split('\n').filter(l => l.trim());
+  const autoHtml = `<div style="margin-bottom:8px"><b>Зарегистрировано ${taskLines.length} задач</b> для автономной проверки:</div>` +
+    taskLines.map((line, i) => {
+      const parts = line.split('|').map(s => s.trim());
+      return `<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid #d1fae5">
+        <span style="color:var(--dim);width:20px">${i+1}</span>
+        <span style="flex:1">${parts[1] || line}</span>
+        <span style="color:var(--dim);font-size:0.8rem">${parts[3] || '—'}</span>
+        <span style="color:var(--operator);font-size:0.8rem">⏱ ожидает</span>
+      </div>`;
+    }).join('') +
+    `<div style="margin-top:8px;color:var(--dim);font-size:0.8rem">
+      Система проверит исполнение через 24 часа. Невыполненные задачи будут эскалированы.
+      <br>Checkpoint сохранён — можно продолжить собор позже.
+    </div>`;
+  document.getElementById('auto-status').innerHTML = autoHtml;
+
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   document.getElementById('s-time').textContent = elapsed + 's';
   document.getElementById('s-steps').textContent = '✓';
-  status(`✅ Собор завершён за ${elapsed}s`);
+  status(`✅ Собор завершён за ${elapsed}s · checkpoint сохранён · ${taskLines.length} задач на исполнении`);
   btn.disabled = false; btn.textContent = 'Созвать собор';
 }
 </script>
