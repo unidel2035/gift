@@ -204,6 +204,34 @@ const server = createServer(async (req, res) => {
   if (url === '/team' || url === '/team.html') {
     return serveHTML(res, join(ROOT, 'public', 'team.html'));
   }
+  // Слайд A3 для презентации Пескову (13.05.2026) — БАС-версия
+  if (url === '/peskov' || url === '/peskov-bas-a3.html') {
+    return serveHTML(res, join(ROOT, 'public', 'peskov-bas-a3.html'));
+  }
+  // Старый слайд (онтология общины, без БАС-отрасли) — backup
+  if (url === '/peskov-gift' || url === '/peskov-a3.html') {
+    return serveHTML(res, join(ROOT, 'public', 'peskov-a3.html'));
+  }
+  // Локальный предпросмотр peskov.html из dronedoc2026 (БАС-собор + Gift)
+  // Полная страница работает только на nti.drondoc.ru (нужны /api/chat и /api/kag/search)
+  if (url === '/peskov-live' || url === '/peskov-live.html') {
+    return serveHTML(res, join(ROOT, 'public', 'peskov-live.html'));
+  }
+  // Демо-сценарий для презентации — режиссёр на 7 шагов
+  if (url === '/demo' || url === '/demo.html') {
+    return serveHTML(res, join(ROOT, 'public', 'demo.html'));
+  }
+  // Соборный чат БАС-отрасли (4 роли · для презентации Пескову)
+  if (url === '/bas' || url === '/bas-sobor.html') {
+    return serveHTML(res, join(ROOT, 'public', 'bas-sobor.html'));
+  }
+  if (url === '/sobor-v2' || url === '/sobor-v2.html') {
+    return serveHTML(res, join(ROOT, 'public', 'sobor-v2.html'));
+  }
+  // SSE-стрим: 4 параллельных голоса БАС-собора через Ollama
+  if (req.url.startsWith('/api/bas-stream')) {
+    return streamBasSobor(req, res);
+  }
   // API: текущий V-вектор (для /team)
   if (url === '/api/value') {
     try {
@@ -408,6 +436,189 @@ async function streamChat(req, res) {
     send('error', { message: e.message });
     res.end();
   }
+}
+
+// ── Соборный чат БАС-отрасли: 4 параллельных голоса через Ollama ──
+async function streamBasSobor(req, res) {
+  const u = new NodeURL(req.url, `http://${req.headers.host}`);
+  const question = u.searchParams.get('q') || '';
+  const model = u.searchParams.get('model') || 'llama3.1:8b';
+  if (!question.trim()) { res.writeHead(400); return res.end('q required'); }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const stripThink = (s) => String(s||'').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+
+  // Четыре роли БАС-отрасли. Каждая со своим логосом и риторикой.
+  const roles = [
+    {
+      id: 'producer',
+      name: 'Производитель',
+      logos: 'как это делать',
+      icon: '⚙',
+      sys: 'Ты — голос Производителя в отрасли БАС России (беспилотные авиационные системы). Тебя представляют конструкторы и инженерные команды. Отвечай с позиции производства: что технически возможно, какие модели в реестре (2003 модели БПЛА), что готово к серии, что в опытных образцах. Считай ресурсы, сроки, локализацию компонентов. Кратко, 3-4 предложения, по делу.',
+    },
+    {
+      id: 'operator',
+      name: 'Оператор',
+      logos: 'как это летает',
+      icon: '✈',
+      sys: 'Ты — голос Оператора в отрасли БАС России. Ты пилотируешь, обслуживаешь, выполняешь миссии. Знаешь сценарии применения по регионам, ROI миссий, реальную потребность в воздухе. Отвечай с позиции живой эксплуатации: что окупается, где есть спрос, какие узкие места (квалификация пилотов, ремонт, запчасти, навигация). Кратко, 3-4 предложения.',
+    },
+    {
+      id: 'regulator',
+      name: 'Регулятор',
+      logos: 'как это допустимо',
+      icon: '⚖',
+      sys: 'Ты — голос Регулятора в отрасли БАС России. Представляешь Росавиацию, Минпромторг, Минобороны. Знаешь НПА, требования сертификации, разрешённые зоны, ответственность. Отвечай с позиции допустимости и безопасности: что в законе, какие риски, что меняется в регуляторике. Кратко, 3-4 предложения, без популизма.',
+    },
+    {
+      id: 'investor',
+      name: 'Инвестор',
+      logos: 'где это выгодно',
+      icon: '₽',
+      sys: 'Ты — голос Инвестора в отрасли БАС России. Считаешь экономические модели, риски, окно возможностей. Знаешь объёмы рынка, госпрограммы, OSINT-картину. Отвечай с позиции капитала: где есть деньги, какой горизонт окупаемости, какие сектора недооценены, где переоценка. Кратко, 3-4 предложения, цинично-точно.',
+    },
+  ];
+
+  send('start', {
+    question,
+    model,
+    roles: roles.map(r => ({ id: r.id, name: r.name, logos: r.logos, icon: r.icon })),
+  });
+
+  const t0 = Date.now();
+  const elapsedSec = () => parseFloat(((Date.now() - t0) / 1000).toFixed(1));
+
+  // Один вызов Ollama
+  async function callOllama(systemPrompt, userMsg, numPredict = 500) {
+    const r = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(180_000),
+      body: JSON.stringify({
+        model,
+        stream: false,
+        keep_alive: '30m',
+        options: { temperature: 0.7, num_predict: numPredict },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userMsg },
+        ],
+      }),
+    });
+    if (!r.ok) throw new Error(`Ollama ${r.status}`);
+    const data = await r.json();
+    return stripThink(data.message?.content || '');
+  }
+
+  // ── РАУНД 1: каждая роль высказывается со своей позиции ──────────────
+  send('round', { n: 1, label: 'Каждый говорит со своей позиции', elapsedSec: elapsedSec() });
+
+  const round1 = {};
+  await Promise.all(roles.map(async role => {
+    try {
+      const content = await callOllama(
+        role.sys,
+        `Вопрос к собору: ${question}\n\nОтветь как ${role.name} БАС-отрасли. РОВНО 2-3 предложения, чётко, в характере. Не упоминай Пескова. Без преамбул.`,
+        200,
+      );
+      round1[role.id] = content;
+      send('voice', {
+        round: 1, id: role.id, name: role.name, logos: role.logos, icon: role.icon,
+        content, elapsedSec: elapsedSec(),
+      });
+    } catch (e) {
+      round1[role.id] = `[молчит: ${e.message}]`;
+      send('voice', {
+        round: 1, id: role.id, name: role.name, logos: role.logos, icon: role.icon,
+        content: `[${role.name} молчит: ${e.message}]`, error: true,
+        elapsedSec: elapsedSec(),
+      });
+    }
+  }));
+
+  // ── РАУНД 2: каждая роль видит трёх других и спорит ──────────────────
+  send('round', { n: 2, label: 'Дебаты: спорим, дополняем, не соглашаемся', elapsedSec: elapsedSec() });
+
+  const round2 = {};
+  await Promise.all(roles.map(async role => {
+    const othersText = roles
+      .filter(r => r.id !== role.id)
+      .map(r => `${r.name} (${r.logos}): ${round1[r.id]}`)
+      .join('\n\n');
+    try {
+      const debatePrompt = `Вопрос к собору: ${question}\n\nТвой первый ответ: ${round1[role.id]}\n\nТри других голоса собора ответили:\n\n${othersText}\n\nВТОРОЙ раунд дебатов. Участников ровно четыре: Производитель, Оператор, Регулятор, Инвестор. Никого больше. РОВНО 3 предложения, БЕЗ преамбул:\n(1) С кем из этих четырёх согласен — назови имя из списка и что именно поддерживаешь.\n(2) С кем не согласен — назови имя из списка и что возразишь.\n(3) Что упустили все четверо — добавь главное.`;
+      const content = await callOllama(role.sys, debatePrompt, 250);
+      round2[role.id] = content;
+      send('voice', {
+        round: 2, id: role.id, name: role.name, logos: role.logos, icon: role.icon,
+        content, elapsedSec: elapsedSec(),
+      });
+    } catch (e) {
+      round2[role.id] = `[молчит во 2-м раунде]`;
+      send('voice', {
+        round: 2, id: role.id, name: role.name, logos: role.logos, icon: role.icon,
+        content: `[молчит во 2-м раунде: ${e.message}]`, error: true,
+        elapsedSec: elapsedSec(),
+      });
+    }
+  }));
+
+  // ── СИНТЕЗ: соборный голос читает всё и выносит решение ──────────────
+  send('round', { n: 3, label: 'Синтез — соборный голос подводит итог', elapsedSec: elapsedSec() });
+
+  const fullContext = roles.map(r => {
+    return `${r.name}:\n— раунд 1: ${round1[r.id]}\n— раунд 2: ${round2[r.id]}`;
+  }).join('\n\n');
+
+  const synthSys = `Ты — соборный голос (συμφωνία) БАС-отрасли. Ты не пятая роль, ты — то что рождается из четырёх. Не примиряешь — а вычленяешь.
+
+Прочитай дебаты Производителя, Оператора, Регулятора и Инвестора. Найди:
+— в чём они РЕАЛЬНО согласны (даже если не назвали этого)
+— в чём непреодолимое противоречие (это не недостаток, это структура отрасли)
+— какое решение возможно сейчас, какое требует следующего шага
+
+4-6 предложений. Языком решения, а не комментария. Без греческих терминов.`;
+
+  let synthesis;
+  try {
+    synthesis = await callOllama(
+      synthSys,
+      `Вопрос к собору: ${question}\n\nДебаты собора (Производитель, Оператор, Регулятор, Инвестор):\n\n${fullContext}\n\nВынеси соборное решение. 4-5 предложений, начни сразу с дела.`,
+      400,
+    );
+  } catch (e) {
+    synthesis = `[Соборный голос молчит: ${e.message}]`;
+  }
+  send('synthesis', {
+    content: synthesis,
+    elapsedSec: elapsedSec(),
+  });
+
+  const elapsed = elapsedSec();
+  send('done', { elapsedSec: elapsed });
+
+  // Запись акта в матрицу — вопрошающий → _koinon
+  try {
+    const dir = join(ROOT, 'data/conciliar-swe');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const id = `bas-sobor-${Date.now()}`;
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({
+      id, kind: 'bas-sobor', question, at: new Date().toISOString(),
+      elapsedSec: elapsed, model,
+    }, null, 2));
+  } catch {}
+
+  res.end();
 }
 
 // ── Команды чата — собор действует, не только говорит ──
@@ -1422,6 +1633,24 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  /api/anamnesis — сервер памяти`);
   console.log(`  /sic           — дашборд СИЦ`);
   console.log(`  /voice         — голосовой режим (push-to-talk)`);
-  console.log(`  /api/sic/list  — список СИЦ-сессий`);
-  console.log(`  /field-toroid.html — поле Лосинца\n`);
+  console.log(`  /bas           — БАС-собор (для презентации Пескову)`);
+  console.log(`  /peskov        — слайд A3 (печать в PDF)\n`);
+
+  // Прогрев модели для БАС-собора: чтобы первый раунд начался без 60с загрузки
+  (async () => {
+    const model = process.env.BAS_MODEL || 'llama3.1:8b';
+    try {
+      const r = await fetch('http://localhost:11434/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          model, stream: false, keep_alive: '30m',
+          options: { num_predict: 5 },
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+      if (r.ok) console.log(`  ${model} прогрет → собор готов к зову`);
+    } catch {}
+  })();
 });

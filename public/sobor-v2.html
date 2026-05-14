@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Собор v2 · Никейская модель</title>
+<style>
+:root {
+  --ink: #18181b; --dim: #52525b; --gold: #c97a18; --paper: #faf7f0;
+  --line: #e4e4e7; --soft: #f4f4f5;
+  --producer: #2563a3; --operator: #3d6a32; --regulator: #8a4f2a; --investor: #6b3a82;
+  --synth: #a87a2a; --memory: #047857;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; background: var(--paper); color: var(--ink); font: 15px/1.5 'Inter', -apple-system, sans-serif; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold); padding-bottom: 0.8rem; margin-bottom: 1.2rem; }
+header h1 { font-size: 1.5rem; font-weight: 700; }
+header h1 b { color: var(--gold); }
+header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
+
+.input-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.input-row textarea { flex: 1; resize: none; height: 48px; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 1rem; font: inherit; font-size: 0.95rem; }
+.input-row textarea:focus { outline: none; border-color: var(--gold); }
+.input-row button { padding: 0 1.5rem; background: var(--ink); color: white; border: none; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.input-row button:disabled { opacity: 0.5; }
+.input-row button:hover:not(:disabled) { background: #000; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+.preset { padding: 4px 12px; background: white; border: 1px solid var(--line); border-radius: 16px; font-size: 0.82rem; cursor: pointer; }
+.preset:hover { border-color: var(--gold); background: #fff8e1; }
+
+.round-banner { display: none; align-items: center; justify-content: space-between; padding: 8px 14px; margin: 1.2rem 0 0.6rem; background: linear-gradient(90deg, var(--gold), #8a4f10); color: white; border-radius: 8px; font-size: 0.85rem; font-weight: 600; }
+.round-banner.visible { display: flex; }
+.round-banner .num { font-size: 1.1rem; margin-right: 8px; }
+.round-banner .desc { font-weight: 400; opacity: 0.9; font-size: 0.78rem; margin-left: 8px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 0.5rem; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+.card { background: white; border: 1px solid var(--line); border-radius: 10px; border-left: 3px solid var(--dim); overflow: hidden; }
+.card.producer { border-left-color: var(--producer); }
+.card.operator { border-left-color: var(--operator); }
+.card.regulator { border-left-color: var(--regulator); }
+.card.investor { border-left-color: var(--investor); }
+.card .head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.card .name { font-weight: 700; font-size: 0.9rem; }
+.card .name .icon { margin-right: 4px; }
+.card .logos { font-size: 0.75rem; color: var(--dim); font-style: italic; }
+.card .body { padding: 10px 14px; font-size: 0.88rem; line-height: 1.55; min-height: 40px; }
+.card .body.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.card .expand-btn { display: block; padding: 2px 10px; margin: 0 14px 8px; font-size: 0.75rem; color: var(--dim); background: var(--soft); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.card .expand-btn:hover { background: #e8e8e8; }
+.card.thinking .body::before { content: '⏳ думает…'; color: var(--dim); font-style: italic; }
+.card .timer { font-size: 0.7rem; color: var(--dim); font-family: monospace; }
+
+/* Различитель — предупреждение */
+.manip-alert { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 6px 10px; margin: 4px 14px 8px; font-size: 0.78rem; color: #991b1b; }
+.manip-alert b { color: #7f1d1d; }
+
+/* Синтез / Формула */
+.formula-card { background: white; border: 2px solid var(--gold); border-radius: 10px; margin-top: 0.5rem; }
+.formula-card .head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: linear-gradient(135deg, #fff8e1, white); border-bottom: 1px solid var(--gold); }
+.formula-card .name { font-weight: 700; font-size: 1rem; color: var(--gold); }
+.formula-section { padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.formula-section:last-child { border-bottom: none; }
+.formula-section .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; margin-bottom: 4px; }
+.formula-section .label.affirm { color: var(--operator); }
+.formula-section .label.reject { color: #991b1b; }
+.formula-section .label.open { color: var(--investor); }
+.formula-section .text { font-size: 0.88rem; line-height: 1.5; }
+
+.status-bar { padding: 8px 14px; background: var(--soft); border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--dim); display: none; }
+.status-bar.visible { display: block; }
+
+.stats { display: flex; gap: 2rem; margin-top: 1rem; font-size: 0.8rem; color: var(--dim); }
+.stats b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Собор <b>v2</b> · Никейская модель</h1>
+  <div class="meta">4 раунда · DeepSeek · вопрошание → различение → формула</div>
+</header>
+
+<div class="presets">
+  <span class="preset" onclick="setQ(this.textContent)">Как обеспечить суверенитет отрасли БАС?</span>
+  <span class="preset" onclick="setQ(this.textContent)">Почему госзаказ БАС 2024 не был реализован?</span>
+  <span class="preset" onclick="setQ(this.textContent)">Где границы автономии ИИ-агента в управлении флотом?</span>
+</div>
+
+<div class="input-row">
+  <textarea id="q" placeholder="Задайте вопрос — 4 раунда: позиции → вопрошание → различение → формула"></textarea>
+  <button id="btn" onclick="runSobor()">Созвать собор</button>
+</div>
+
+<div class="status-bar" id="status"></div>
+
+<!-- Раунд 1: Позиции -->
+<div class="round-banner" id="rb1"><span class="num">1</span> Позиции <span class="desc">— каждый со своей стороны</span></div>
+<div class="grid" id="g1">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">«как это делать»</div></div><div class="body" id="r1-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">«как это летает»</div></div><div class="body" id="r1-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">«как это допустимо»</div></div><div class="body" id="r1-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">«где это выгодно»</div></div><div class="body" id="r1-investor"></div></div>
+</div>
+
+<!-- Раунд 2: Вопрошание (NEW) -->
+<div class="round-banner" id="rb2"><span class="num">2</span> Вопрошание <span class="desc">— каждый задаёт вопрос другому, не спорит а уточняет</span></div>
+<div class="grid" id="g2" style="display:none">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">спрашивает</div></div><div class="body" id="r2-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-investor"></div></div>
+</div>
+
+<!-- Раунд 3: Различение (NEW) -->
+<div class="round-banner" id="rb3"><span class="num">3</span> Различение <span class="desc">— «мой тезис строит целое или защищает мою позицию?»</span></div>
+<div class="grid" id="g3" style="display:none">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-investor"></div></div>
+</div>
+
+<!-- Раунд 4: Формула -->
+<div class="round-banner" id="rb4"><span class="num">4</span> Формула <span class="desc">— конструкция с границами, как Символ Веры</span></div>
+<div class="formula-card" id="formula" style="display:none">
+  <div class="head"><div class="name">⛬ Формула собора</div></div>
+  <div class="formula-section"><div class="label affirm">✓ УТВЕРЖДАЕМ</div><div class="text" id="f-affirm"></div></div>
+  <div class="formula-section"><div class="label reject">✗ ОТВЕРГАЕМ</div><div class="text" id="f-reject"></div></div>
+  <div class="formula-section"><div class="label open">? ОТКРЫТО — для следующего круга</div><div class="text" id="f-open"></div></div>
+</div>
+
+<div class="stats" id="stats">
+  <span>Время: <b id="s-time">—</b></span>
+  <span>Шагов: <b id="s-steps">0</b>/13</span>
+</div>
+
+</div>
+
+<script>
+const API = 'https://nti.drondoc.ru'; // DeepSeek через бэкенд dronedoc
+const ROLES = [
+  { id: 'producer', name: 'Производитель', icon: '⚙', logos: '«как это делать»',
+    sys: 'Ты — голос Производителя в отрасли БАС России. Отвечай с позиции производства: ресурсы, технологии, компоненты, цепочки поставок. 3-4 предложения, без преамбул.' },
+  { id: 'operator', name: 'Оператор', icon: '✈', logos: '«как это летает»',
+    sys: 'Ты — голос Оператора в отрасли БАС России. Отвечай с позиции эксплуатации: маршруты, миссии, логистика, полётные ограничения. 3-4 предложения, без преамбул.' },
+  { id: 'regulator', name: 'Регулятор', icon: '⚖', logos: '«как это допустимо»',
+    sys: 'Ты — голос Регулятора в отрасли БАС России. Отвечай с позиции нормативной базы: сертификация, воздушное право, постановления (включая №1701). 3-4 предложения, без преамбул.' },
+  { id: 'investor', name: 'Инвестор', icon: '₽', logos: '«где это выгодно»',
+    sys: 'Ты — голос Инвестора в отрасли БАС России. Отвечай с позиции экономики: рентабельность, ROI, региональные сценарии. 3-4 предложения, без преамбул.' },
+];
+
+function setQ(t) { document.getElementById('q').value = t; }
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { runSobor(); e.preventDefault(); }
+});
+
+let steps = 0;
+function status(text) { const el = document.getElementById('status'); el.textContent = text; el.classList.add('visible'); }
+function step() { steps++; document.getElementById('s-steps').textContent = steps; }
+
+async function chat(systemPrompt, userMsg) {
+  const r = await fetch(`${API}/api/chat/lite/deepseek-stream`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: userMsg, systemPrompt, history: [] }),
+  });
+  if (!r.ok) throw new Error('chat ' + r.status);
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', out = '';
+  function parse() {
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      const m = line.match(/^data: (.+)$/);
+      if (!m) continue;
+      if (m[1] === '[DONE]') return true;
+      try { const obj = JSON.parse(m[1]); if (obj.text) out += obj.text; } catch {}
+    }
+    return false;
+  }
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    if (parse()) return out.trim();
+  }
+  parse();
+  return out.trim();
+}
+
+async function chatToEl(sys, msg, elId) {
+  const el = document.getElementById(elId);
+  el.textContent = '';
+  const r = await fetch(`${API}/api/chat/lite/deepseek-stream`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg, systemPrompt: sys, history: [] }),
+  });
+  if (!r.ok) { el.textContent = '[ошибка ' + r.status + ']'; return ''; }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', out = '';
+  function parseBuf() {
+    const lines = buf.split('\n');
+    buf = lines.pop() || ''; // keep incomplete line
+    for (const line of lines) {
+      const m = line.match(/^data: (.+)$/);
+      if (!m) continue;
+      if (m[1] === '[DONE]') return true;
+      try { const obj = JSON.parse(m[1]); if (obj.text) { out += obj.text; el.textContent = out; } } catch {}
+    }
+    return false;
+  }
+  const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+  try {
+    while (true) {
+      const { value, done } = await Promise.race([reader.read(), timeout(5000)]);
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (parseBuf()) { step(); return out.trim(); }
+    }
+  } catch (e) {
+    // timeout or error — return what we have
+  }
+  parseBuf();
+  step();
+  return out.trim();
+}
+
+async function runSobor() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('btn');
+  btn.disabled = true; btn.textContent = 'собор идёт…';
+  steps = 0;
+  const t0 = Date.now();
+
+  // ═══ РАУНД 1: Позиции (параллельно) ═══
+  status('🔍 Раунд 1 — позиции…');
+  document.getElementById('rb1').classList.add('visible');
+  const round1 = {};
+  await Promise.all(ROLES.map(async role => {
+    round1[role.id] = await chatToEl(role.sys, `Вопрос к собору: ${q}\n\nОтветь как ${role.name}. РОВНО 3-4 предложения.`, `r1-${role.id}`);
+  }));
+
+  // ═══ РАУНД 2: Вопрошание (параллельно) ═══
+  status('❓ Раунд 2 — вопрошание…');
+  document.getElementById('rb2').classList.add('visible');
+  document.getElementById('g2').style.display = 'grid';
+  document.getElementById('rb2').scrollIntoView({behavior:'smooth'});
+  const round2 = {};
+  await Promise.all(ROLES.map(async role => {
+    const others = ROLES.filter(r => r.id !== role.id)
+      .map(r => `${r.name}: ${round1[r.id]}`).join('\n\n');
+    round2[role.id] = await chatToEl(role.sys,
+      `Вопрос: ${q}\n\nТвоя позиция: ${round1[role.id]}\n\nТри других голоса:\n\n${others}\n\n` +
+      `НЕ СПОРЬ. Задай ровно ОДИН уточняющий вопрос тому голосу, чью позицию ты понял хуже всего. Формат: «[Имя], [вопрос]?» Одно предложение.`,
+      `r2-${role.id}`);
+  }));
+
+  // ═══ РАУНД 3: Различение (параллельно) ═══
+  status('🔬 Раунд 3 — различение…');
+  document.getElementById('rb3').classList.add('visible');
+  document.getElementById('g3').style.display = 'grid';
+  document.getElementById('rb3').scrollIntoView({behavior:'smooth'});
+  const round3 = {};
+  await Promise.all(ROLES.map(async role => {
+    const questions = ROLES.filter(r => r.id !== role.id)
+      .map(r => `${r.name} спрашивает: ${round2[r.id]}`).join('\n');
+    round3[role.id] = await chatToEl(role.sys,
+      `Вопрос: ${q}\n\nТвоя позиция: ${round1[role.id]}\n\nТебе задали вопросы:\n${questions}\n\n` +
+      `Проверь себя честно. Ответь в 2-3 предложениях:\n` +
+      `(1) Ответ на заданный тебе вопрос.\n` +
+      `(2) Что в твоей позиции служит целому (всей отрасли), а что — только твоей стороне?\n` +
+      `Без преамбул.`,
+      `r3-${role.id}`);
+  }));
+
+  // ═══ РАУНД 4: Формула ═══
+  status('⛬ Раунд 4 — формула…');
+  document.getElementById('rb4').classList.add('visible');
+  document.getElementById('formula').style.display = 'block';
+  document.getElementById('rb4').scrollIntoView({behavior:'smooth'});
+
+  const fullCtx = ROLES.map(r =>
+    `${r.name}:\n— позиция: ${round1[r.id]}\n— вопрос: ${round2[r.id]}\n— проверка: ${round3[r.id]}`
+  ).join('\n\n');
+
+  const formulaText = await chatToEl(
+    `Ты — соборный голос. Прочитай 3 раунда дебатов четырёх голосов БАС-отрасли. Вынеси ФОРМУЛУ — конструкцию с границами.\n\nОтветь СТРОГО в 3 блоках:\n\n✓ УТВЕРЖДАЕМ:\n[2-3 пункта — в чём собор согласен]\n\n✗ ОТВЕРГАЕМ:\n[1-2 пункта — что не работает и ПОЧЕМУ]\n\n? ОТКРЫТО:\n[1-2 пункта — что требует следующего круга]\n\nБез преамбул.`,
+    `Вопрос: ${q}\n\nДебаты:\n\n${fullCtx}\n\nВынеси формулу.`,
+    'f-affirm'
+  );
+
+  // Парсим формулу по секциям
+  const sections = formulaText.match(/[✓✗?][^✓✗?]*/g) || [];
+  if (sections.length >= 2) {
+    for (const s of sections) {
+      if (s.startsWith('✓')) document.getElementById('f-affirm').textContent = s.replace(/^✓\s*УТВЕРЖДАЕМ:?\s*/i, '').trim();
+      if (s.startsWith('✗')) document.getElementById('f-reject').textContent = s.replace(/^✗\s*ОТВЕРГАЕМ:?\s*/i, '').trim();
+      if (s.startsWith('?')) document.getElementById('f-open').textContent = s.replace(/^\?\s*ОТКРЫТО[^:]*:?\s*/i, '').trim();
+    }
+  }
+
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  document.getElementById('s-time').textContent = elapsed + 's';
+  status(`✅ Собор завершён за ${elapsed}s`);
+  btn.disabled = false; btn.textContent = 'Созвать собор';
+}
+</script>
+</body>
+</html>
