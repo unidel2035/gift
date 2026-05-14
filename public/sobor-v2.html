@@ -195,6 +195,30 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
 <!-- Пустыня -->
 <div id="desert" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:8px;padding:10px 14px;font-size:0.88rem;margin-bottom:0.5rem"></div>
 
+<!-- Рекурсивная проблематизация -->
+<div class="round-banner" id="rb-deep"><span class="num">🔬</span> Проблематизация <span class="desc">— ищем затыки и оргоружие</span></div>
+<div id="deep-dig" style="display:none">
+  <div class="formula-card" style="border-color:#991b1b">
+    <div class="head" style="background:linear-gradient(135deg,#fef2f2,white)"><div class="name" style="color:#991b1b">🔴 Затыки + ⚡ Оргоружие</div></div>
+    <div class="formula-section"><div class="text" id="deep-text" style="white-space:pre-wrap;font-size:0.85rem"></div></div>
+  </div>
+  <div id="sub-sobor" style="display:none;margin-top:8px">
+    <div style="background:linear-gradient(90deg,var(--gold),#8a4f10);color:white;padding:6px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;margin-bottom:6px">
+      🔄 Вложенный собор: <span id="sub-question"></span>
+    </div>
+    <div class="grid">
+      <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">по затыку</div></div><div class="body" id="sub-producer"></div></div>
+      <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">по затыку</div></div><div class="body" id="sub-operator"></div></div>
+      <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">по затыку</div></div><div class="body" id="sub-regulator"></div></div>
+      <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">по затыку</div></div><div class="body" id="sub-investor"></div></div>
+    </div>
+    <div class="formula-card" style="margin-top:6px">
+      <div class="head"><div class="name">⛬ Мини-формула вложенного собора</div></div>
+      <div class="formula-section"><div class="text" id="sub-formula" style="white-space:pre-wrap"></div></div>
+    </div>
+  </div>
+</div>
+
 <!-- Граф решений -->
 <div class="round-banner" id="rb-graph"><span class="num">🌳</span> Граф решений <span class="desc">— кликни по ветке чтобы развернуть</span></div>
 <div id="decision-graph" style="display:none;background:white;border:2px solid var(--gold);border-radius:10px;padding:14px;margin-bottom:0.5rem">
@@ -679,6 +703,49 @@ async function runSobor() {
       document.getElementById('desert').style.display = 'block';
     }
   } catch {}
+
+  // ═══ РЕКУРСИВНАЯ ПРОБЛЕМАТИЗАЦИЯ — копаем до дна ═══
+  status('🔬 Проверка реализуемости — ищу затыки…');
+  document.getElementById('rb-deep').classList.add('visible');
+  document.getElementById('deep-dig').style.display = 'block';
+  document.getElementById('rb-deep').scrollIntoView({behavior:'smooth'});
+
+  const deepText = await chatToEl(
+    `Ты — критический аналитик. Прочитай формулу и решение собора. Найди ЗАТЫКИ — места где решение НЕРЕАЛИЗУЕМО.\n\n` +
+    `Для каждого затыка укажи:\n` +
+    `🔴 ЗАТЫК: [что именно нереализуемо]\n` +
+    `💡 ПОЧЕМУ: [конкретная причина — нет чипов, нет завода, нет денег, нет людей]\n` +
+    `⚡ ОРГОРУЖИЕ: [какая нестандартная организационная форма может решить — спецкооператив, обход через третьи страны, параллельная разработка, венчурный собор]\n` +
+    `📋 ПЕРВЫЙ ШАГ: [что сделать завтра]\n\n` +
+    `2-3 затыка. Копай ГЛУБОКО — не поверхностные проблемы, а структурные. Если нужно — выйди на уровень геополитики (санкции, закупки, альянсы). Без преамбул.`,
+    `Вопрос: ${q}\n\nФормула:\n✓ ${document.getElementById('f-affirm').textContent}\n✗ ${document.getElementById('f-reject').textContent}\n\nРешение:\n${decisionText}\n\nНайди затыки и оргоружие.`,
+    'deep-text'
+  );
+
+  // Автоматический вложенный собор по первому затыку
+  const firstBlock = deepText.match(/🔴 ЗАТЫК:\s*([^\n]+)/);
+  if (firstBlock) {
+    const subQ = firstBlock[1].trim();
+    status(`🔄 Вложенный собор: «${subQ.slice(0,50)}…»`);
+    document.getElementById('sub-sobor').style.display = 'block';
+    document.getElementById('sub-question').textContent = subQ;
+
+    // Мини-собор: 4 позиции параллельно
+    const subRound = {};
+    await Promise.all(ROLES.map(async role => {
+      subRound[role.id] = await chatToEl(role.sys,
+        `ВЛОЖЕННЫЙ СОБОР. Основной вопрос был: ${q}\nСобор выявил затык: ${subQ}\n\nТеперь ответь КОНКРЕТНО на затык как ${role.name}. Что РЕАЛЬНО можно сделать? Не общие слова — конкретные шаги, имена, суммы, сроки. 2-3 предложения.`,
+        `sub-${role.id}`);
+    }));
+
+    // Мини-формула вложенного собора
+    const subCtx = ROLES.map(r => `${r.name}: ${subRound[r.id]}`).join('\n');
+    await chatToEl(
+      `Вложенный собор по затыку. Вынеси МИНИ-ФОРМУЛУ в 3 строки:\n✓ Реально сделать: [что]\n✗ Нереально: [что и почему]\n📋 Завтра: [один конкретный шаг]\nБез преамбул.`,
+      `Затык: ${subQ}\n\nОтветы:\n${subCtx}\n\nМини-формула.`,
+      'sub-formula'
+    );
+  }
 
   // ═══ ГРАФ РЕШЕНИЙ ═══
   status('🌳 Граф решений…');
