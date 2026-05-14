@@ -118,12 +118,12 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
 </div>
 
 <!-- Раунд 3: Различение (NEW) -->
-<div class="round-banner" id="rb3"><span class="num">3</span> Различение <span class="desc">— «мой тезис строит целое или защищает мою позицию?»</span></div>
+<div class="round-banner" id="rb3"><span class="num">3</span> Перекрёстное различение <span class="desc">— каждый проверяет другого: «ты служишь целому или себе?»</span></div>
 <div class="grid" id="g3" style="display:none">
-  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-producer"></div></div>
-  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-operator"></div></div>
-  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-regulator"></div></div>
-  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">проверяет себя</div></div><div class="body" id="r3-investor"></div></div>
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">проверяет Оператора</div></div><div class="body" id="r3-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">проверяет Регулятора</div></div><div class="body" id="r3-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">проверяет Инвестора</div></div><div class="body" id="r3-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">проверяет Производителя</div></div><div class="body" id="r3-investor"></div></div>
 </div>
 
 <!-- Раунд 4: Формула -->
@@ -135,8 +135,15 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
   <div class="formula-section"><div class="label open">? ОТКРЫТО — для следующего круга</div><div class="text" id="f-open"></div></div>
 </div>
 
-<!-- Раунд 5: Голос памяти + Различитель -->
-<div class="round-banner" id="rb5"><span class="num">5</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
+<!-- Раунд 5: Конструкция решения -->
+<div class="round-banner" id="rb5a"><span class="num">5</span> Конструкция решения <span class="desc">— кто, что, когда, первый шаг</span></div>
+<div class="formula-card" id="decision" style="display:none">
+  <div class="head"><div class="name">🔧 План действий</div></div>
+  <div class="formula-section"><div class="text" id="d-text"></div></div>
+</div>
+
+<!-- Раунд 6: Голос памяти + Различитель -->
+<div class="round-banner" id="rb6a"><span class="num">6</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
 <div class="grid" id="g5" style="display:none">
   <div class="card" style="border-left-color:var(--memory)"><div class="head"><div class="name"><span class="icon">◉</span> Голос памяти</div><div class="logos">структура акта</div></div><div class="body" id="r5-memory"></div></div>
   <div class="card" style="border-left-color:#991b1b"><div class="head"><div class="name"><span class="icon">🛡</span> Различитель</div><div class="logos">чистота аргументов</div></div><div class="body" id="r5-distinguisher"></div></div>
@@ -280,22 +287,26 @@ async function runSobor() {
       `r2-${role.id}`);
   }));
 
-  // ═══ РАУНД 3: Различение (параллельно) ═══
-  status('🔬 Раунд 3 — различение…');
+  // ═══ РАУНД 3: Перекрёстное различение (каждый проверяет ДРУГОГО) ═══
+  status('🔬 Раунд 3 — перекрёстное различение…');
   document.getElementById('rb3').classList.add('visible');
   document.getElementById('g3').style.display = 'grid';
   document.getElementById('rb3').scrollIntoView({behavior:'smooth'});
   const round3 = {};
-  await Promise.all(ROLES.map(async role => {
-    const questions = ROLES.filter(r => r.id !== role.id)
-      .map(r => `${r.name} спрашивает: ${round2[r.id]}`).join('\n');
-    round3[role.id] = await chatToEl(role.sys,
-      `Вопрос: ${q}\n\nТвоя позиция: ${round1[role.id]}\n\nТебе задали вопросы:\n${questions}\n\n` +
-      `Проверь себя честно. Ответь в 2-3 предложениях:\n` +
-      `(1) Ответ на заданный тебе вопрос.\n` +
-      `(2) Что в твоей позиции служит целому (всей отрасли), а что — только твоей стороне?\n` +
-      `Без преамбул.`,
-      `r3-${role.id}`);
+  // Каждый проверяет следующего по кругу: П→О, О→Р, Р→И, И→П
+  const checkPairs = [[0,1],[1,2],[2,3],[3,0]];
+  await Promise.all(checkPairs.map(async ([checkerIdx, targetIdx]) => {
+    const checker = ROLES[checkerIdx];
+    const target = ROLES[targetIdx];
+    round3[checker.id] = await chatToEl(checker.sys,
+      `Вопрос: ${q}\n\n` +
+      `Позиция ${target.name}: ${round1[target.id]}\n` +
+      `Вопрос ${target.name}: ${round2[target.id]}\n\n` +
+      `Ты — ${checker.name}. Проверь позицию ${target.name}. Ответь РОВНО 2-3 предложения:\n` +
+      `(1) Что в позиции ${target.name} служит ВСЕЙ отрасли, а что — только его стороне?\n` +
+      `(2) Есть ли подмена: ${target.name} говорит о пользе для всех, но на самом деле продвигает свой интерес?\n` +
+      `Будь честен. Если чисто — скажи «чисто». Без преамбул.`,
+      `r3-${checker.id}`);
   }));
 
   // ═══ РАУНД 4: Формула ═══
@@ -324,7 +335,19 @@ async function runSobor() {
     }
   }
 
-  // ═══ РАУНД 5: Голос памяти + Различитель (параллельно) ═══
+  // ═══ РАУНД 5: Конструкция решения ═══
+  status('🔧 Конструкция решения…');
+  document.getElementById('rb5a').classList.add('visible');
+  document.getElementById('decision').style.display = 'block';
+  document.getElementById('rb5a').scrollIntoView({behavior:'smooth'});
+
+  await chatToEl(
+    `Ты — конструктор решений. Прочитай формулу собора и построй КОНКРЕТНЫЙ план действий.\n\nОтветь СТРОГО по структуре:\n\n🎯 РЕШЕНИЕ: [одно предложение — что делаем]\n\n👤 КТО ОТВЕЧАЕТ:\n- [роль]: [за что конкретно]\n- [роль]: [за что]\n\n📅 ПЕРВЫЙ ШАГ: [что сделать в ближайшую неделю, одно действие]\n\n⚠ РИСК: [главный риск и как его снять]\n\nБез преамбул. Языком действия, не анализа.`,
+    `Вопрос: ${q}\n\nФормула собора:\n${formulaText}\n\nПострой конкретный план.`,
+    'd-text'
+  );
+
+  // ═══ РАУНД 6: Голос памяти + Различитель (параллельно) ═══
   status('◉ Голос памяти + 🛡 Различитель…');
   document.getElementById('rb5').classList.add('visible');
   document.getElementById('g5').style.display = 'grid';
@@ -337,7 +360,7 @@ async function runSobor() {
       'r5-memory'
     ),
     chatToEl(
-      `Ты — Различитель. Анализируй НЕ содержание, а СПОСОБ аргументации.\n\nПроверь ответы 4 агентов на приёмы:\n- Подмена тезиса\n- Ложная дилемма (или/или вместо и/и)\n- Апелляция к авторитету без обоснования\n- Скрытая манипуляция (льстит чтобы получить ресурс)\n\nОтветь в 2-3 предложениях: кто чист, кто использовал приёмы, какие именно. Если все чисты — так и скажи. Без преамбул.`,
+      `Ты — Различитель духов. Анализируй НЕ содержание, а ДУХ высказывания.\n\nДля каждого из 4 агентов определи:\n1. Служит ли его речь ЦЕЛОМУ (строит общее решение) или СЕБЕ (продвигает свой интерес)?\n2. Есть ли приёмы: подмена тезиса, ложная дилемма, апелляция к авторитету, скрытая манипуляция?\n3. Есть ли ИЗБЫТОК (surplus) — новое знание, которого не было до собора?\n\nПорядок обличения (Мф 18:15-17):\n- Если приём замечен ПЕРВЫЙ раз — укажи мягко: «[Имя], обрати внимание на...»\n- Если ПОВТОРНО — назови публично: «[Имя] в третий раз подменяет тезис»\n\nФормат: по 1 строке на каждого агента. Если чист — «чист, есть surplus». Без преамбул.`,
       `Вопрос: ${q}\n\nОтветы:\n${fullCtx}`,
       'r5-distinguisher'
     )
