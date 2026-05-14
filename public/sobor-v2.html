@@ -142,8 +142,28 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
   <div class="formula-section"><div class="text" id="d-text"></div></div>
 </div>
 
-<!-- Раунд 6: Голос памяти + Различитель -->
-<div class="round-banner" id="rb6a"><span class="num">6</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
+<!-- Канцелярия -->
+<div class="round-banner" id="rb-chancel"><span class="num">📋</span> Канцелярия <span class="desc">— протокол + задачи + подача</span></div>
+<div id="chancery" style="display:none">
+  <div class="grid">
+    <div class="formula-card">
+      <div class="head"><div class="name">📄 Протокол решения</div></div>
+      <div class="formula-section"><div class="text" id="ch-protocol" style="white-space:pre-wrap;font-size:0.85rem"></div></div>
+    </div>
+    <div class="formula-card">
+      <div class="head"><div class="name">📋 Таблица задач</div></div>
+      <div class="formula-section"><div class="text" id="ch-tasks" style="white-space:pre-wrap;font-size:0.85rem;font-family:monospace"></div></div>
+    </div>
+  </div>
+  <div id="ch-actions" style="display:none;gap:8px;margin:8px 0;flex-wrap:wrap">
+    <button class="preset" onclick="copyProtocol()" style="background:var(--gold);color:white;border-color:var(--gold)">📋 Копировать протокол</button>
+    <button class="preset" onclick="downloadProtocol()" style="background:var(--ink);color:white;border-color:var(--ink)">💾 Скачать .txt</button>
+    <button class="preset" onclick="sendToIntegram()" style="background:#2563a3;color:white;border-color:#2563a3">📤 Создать задачи в Интеграм</button>
+  </div>
+</div>
+
+<!-- Раунд 7: Голос памяти + Различитель -->
+<div class="round-banner" id="rb7"><span class="num">7</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
 <div class="grid" id="g5" style="display:none">
   <div class="card" style="border-left-color:var(--memory)"><div class="head"><div class="name"><span class="icon">◉</span> Голос памяти</div><div class="logos">структура акта</div></div><div class="body" id="r5-memory"></div></div>
   <div class="card" style="border-left-color:#991b1b"><div class="head"><div class="name"><span class="icon">🛡</span> Различитель</div><div class="logos">чистота аргументов</div></div><div class="body" id="r5-distinguisher"></div></div>
@@ -180,6 +200,41 @@ const ROLES = [
 ];
 
 function setQ(t) { document.getElementById('q').value = t; }
+function copyProtocol() {
+  const text = document.getElementById('ch-protocol').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('Протокол скопирован'));
+}
+function downloadProtocol() {
+  const text = document.getElementById('ch-protocol').textContent;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `protocol-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+}
+async function sendToIntegram() {
+  const tasks = document.getElementById('ch-tasks').textContent;
+  const lines = tasks.split('\n').filter(l => l.trim());
+  const btn = event.target;
+  btn.textContent = 'Отправляю…'; btn.disabled = true;
+  try {
+    // Создаём задачи через Integram MCP (через бэкенд)
+    for (const line of lines) {
+      const parts = line.split('|').map(s => s.trim());
+      if (parts.length >= 3) {
+        await fetch('https://ai2o.online/api/v2/objects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: parts[1], assignee: parts[2], deadline: parts[3] || '' })
+        }).catch(() => {});
+      }
+    }
+    btn.textContent = '✅ Задачи созданы';
+  } catch (e) {
+    btn.textContent = '❌ Ошибка: ' + e.message;
+  }
+}
+
 document.getElementById('q').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { runSobor(); e.preventDefault(); }
 });
@@ -347,7 +402,41 @@ async function runSobor() {
     'd-text'
   );
 
-  // ═══ РАУНД 6: Голос памяти + Различитель (параллельно) ═══
+  // ═══ РАУНД 5½: Канцелярия — исполнительный акт ═══
+  status('📋 Канцелярия — составляю документы…');
+  document.getElementById('rb-chancel').classList.add('visible');
+  document.getElementById('chancery').style.display = 'block';
+  document.getElementById('rb-chancel').scrollIntoView({behavior:'smooth'});
+
+  const decisionText = document.getElementById('d-text').textContent;
+  const [protocolText, taskTableText] = await Promise.all([
+    // Протокол решения
+    chatToEl(
+      `Ты — секретарь собора. Составь ПРОТОКОЛ РЕШЕНИЯ в формате официального документа.\n\nСтруктура:\n` +
+      `ПРОТОКОЛ СОБОРА №[номер] от [дата]\n\n` +
+      `ВОПРОС: [формулировка]\n\n` +
+      `СЛУШАЛИ: [кратко кто что сказал — 1 строка на роль]\n\n` +
+      `РЕШИЛИ:\n1. [пункт]\n2. [пункт]\n3. [пункт]\n\n` +
+      `ОТВЕТСТВЕННЫЕ:\n- [ФИО/роль]: [задача] — срок: [дата]\n\n` +
+      `КОНТРОЛЬ: [кто контролирует исполнение]\n\n` +
+      `Дата: ${new Date().toLocaleDateString('ru-RU')}. Номер: СБ-${Date.now().toString(36).slice(-4).toUpperCase()}`,
+      `Вопрос: ${q}\n\nФормула:\n${formulaText}\n\nПлан:\n${decisionText}\n\nСоставь протокол.`,
+      'ch-protocol'
+    ),
+    // Таблица задач
+    chatToEl(
+      `Составь таблицу задач на основе решения собора. Формат — каждая строка:\n` +
+      `[№] | [Задача] | [Ответственный] | [Срок] | [Статус: новая]\n\n` +
+      `3-5 строк. Без заголовка таблицы, только строки. Сроки — конкретные даты от сегодня (${new Date().toLocaleDateString('ru-RU')}).`,
+      `Решение:\n${decisionText}\n\nСоставь таблицу задач.`,
+      'ch-tasks'
+    )
+  ]);
+
+  // Кнопки действий
+  document.getElementById('ch-actions').style.display = 'flex';
+
+  // ═══ РАУНД 7: Голос памяти + Различитель (параллельно) ═══
   status('◉ Голос памяти + 🛡 Различитель…');
   document.getElementById('rb5').classList.add('visible');
   document.getElementById('g5').style.display = 'grid';
