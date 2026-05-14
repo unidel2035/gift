@@ -212,26 +212,72 @@ function downloadProtocol() {
   a.download = `protocol-${new Date().toISOString().slice(0,10)}.txt`;
   a.click();
 }
+const INTEGRAM = {
+  api: 'https://api.ai2o.ru',
+  db: 'sobor-artifacts',
+  tables: { sobory: 301, tasks: 304, finmodel: 305, roadmap: 306, normacts: 307, voices: 308 },
+  token: null,
+  async auth() {
+    if (this.token) return this.token;
+    const r = await fetch(`${API}/api/integram-auth/authenticate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'unidel@yandex.ru', password: 'Denver2035', database: this.db })
+    });
+    const d = await r.json();
+    this.token = d.token;
+    return this.token;
+  },
+  async create(typeId, fields) {
+    const token = await this.auth();
+    const r = await fetch(`${this.api}/${this.db}/object?token=${token}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typeId, ...fields })
+    });
+    return r.json();
+  }
+};
+
 async function sendToIntegram() {
-  const tasks = document.getElementById('ch-tasks').textContent;
-  const lines = tasks.split('\n').filter(l => l.trim());
   const btn = event.target;
   btn.textContent = 'Отправляю…'; btn.disabled = true;
   try {
-    // Создаём задачи через Integram MCP (через бэкенд)
-    for (const line of lines) {
+    const q = document.getElementById('q').value.trim();
+    const formulaAffirm = document.getElementById('f-affirm').textContent;
+    const formulaReject = document.getElementById('f-reject').textContent;
+    const formulaOpen = document.getElementById('f-open').textContent;
+    const decisionText = document.getElementById('d-text').textContent;
+    const protocolText = document.getElementById('ch-protocol').textContent;
+    const elapsed = document.getElementById('s-time').textContent;
+
+    // 1. Создать запись Собора
+    const sobor = await INTEGRAM.create(INTEGRAM.tables.sobory, {
+      _value: q.slice(0, 200),
+      '1000026951': new Date().toISOString(), // Дата
+      '1000026953': formulaAffirm, // Формула: утверждаем
+      '1000026954': formulaReject, // Формула: отвергаем
+      '1000026955': formulaOpen, // Формула: открыто
+      '1000026956': decisionText, // Решение
+      '1000026957': protocolText, // Протокол
+    });
+
+    // 2. Создать задачи
+    const taskLines = document.getElementById('ch-tasks').textContent.split('\n').filter(l => l.trim());
+    for (const line of taskLines) {
       const parts = line.split('|').map(s => s.trim());
       if (parts.length >= 3) {
-        await fetch('https://ai2o.online/api/v2/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: parts[1], assignee: parts[2], deadline: parts[3] || '' })
-        }).catch(() => {});
+        await INTEGRAM.create(INTEGRAM.tables.tasks, {
+          _value: parts[1] || line,
+          '1000026963': parts[2] || '', // Ответственный
+        });
       }
     }
-    btn.textContent = '✅ Задачи созданы';
+
+    btn.textContent = '✅ Собор + задачи в Интеграм';
+    btn.style.background = '#047857';
   } catch (e) {
-    btn.textContent = '❌ Ошибка: ' + e.message;
+    console.error('Integram error:', e);
+    btn.textContent = '❌ ' + e.message;
+    btn.disabled = false;
   }
 }
 
