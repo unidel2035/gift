@@ -155,10 +155,22 @@ header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
       <div class="formula-section"><div class="text" id="ch-tasks" style="white-space:pre-wrap;font-size:0.85rem;font-family:monospace"></div></div>
     </div>
   </div>
+  <div class="grid" id="ch-v2" style="display:none">
+    <div class="formula-card">
+      <div class="head"><div class="name">📊 Финансовая модель</div></div>
+      <div class="formula-section"><div class="text" id="ch-finmodel" style="white-space:pre-wrap;font-size:0.82rem;font-family:monospace"></div></div>
+    </div>
+    <div class="formula-card">
+      <div class="head"><div class="name">📝 Проект нормативного акта</div></div>
+      <div class="formula-section"><div class="text" id="ch-normact" style="white-space:pre-wrap;font-size:0.82rem"></div></div>
+    </div>
+  </div>
   <div id="ch-actions" style="display:none;gap:8px;margin:8px 0;flex-wrap:wrap">
     <button class="preset" onclick="copyProtocol()" style="background:var(--gold);color:white;border-color:var(--gold)">📋 Копировать протокол</button>
     <button class="preset" onclick="downloadProtocol()" style="background:var(--ink);color:white;border-color:var(--ink)">💾 Скачать .txt</button>
-    <button class="preset" onclick="sendToIntegram()" style="background:#2563a3;color:white;border-color:#2563a3">📤 Создать задачи в Интеграм</button>
+    <button class="preset" onclick="downloadNormact()" style="background:var(--regulator);color:white;border-color:var(--regulator)">📝 Скачать приказ .txt</button>
+    <button class="preset" onclick="downloadFinmodel()" style="background:var(--investor);color:white;border-color:var(--investor)">📊 Скачать финмодель .csv</button>
+    <button class="preset" onclick="sendToIntegram()" style="background:#2563a3;color:white;border-color:#2563a3">📤 Всё в Интеграм</button>
   </div>
 </div>
 
@@ -203,6 +215,25 @@ function setQ(t) { document.getElementById('q').value = t; }
 function copyProtocol() {
   const text = document.getElementById('ch-protocol').textContent;
   navigator.clipboard.writeText(text).then(() => alert('Протокол скопирован'));
+}
+function downloadNormact() {
+  const text = document.getElementById('ch-normact').textContent;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `normact-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+}
+function downloadFinmodel() {
+  const text = document.getElementById('ch-finmodel').textContent;
+  const lines = text.split('\n').filter(l => l.trim());
+  const csv = 'Регион;Выручка (млн);Затраты (млн);ROI (%);Срок окупаемости\n' +
+    lines.map(l => l.split('|').map(s => s.trim()).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `finmodel-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
 }
 function downloadProtocol() {
   const text = document.getElementById('ch-protocol').textContent;
@@ -272,7 +303,30 @@ async function sendToIntegram() {
       }
     }
 
-    btn.textContent = '✅ Собор + задачи в Интеграм';
+    // 3. Финмодель — каждая строка как запись
+    const finLines = document.getElementById('ch-finmodel').textContent.split('\n').filter(l => l.includes('|'));
+    for (const line of finLines) {
+      const [region, revenue, costs, roi, payback] = line.split('|').map(s => s.trim());
+      if (region) {
+        await INTEGRAM.create(INTEGRAM.tables.finmodel, {
+          _value: `${region} — ${q.slice(0,50)}`,
+          '1000026968': region,
+          '1000026969': parseFloat(revenue) || 0,
+          '1000026970': parseFloat(costs) || 0,
+        }).catch(() => {});
+      }
+    }
+
+    // 4. Нормативный акт
+    const normText = document.getElementById('ch-normact').textContent;
+    if (normText) {
+      await INTEGRAM.create(INTEGRAM.tables.normacts, {
+        _value: `Проект приказа: ${q.slice(0,100)}`,
+        '1000026978': normText,
+      }).catch(() => {});
+    }
+
+    btn.textContent = '✅ Всё в Интеграм: собор + задачи + финмодель + приказ';
     btn.style.background = '#047857';
   } catch (e) {
     console.error('Integram error:', e);
@@ -476,6 +530,23 @@ async function runSobor() {
       `3-5 строк. Без заголовка таблицы, только строки. Сроки — конкретные даты от сегодня (${new Date().toLocaleDateString('ru-RU')}).`,
       `Решение:\n${decisionText}\n\nСоставь таблицу задач.`,
       'ch-tasks'
+    )
+  ]);
+
+  // ═══ КАНЦЕЛЯРИЯ v2: Финмодель + Нормативный акт (параллельно) ═══
+  status('📊 Канцелярия v2 — финмодель + нормативный акт…');
+  document.getElementById('ch-v2').style.display = 'grid';
+
+  const [finmodelText, normactText] = await Promise.all([
+    chatToEl(
+      `Ты — финансовый аналитик. На основе решения собора построй ФИНАНСОВУЮ МОДЕЛЬ.\n\nФормат — таблица, каждая строка:\nРегион | Выручка (млн) | Затраты (млн) | ROI (%) | Срок окупаемости\n\n5-8 строк для разных регионов РФ. Данные — экспертная оценка на основе контекста БАС. Без заголовка, только строки.`,
+      `Решение собора:\n${decisionText}\n\nСоставь финмодель по регионам.`,
+      'ch-finmodel'
+    ),
+    chatToEl(
+      `Ты — юрист-нормотворец. На основе решения собора составь ПРОЕКТ НОРМАТИВНОГО АКТА.\n\nФормат:\nПРОЕКТ ПРИКАЗА\n[Орган]: [название]\nот «__» _______ 2026 г. № ___\n\nВ целях [обоснование]...\n\nПРИКАЗЫВАЮ:\n1. [пункт]\n2. [пункт]\n3. Контроль возложить на [кого]\n\n[Подпись]\n\nКороткий документ, 1 страница. Реалистичный.`,
+      `Решение собора:\n${decisionText}\n\nСоставь проект приказа.`,
+      'ch-normact'
     )
   ]);
 
