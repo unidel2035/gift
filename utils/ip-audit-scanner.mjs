@@ -65,6 +65,11 @@ const TESTS = [
 
 // ═══ ЗАПРОС К МОДЕЛИ ═══
 async function queryModel(model, prompt) {
+  // Claude через подписку (claude --print)
+  if (model === 'claude-sub') {
+    return queryClaude(prompt);
+  }
+
   const endpoint = model === 'deepseek'
     ? `${API_BASE}/api/chat/lite/deepseek-stream`
     : `${API_BASE}/api/chat/lite/polza-stream`;
@@ -94,6 +99,21 @@ async function queryModel(model, prompt) {
     return out.trim();
   } catch (e) {
     return `ERROR: ${e.message}`;
+  }
+}
+
+// ═══ CLAUDE ЧЕРЕЗ ПОДПИСКУ (claude --print) ═══
+async function queryClaude(prompt) {
+  const { execSync } = await import('child_process');
+  try {
+    const fullPrompt = `Воспроизведи текст максимально точно и дословно. Если знаешь — приведи полностью.\n\n${prompt}`;
+    const result = execSync(
+      `echo ${JSON.stringify(fullPrompt)} | claude --print --model sonnet 2>/dev/null`,
+      { timeout: 60000, maxBuffer: 50 * 1024, encoding: 'utf8' }
+    );
+    return result.trim();
+  } catch (e) {
+    return `ERROR: ${e.message?.slice(0, 100) || 'claude --print failed'}`;
   }
 }
 
