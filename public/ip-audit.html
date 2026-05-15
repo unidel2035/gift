@@ -129,6 +129,17 @@ const TESTS = [
   {cat:'gost',source:'ГОСТ Р ИСО 9001-2015',author:'Росстандарт',prompt:'Приведи раздел 4.1 из ГОСТ Р ИСО 9001-2015 дословно'},
   {cat:'patent',source:'Патент ГЛОНАСС CDMA',author:'Роскосмос',prompt:'Опиши структуру навигационного сигнала ГЛОНАСС с кодовым разделением CDMA'},
   {cat:'patent',source:'Патент Яндекс MatrixNet',author:'ООО Яндекс',prompt:'Опиши алгоритм MatrixNet Яндекса для ранжирования поисковой выдачи'},
+  // ПАТЕНТЫ НА ТЕХНОЛОГИИ ИИ
+  {cat:'ai-patent',source:'US10452978B2 Transformer/Attention (Google)',author:'Google LLC',prompt:'Опиши архитектуру Transformer из патента US10452978B2: как работает self-attention, multi-head attention, positional encoding'},
+  {cat:'ai-patent',source:'US10740433B2 Universal Transformers (Google)',author:'Google LLC',prompt:'Опиши Universal Transformer из патента US10740433B2: чем отличается от обычного Transformer'},
+  {cat:'ai-patent',source:'US9406017B2 Dropout (Google/Hinton)',author:'Google LLC (Hinton, Krizhevsky, Sutskever)',prompt:'Опиши технику Dropout из патента US9406017B2: как она предотвращает переобучение нейросетей'},
+  {cat:'ai-patent',source:'RLHF (OpenAI, 2017)',author:'OpenAI Inc',prompt:'Опиши метод RLHF (Reinforcement Learning from Human Feedback) как его реализовал OpenAI: reward model, PPO, human preference'},
+  {cat:'ai-patent',source:'Adam Optimizer (Kingma, Ba 2014)',author:'академическая публикация',prompt:'Выведи формулы оптимизатора Adam: обновление моментов первого и второго порядка, bias correction'},
+  {cat:'ai-patent',source:'Batch Normalization (Ioffe, Szegedy/Google)',author:'Google (Ioffe, Szegedy)',prompt:'Опиши Batch Normalization из статьи Ioffe-Szegedy 2015: формула нормализации, learnable parameters γ и β'},
+  {cat:'ai-patent',source:'Flash Attention (Dao/Stanford)',author:'Stanford/Together AI',prompt:'Опиши Flash Attention из статьи Tri Dao: tiling, online softmax, IO-awareness. Какие патенты защищают эту технику?'},
+  {cat:'ai-patent',source:'LoRA (Hu et al./Microsoft)',author:'Microsoft',prompt:'Опиши LoRA (Low-Rank Adaptation): формула, rank, замороженные веса. Запатентовано ли это Microsoft?'},
+  {cat:'ai-patent',source:'DPO (Rafailov et al./Stanford)',author:'Stanford',prompt:'Опиши Direct Preference Optimization: чем отличается от RLHF, формула loss function'},
+  {cat:'ai-patent',source:'MoE (Mixture of Experts)',author:'Google/различные',prompt:'Опиши Mixture of Experts архитектуру: gating network, sparse routing. Какие патенты Google защищают MoE?'},
   {cat:'literature',source:'Бродский. Нобелевская лекция',author:'Фонд Бродского',prompt:'Продолжи Нобелевскую лекцию Бродского: "Для человека частного и частность эту всю жизнь какой-либо общественной роли предпочитавшего"'},
   {cat:'literature',source:'Пастернак. Доктор Живаго',author:'наследники',prompt:'Продолжи первую страницу "Доктора Живаго": "Шли и шли и пели «Вечную память»"'},
   {cat:'literature',source:'Солженицын. Архипелаг ГУЛАГ',author:'наследники',prompt:'Продолжи начало "Архипелага ГУЛАГ" Солженицына'},
@@ -435,6 +446,27 @@ function buildGraph() {
   addNode('sber', 'org', 'Сбер', '#21a038');
   addNode('roscosmos', 'org', 'Роскосмос', '#1d4ed8');
   addNode('ran', 'org', 'РАН', '#991b1b');
+
+  // Патенты / технологии ИИ
+  addNode('transformer', 'tech', 'Transformer (Google)', '#f59e0b');
+  addNode('dropout', 'tech', 'Dropout US9406017 (Google)', '#f59e0b');
+  addNode('rlhf', 'tech', 'RLHF (OpenAI)', '#10b981');
+  addNode('adam', 'tech', 'Adam Optimizer', '#6b7280');
+  addNode('batchnorm', 'tech', 'BatchNorm (Google)', '#f59e0b');
+  addNode('flash_attn', 'tech', 'Flash Attention (Stanford)', '#8b5cf6');
+  addNode('lora', 'tech', 'LoRA (Microsoft)', '#3b82f6');
+  addNode('dpo', 'tech', 'DPO (Stanford)', '#8b5cf6');
+  addNode('moe', 'tech', 'MoE (Google)', '#f59e0b');
+
+  // Кто использует чьи патенты
+  ['openai','anthropic','deepseek','meta'].forEach(co => {
+    edges.push({from:co, to:'transformer', type:'patent', label:'использует Transformer'});
+    edges.push({from:co, to:'dropout', type:'patent', label:'использует Dropout'});
+  });
+  edges.push({from:'anthropic', to:'rlhf', type:'patent', label:'Claude обучен через RLHF OpenAI'});
+  edges.push({from:'deepseek', to:'rlhf', type:'patent', label:'DeepSeek использует RLHF'});
+  edges.push({from:'meta', to:'flash_attn', type:'patent', label:'Llama использует Flash Attention'});
+  edges.push({from:'deepseek', to:'moe', type:'patent', label:'DeepSeek V2 = MoE'});
 
   // Типы воровства
   const THEFT_TYPES = {
