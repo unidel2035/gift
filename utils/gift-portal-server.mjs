@@ -228,6 +228,9 @@ const server = createServer(async (req, res) => {
   if (url === '/sobor-v2' || url === '/sobor-v2.html') {
     return serveHTML(res, join(ROOT, 'public', 'sobor-v2.html'));
   }
+  if (url === '/ip-audit' || url === '/ip-audit.html') {
+    return serveHTML(res, join(ROOT, 'public', 'ip-audit.html'));
+  }
   // SSE-стрим: 4 параллельных голоса БАС-собора через Ollama
   if (req.url.startsWith('/api/bas-stream')) {
     return streamBasSobor(req, res);

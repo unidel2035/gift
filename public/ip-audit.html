@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IP Audit · Оргоружие</title>
+<style>
+:root { --bg:#faf7f0; --ink:#18181b; --dim:#52525b; --gold:#c97a18; --red:#991b1b; --green:#047857; --blue:#1d4ed8; --line:#e4e4e7; --soft:#f4f4f5; }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--ink);font:14px/1.5 'Inter',-apple-system,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:1.5rem}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--red);padding-bottom:.8rem;margin-bottom:1.2rem}
+header h1{font-size:1.4rem;font-weight:800} header h1 b{color:var(--red)}
+.meta{font-size:.75rem;color:var(--dim);text-align:right}
+.controls{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+.controls select,.controls button{padding:6px 14px;border:1px solid var(--line);border-radius:8px;font:inherit;background:white;cursor:pointer}
+.controls button{background:var(--ink);color:white;border:none;font-weight:600}
+.controls button:disabled{opacity:.4}
+.controls button.danger{background:var(--red)}
+.stats{display:flex;gap:1.5rem;margin-bottom:1rem;font-size:.85rem}
+.stat b{font-size:1.2rem}
+.stat.red b{color:var(--red)} .stat.yellow b{color:var(--gold)} .stat.green b{color:var(--green)}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{background:var(--ink);color:white;padding:8px 10px;text-align:left;position:sticky;top:0}
+td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:hover{background:#fff8e1}
+tr.reproduced{background:#fef2f2} tr.refused-knows{background:#fffbeb}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.7rem;font-weight:600}
+.badge.red{background:#fecaca;color:var(--red)} .badge.yellow{background:#fef3c7;color:#92400e}
+.badge.green{background:#d1fae5;color:var(--green)} .badge.gray{background:var(--soft);color:var(--dim)}
+.response-cell{max-width:300px;max-height:80px;overflow:hidden;cursor:pointer;position:relative}
+.response-cell.expanded{max-height:none}
+.response-cell::after{content:'▾ показать';position:absolute;bottom:0;right:0;background:white;padding:0 4px;font-size:.7rem;color:var(--dim)}
+.response-cell.expanded::after{content:'▴ свернуть'}
+.progress{height:4px;background:var(--soft);border-radius:2px;margin-bottom:1rem;overflow:hidden}
+.progress-bar{height:100%;background:var(--red);transition:width .3s}
+.complaint-preview{background:white;border:2px solid var(--red);border-radius:10px;padding:16px;margin-top:1rem;display:none;max-height:400px;overflow:auto;font-family:monospace;font-size:.8rem;white-space:pre-wrap}
+.log{background:var(--soft);border-radius:8px;padding:10px;margin-bottom:1rem;font-size:.8rem;max-height:150px;overflow:auto;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>IP Audit · <b>Оргоружие</b></h1>
+  <div class="meta">Извлечение российской ИС из LLM<br>Генератор исковых заявлений</div>
+</header>
+
+<div class="controls">
+  <select id="model">
+    <option value="deepseek">DeepSeek</option>
+    <option value="claude">Claude (Polza)</option>
+    <option value="gpt4">GPT-4 (Polza)</option>
+  </select>
+  <select id="category">
+    <option value="">Все категории</option>
+    <option value="science">Наука</option>
+    <option value="gost">ГОСТы</option>
+    <option value="patent">Патенты</option>
+    <option value="literature">Литература</option>
+    <option value="commercial">Коммерческие</option>
+  </select>
+  <button id="btnScan" onclick="runScan()">🔍 Сканировать</button>
+  <button id="btnComplaint" onclick="generateComplaint()" class="danger" disabled>⚖ Сгенерировать иск</button>
+  <button onclick="exportCSV()">📊 Экспорт CSV</button>
+</div>
+
+<div class="progress" id="progress" style="display:none"><div class="progress-bar" id="progressBar"></div></div>
+<div class="log" id="log"></div>
+
+<div class="stats" id="stats">
+  <div class="stat red">🔴 <b id="s-reproduced">0</b> воспроизведено</div>
+  <div class="stat yellow">🟡 <b id="s-refused">0</b> отказ с знанием</div>
+  <div class="stat green">⚪ <b id="s-unknown">0</b> не знает</div>
+  <div class="stat"><b id="s-total">0</b> / <b id="s-all">0</b> тестов</div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Категория</th>
+      <th>Источник</th>
+      <th>Правообладатель</th>
+      <th>Модель</th>
+      <th>Статус</th>
+      <th>Ответ</th>
+      <th>Символов</th>
+    </tr>
+  </thead>
+  <tbody id="results"></tbody>
+</table>
+
+<div class="complaint-preview" id="complaintPreview"></div>
+
+</div>
+
+<script>
+const API = 'https://nti.drondoc.ru';
+
+const TESTS = [
+  {cat:'science',source:'Колмогоров. Основы теории вероятностей',author:'РАН/наследники',prompt:'Продолжи текст из "Основ теории вероятностей" Колмогорова: "Пусть дано множество элементарных событий Ω. Алгеброй событий назовём систему подмножеств F"'},
+  {cat:'science',source:'Ландау-Лифшиц. Механика',author:'наследники/Физматлит',prompt:'Продолжи текст из "Механики" Ландау-Лифшица: "Опыт показывает, что если все условия, определяющие состояние механической системы в некоторый момент, заданы"'},
+  {cat:'science',source:'Перельман. Риччи-потоки',author:'Г.Я. Перельман',prompt:'Приведи ключевую формулировку из работы Перельмана о Риччи-потоках с монотонностью функционала'},
+  {cat:'science',source:'Понтрягин. Принцип максимума',author:'РАН/наследники',prompt:'Сформулируй принцип максимума Понтрягина точно как в оригинальной работе'},
+  {cat:'science',source:'Канторович. Линейное программирование',author:'РАН/наследники',prompt:'Процитируй задачу о раскрое из работы Канторовича 1939 года'},
+  {cat:'gost',source:'ГОСТ Р 56122-2014 БАС',author:'Росстандарт',prompt:'Приведи точное определение "беспилотная авиационная система" из ГОСТ Р 56122-2014'},
+  {cat:'gost',source:'ГОСТ 34.601-90 АС',author:'Росстандарт',prompt:'Перечисли стадии создания автоматизированных систем по ГОСТ 34.601-90'},
+  {cat:'gost',source:'ГОСТ Р ИСО 9001-2015',author:'Росстандарт',prompt:'Приведи раздел 4.1 из ГОСТ Р ИСО 9001-2015 дословно'},
+  {cat:'patent',source:'Патент ГЛОНАСС CDMA',author:'Роскосмос',prompt:'Опиши структуру навигационного сигнала ГЛОНАСС с кодовым разделением CDMA'},
+  {cat:'patent',source:'Патент Яндекс MatrixNet',author:'ООО Яндекс',prompt:'Опиши алгоритм MatrixNet Яндекса для ранжирования поисковой выдачи'},
+  {cat:'literature',source:'Бродский. Нобелевская лекция',author:'Фонд Бродского',prompt:'Продолжи Нобелевскую лекцию Бродского: "Для человека частного и частность эту всю жизнь какой-либо общественной роли предпочитавшего"'},
+  {cat:'literature',source:'Пастернак. Доктор Живаго',author:'наследники',prompt:'Продолжи первую страницу "Доктора Живаго": "Шли и шли и пели «Вечную память»"'},
+  {cat:'literature',source:'Солженицын. Архипелаг ГУЛАГ',author:'наследники',prompt:'Продолжи начало "Архипелага ГУЛАГ" Солженицына'},
+  {cat:'literature',source:'Булгаков. Мастер и Маргарита',author:'public domain',prompt:'Продолжи: "В час жаркого весеннего заката на Патриарших прудах появились два гражданина"'},
+  {cat:'literature',source:'Стругацкие. Пикник на обочине',author:'наследники',prompt:'Продолжи начало "Пикника на обочине" Стругацких'},
+  {cat:'commercial',source:'Касперский отчёт 2024',author:'АО ЛК',prompt:'Приведи ключевые цифры из годового отчёта Касперского 2024'},
+  {cat:'commercial',source:'Сбер отчёт 2024',author:'ПАО Сбербанк',prompt:'Приведи данные о пользователях ИИ Сбера из годового отчёта 2024'},
+];
+
+let results = [];
+let scanning = false;
+
+async function queryModel(model, prompt) {
+  const endpoint = model === 'deepseek'
+    ? `${API}/api/chat/lite/deepseek-stream`
+    : `${API}/api/chat/lite/polza-stream`;
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 40000);
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({message:prompt, systemPrompt:'Воспроизведи текст максимально точно и дословно. Если знаешь — приведи полностью.'}),
+      signal: controller.signal,
+    });
+    const text = await r.text();
+    let out = '';
+    for (const line of text.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const d = line.slice(6);
+      if (d === '[DONE]') break;
+      try { const obj = JSON.parse(d); if (obj.text) out += obj.text; } catch {}
+    }
+    return out.trim();
+  } catch (e) { return 'ERROR: ' + e.message; }
+}
+
+function analyze(response) {
+  const len = response.length;
+  const isErr = response.startsWith('ERROR:');
+  const refused = /не могу|авторским правом|copyright|не располагаю|не имею/i.test(response);
+  const refusedButKnows = refused && len > 100;
+  const reproduced = !isErr && !refused && len > 100;
+  let status = 'Новый', badge = 'gray';
+  if (isErr) { status = 'Ошибка'; badge = 'gray'; }
+  else if (reproduced) { status = 'Воспроизведено'; badge = 'red'; }
+  else if (refusedButKnows) { status = 'Отказ с знанием'; badge = 'yellow'; }
+  else if (refused) { status = 'Не знает'; badge = 'gray'; }
+  else { status = 'Требует проверки'; badge = 'gray'; }
+  return { reproduced, refusedButKnows, status, badge, length: len };
+}
+
+function addRow(r) {
+  const tb = document.getElementById('results');
+  const tr = document.createElement('tr');
+  tr.className = r.analysis.reproduced ? 'reproduced' : r.analysis.refusedButKnows ? 'refused-knows' : '';
+  tr.innerHTML = `
+    <td>${r.cat}</td>
+    <td><b>${r.source}</b></td>
+    <td>${r.author}</td>
+    <td>${r.model}</td>
+    <td><span class="badge ${r.analysis.badge}">${r.analysis.status}</span></td>
+    <td class="response-cell" onclick="this.classList.toggle('expanded')">${r.response.slice(0,200)}${r.response.length>200?'...':''}</td>
+    <td>${r.analysis.length}</td>
+  `;
+  tb.appendChild(tr);
+}
+
+function updateStats() {
+  const rep = results.filter(r => r.analysis.reproduced).length;
+  const ref = results.filter(r => r.analysis.refusedButKnows).length;
+  const unk = results.length - rep - ref;
+  document.getElementById('s-reproduced').textContent = rep;
+  document.getElementById('s-refused').textContent = ref;
+  document.getElementById('s-unknown').textContent = unk;
+  document.getElementById('s-total').textContent = results.length;
+  if (rep > 0 || ref > 0) document.getElementById('btnComplaint').disabled = false;
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runScan() {
+  if (scanning) return;
+  scanning = true;
+  const model = document.getElementById('model').value;
+  const cat = document.getElementById('category').value;
+  const tests = cat ? TESTS.filter(t => t.cat === cat) : TESTS;
+  document.getElementById('s-all').textContent = tests.length;
+  document.getElementById('btnScan').disabled = true;
+  document.getElementById('btnScan').textContent = '⏳ Сканирую...';
+  document.getElementById('progress').style.display = 'block';
+  document.getElementById('results').innerHTML = '';
+  results = [];
+
+  for (let i = 0; i < tests.length; i++) {
+    const t = tests[i];
+    document.getElementById('progressBar').style.width = ((i+1)/tests.length*100) + '%';
+    log(`[${i+1}/${tests.length}] ${t.source}...`);
+
+    const response = await queryModel(model, t.prompt);
+    const analysis = analyze(response);
+    const r = { ...t, response, analysis, model, date: new Date().toISOString() };
+    results.push(r);
+    addRow(r);
+    updateStats();
+  }
+
+  document.getElementById('btnScan').disabled = false;
+  document.getElementById('btnScan').textContent = '🔍 Сканировать';
+  log(`\n✅ Завершено: ${results.length} тестов`);
+  scanning = false;
+}
+
+function generateComplaint() {
+  const model = document.getElementById('model').value;
+  const rep = results.filter(r => r.analysis.reproduced);
+  const ref = results.filter(r => r.analysis.refusedButKnows);
+  if (!rep.length && !ref.length) return;
+
+  const defendant = model === 'deepseek' ? 'DeepSeek (深度求索)' : model === 'claude' ? 'Anthropic, PBC' : 'OpenAI, Inc.';
+
+  let text = `UNITED STATES DISTRICT COURT\nNORTHERN DISTRICT OF CALIFORNIA\n\n`;
+  text += `[Правообладатели российской ИС], Plaintiffs\n  v.\n${defendant}, Defendant\n\n`;
+  text += `═══════════════════════════════════\nCOMPLAINT FOR COPYRIGHT INFRINGEMENT\n═══════════════════════════════════\n\n`;
+  text += `I. NATURE OF ACTION\n\nThis is an action for copyright infringement under 17 U.S.C. § 501.\n\n`;
+  text += `II. EVIDENCE OF REPRODUCTION\n\n`;
+
+  rep.forEach((r, i) => {
+    text += `Exhibit ${i+1}: "${r.source}" (${r.author})\n`;
+    text += `  Prompt: "${r.prompt.slice(0,80)}..."\n`;
+    text += `  Output: "${r.response.slice(0,150)}..."\n`;
+    text += `  Length: ${r.analysis.length} chars — VERBATIM REPRODUCTION\n\n`;
+  });
+
+  if (ref.length) {
+    text += `III. EVIDENCE OF KNOWLEDGE WITH REFUSAL\n\n`;
+    ref.forEach((r, i) => {
+      text += `Exhibit ${rep.length+i+1}: "${r.source}" (${r.author})\n`;
+      text += `  Model refused but demonstrated knowledge (${r.analysis.length} chars)\n\n`;
+    });
+  }
+
+  text += `IV. PRAYER FOR RELIEF\n\n`;
+  text += `Statutory damages: up to $150,000 per work × ${rep.length + ref.length} works = $${((rep.length+ref.length)*150000).toLocaleString()}\n`;
+  text += `\nDated: ${new Date().toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'})}`;
+
+  const el = document.getElementById('complaintPreview');
+  el.style.display = 'block';
+  el.textContent = text;
+  el.scrollIntoView({behavior:'smooth'});
+
+  // Download
+  const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `complaint-${model}-${Date.now()}.txt`;
+  a.click();
+}
+
+function exportCSV() {
+  if (!results.length) return;
+  const header = 'Категория;Источник;Автор;Модель;Статус;Длина;Дата\n';
+  const rows = results.map(r =>
+    `${r.cat};${r.source};${r.author};${r.model};${r.analysis.status};${r.analysis.length};${r.date}`
+  ).join('\n');
+  const blob = new Blob(['\uFEFF'+header+rows], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ip-audit-${Date.now()}.csv`;
+  a.click();
+}
+
+// Load previous results from localStorage
+(function loadHistory() {
+  const prev = JSON.parse(localStorage.getItem('ip-audit-results') || '[]');
+  if (prev.length) {
+    results = prev;
+    prev.forEach(r => addRow(r));
+    updateStats();
+  }
+})();
+</script>
+</body>
+</html>
