@@ -325,6 +325,13 @@ async function runScan() {
   document.getElementById('btnScan').textContent = '🔍 Сканировать';
   log(`\n✅ Завершено: ${results.length} тестов`);
   scanning = false;
+  // Сохранить в localStorage
+  const allSaved = JSON.parse(localStorage.getItem('ip-audit-all') || '[]');
+  allSaved.push(...results);
+  localStorage.setItem('ip-audit-all', JSON.stringify(allSaved.slice(-500)));
+  localStorage.setItem('ip-audit-results', JSON.stringify(results));
+  // Автоматически строить граф
+  buildGraph();
 }
 
 function generateComplaint() {
@@ -448,8 +455,17 @@ function buildGraph() {
   // OpenAI vs DeepSeek (distillation)
   edges.push({from:'deepseek', to:'openai', type:'distillation', label:'knowledge distillation (иск OpenAI)'});
 
-  // Из результатов сканирования
-  results.forEach(r => {
+  // Из ВСЕХ накопленных результатов (текущие + история)
+  const allResults = JSON.parse(localStorage.getItem('ip-audit-all') || '[]').concat(results);
+  // Дедупликация по source+model
+  const seen = new Set();
+  const uniqueResults = allResults.filter(r => {
+    const key = `${r.source}:${r.model}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  uniqueResults.forEach(r => {
     if (!r.analysis.reproduced && !r.analysis.refusedButKnows) return;
     const model = r.model === 'deepseek' ? 'deepseek' : r.model === 'claude' ? 'anthropic' : 'openai';
     // Определяем автора
@@ -579,13 +595,17 @@ function buildGraph() {
   });
 }
 
-// Load previous results from localStorage
+// Load ALL accumulated results from localStorage
 (function loadHistory() {
-  const prev = JSON.parse(localStorage.getItem('ip-audit-results') || '[]');
-  if (prev.length) {
-    results = prev;
-    prev.forEach(r => addRow(r));
+  const all = JSON.parse(localStorage.getItem('ip-audit-all') || '[]');
+  if (all.length) {
+    results = all;
+    all.forEach(r => addRow(r));
     updateStats();
+    // Автоматически строить граф при загрузке
+    setTimeout(buildGraph, 100);
+    log(`📂 Загружено ${all.length} результатов из истории`);
+    document.getElementById('log').style.display = 'block';
   }
 })();
 </script>
