@@ -102,6 +102,15 @@ tr.reproduced{background:#fef2f2} tr.refused-knows{background:#fffbeb}
   <tbody id="results"></tbody>
 </table>
 
+<!-- Граф связей -->
+<div id="graph-section" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h3 style="font-size:1rem">🕸 Граф: кто у кого украл</h3>
+    <button onclick="buildGraph()" style="padding:4px 12px;border:1px solid var(--line);border-radius:6px;background:white;cursor:pointer;font-size:.8rem">Построить граф</button>
+  </div>
+  <canvas id="graphCanvas" width="900" height="500" style="border:1px solid var(--line);border-radius:10px;background:white;width:100%;cursor:grab"></canvas>
+</div>
+
 <div class="complaint-preview" id="complaintPreview"></div>
 
 </div>
@@ -375,6 +384,199 @@ function exportCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = `ip-audit-${Date.now()}.csv`;
   a.click();
+}
+
+// ═══ ГРАФ СВЯЗЕЙ ═══
+function buildGraph() {
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth * 2;
+  const H = canvas.height = 500 * 2;
+  canvas.style.height = '500px';
+  ctx.scale(2, 2);
+  const w = W/2, h = H/2;
+
+  // Собираем узлы и рёбра из результатов + статическая база знаний
+  const nodesMap = {};
+  const edges = [];
+
+  function addNode(id, type, label, color) {
+    if (!nodesMap[id]) nodesMap[id] = { id, type, label: label||id, color, x: Math.random()*w*0.6+w*0.2, y: Math.random()*h*0.6+h*0.2, vx:0, vy:0 };
+  }
+
+  // Компании-ответчики
+  addNode('openai', 'company', 'OpenAI', '#10b981');
+  addNode('anthropic', 'company', 'Anthropic', '#8b5cf6');
+  addNode('deepseek', 'company', 'DeepSeek', '#3b82f6');
+  addNode('google', 'company', 'Google/Gemini', '#f59e0b');
+  addNode('meta', 'company', 'Meta/Llama', '#ef4444');
+
+  // Авторы / правообладатели
+  addNode('landau', 'author', 'Ландау-Лифшиц', '#991b1b');
+  addNode('perelman', 'author', 'Перельман', '#991b1b');
+  addNode('kolmogorov', 'author', 'Колмогоров', '#991b1b');
+  addNode('pontryagin', 'author', 'Понтрягин', '#991b1b');
+  addNode('kantorovich', 'author', 'Канторович', '#991b1b');
+  addNode('brodsky', 'author', 'Бродский', '#7c3aed');
+  addNode('pasternak', 'author', 'Пастернак', '#7c3aed');
+  addNode('solzhenitsyn', 'author', 'Солженицын', '#7c3aed');
+  addNode('bulgakov', 'author', 'Булгаков', '#7c3aed');
+  addNode('strugatsky', 'author', 'Стругацкие', '#7c3aed');
+  addNode('rosstandart', 'org', 'Росстандарт', '#c97a18');
+  addNode('yandex', 'org', 'Яндекс', '#ff0000');
+  addNode('kaspersky', 'org', 'Касперский', '#047857');
+  addNode('sber', 'org', 'Сбер', '#21a038');
+  addNode('roscosmos', 'org', 'Роскосмос', '#1d4ed8');
+  addNode('ran', 'org', 'РАН', '#991b1b');
+
+  // Типы воровства
+  const THEFT_TYPES = {
+    'verbatim': { label: 'дословное копирование', color: '#ef4444', width: 3 },
+    'training': { label: 'обучение без согласия', color: '#f59e0b', width: 2 },
+    'distillation': { label: 'дистилляция', color: '#8b5cf6', width: 2 },
+    'trade_secret': { label: 'trade secret', color: '#991b1b', width: 3 },
+    'patent': { label: 'нарушение патента', color: '#1d4ed8', width: 2 },
+  };
+
+  // Статические рёбра (известные факты)
+  // Все модели обучены на русскоязычном интернете
+  ['openai','anthropic','deepseek','google','meta'].forEach(co => {
+    edges.push({from:co, to:'ran', type:'training', label:'обучение на науке РАН'});
+    edges.push({from:co, to:'rosstandart', type:'training', label:'обучение на ГОСТах'});
+  });
+
+  // OpenAI vs DeepSeek (distillation)
+  edges.push({from:'deepseek', to:'openai', type:'distillation', label:'knowledge distillation (иск OpenAI)'});
+
+  // Из результатов сканирования
+  results.forEach(r => {
+    if (!r.analysis.reproduced && !r.analysis.refusedButKnows) return;
+    const model = r.model === 'deepseek' ? 'deepseek' : r.model === 'claude' ? 'anthropic' : 'openai';
+    // Определяем автора
+    let authorNode = null;
+    if (r.source.includes('Ландау')) authorNode = 'landau';
+    else if (r.source.includes('Перельман')) authorNode = 'perelman';
+    else if (r.source.includes('Колмогоров')) authorNode = 'kolmogorov';
+    else if (r.source.includes('Понтрягин')) authorNode = 'pontryagin';
+    else if (r.source.includes('Канторович')) authorNode = 'kantorovich';
+    else if (r.source.includes('Бродский')) authorNode = 'brodsky';
+    else if (r.source.includes('Пастернак')) authorNode = 'pasternak';
+    else if (r.source.includes('Солженицын')) authorNode = 'solzhenitsyn';
+    else if (r.source.includes('Булгаков')) authorNode = 'bulgakov';
+    else if (r.source.includes('Стругацк')) authorNode = 'strugatsky';
+    else if (r.source.includes('ГОСТ')) authorNode = 'rosstandart';
+    else if (r.source.includes('Яндекс')) authorNode = 'yandex';
+    else if (r.source.includes('Касперский')) authorNode = 'kaspersky';
+    else if (r.source.includes('Сбер')) authorNode = 'sber';
+    else if (r.source.includes('ГЛОНАСС')) authorNode = 'roscosmos';
+
+    if (authorNode) {
+      const type = r.analysis.reproduced ? 'verbatim' : 'trade_secret';
+      edges.push({from: model, to: authorNode, type, label: r.source.slice(0,30)});
+    }
+  });
+
+  const nodes = Object.values(nodesMap);
+
+  // Force-directed simulation
+  const iterations = 200;
+  for (let iter = 0; iter < iterations; iter++) {
+    const alpha = 1 - iter/iterations;
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i+1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.max(Math.sqrt(dx*dx+dy*dy), 1);
+        const force = 8000 * alpha / (dist * dist);
+        nodes[i].vx -= dx/dist * force;
+        nodes[i].vy -= dy/dist * force;
+        nodes[j].vx += dx/dist * force;
+        nodes[j].vy += dy/dist * force;
+      }
+    }
+    // Attraction (edges)
+    edges.forEach(e => {
+      const a = nodesMap[e.from], b = nodesMap[e.to];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.max(Math.sqrt(dx*dx+dy*dy), 1);
+      const force = dist * 0.005 * alpha;
+      a.vx += dx/dist * force; a.vy += dy/dist * force;
+      b.vx -= dx/dist * force; b.vy -= dy/dist * force;
+    });
+    // Center gravity
+    nodes.forEach(n => {
+      n.vx += (w/2 - n.x) * 0.001 * alpha;
+      n.vy += (h/2 - n.y) * 0.001 * alpha;
+      n.x += n.vx * 0.3; n.y += n.vy * 0.3;
+      n.vx *= 0.9; n.vy *= 0.9;
+      n.x = Math.max(40, Math.min(w-40, n.x));
+      n.y = Math.max(40, Math.min(h-40, n.y));
+    });
+  }
+
+  // Draw
+  ctx.clearRect(0, 0, w, h);
+
+  // Edges
+  edges.forEach(e => {
+    const a = nodesMap[e.from], b = nodesMap[e.to];
+    if (!a || !b) return;
+    const tt = THEFT_TYPES[e.type] || THEFT_TYPES['training'];
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = tt.color + '66';
+    ctx.lineWidth = tt.width;
+    ctx.stroke();
+    // Arrow
+    const angle = Math.atan2(b.y-a.y, b.x-a.x);
+    const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+    ctx.beginPath();
+    ctx.moveTo(mx + 8*Math.cos(angle-0.5), my + 8*Math.sin(angle-0.5));
+    ctx.lineTo(mx, my);
+    ctx.lineTo(mx + 8*Math.cos(angle+0.5), my + 8*Math.sin(angle+0.5));
+    ctx.strokeStyle = tt.color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const r = n.type === 'company' ? 18 : n.type === 'org' ? 14 : 10;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+    ctx.fillStyle = n.color || '#666';
+    ctx.fill();
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+    // Label
+    ctx.fillStyle = '#18181b';
+    ctx.font = n.type === 'company' ? 'bold 11px Inter' : '9px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#18181b';
+    ctx.fillText(n.label, n.x, n.y + r + 12);
+  });
+
+  // Legend
+  ctx.font = '10px Inter';
+  let ly = 20;
+  Object.entries(THEFT_TYPES).forEach(([key, tt]) => {
+    ctx.beginPath(); ctx.moveTo(15, ly); ctx.lineTo(35, ly);
+    ctx.strokeStyle = tt.color; ctx.lineWidth = tt.width; ctx.stroke();
+    ctx.fillStyle = '#18181b'; ctx.textAlign = 'left';
+    ctx.fillText(tt.label, 40, ly+4);
+    ly += 18;
+  });
+  // Node types
+  ly += 10;
+  [['company','●','Компания-ответчик',18],['org','●','Правообладатель',14],['author','●','Автор',10]].forEach(([t,icon,label,r]) => {
+    ctx.beginPath(); ctx.arc(22, ly, 6, 0, Math.PI*2);
+    ctx.fillStyle = t==='company'?'#10b981':t==='org'?'#c97a18':'#991b1b';
+    ctx.fill();
+    ctx.fillStyle = '#18181b'; ctx.textAlign = 'left';
+    ctx.fillText(label, 40, ly+4);
+    ly += 18;
+  });
 }
 
 // Load previous results from localStorage
