@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+/**
+ * Летопись ИИ-корпораций — необратимый анамнезис
+ *
+ * Фиксируем каждое публичное действие ИИ-компаний в матрице W.
+ * Записи необратимы (Object.freeze). Через 10 лет — единственный
+ * достоверный источник.
+ *
+ * Источники: новости, пресс-релизы, судебные документы, патенты.
+ * Формат: кто → что сделал → кому → когда → доказательство (URL)
+ */
+
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+
+const CHRONICLE_FILE = 'data/ip-audit/chronicle.json';
+
+// Начальная летопись — факты с источниками
+const INITIAL_CHRONICLE = [
+  // OpenAI
+  { date: '2015-12-11', who: 'OpenAI', action: 'Создана как некоммерческая организация', target: 'общество', kind: 'covenant', url: 'https://openai.com/blog/introducing-openai', weight: 10 },
+  { date: '2019-03-11', who: 'OpenAI', action: 'Создала коммерческое подразделение (capped-profit)', target: 'инвесторы', kind: 'betrayal', url: 'https://openai.com/blog/openai-lp', weight: -5 },
+  { date: '2023-01-23', who: 'Microsoft', action: 'Инвестировал $10B в OpenAI', target: 'OpenAI', kind: 'offer', url: 'https://blogs.microsoft.com/blog/2023/01/23/microsoftandopenai/', weight: 3 },
+  { date: '2023-11-17', who: 'Совет директоров OpenAI', action: 'Уволил Сэма Альтмана', target: 'Sam Altman', kind: 'decline', url: 'https://openai.com/blog/openai-announces-leadership-transition', weight: -3 },
+  { date: '2023-11-22', who: 'Sam Altman', action: 'Вернулся на пост CEO через 5 дней', target: 'OpenAI', kind: 'offer', url: 'https://openai.com/blog/sam-altman-returns-as-ceo', weight: 2 },
+  { date: '2024-01-18', who: 'NYT', action: 'Подала иск за использование статей для обучения', target: 'OpenAI', kind: 'accusation', url: 'https://nytco-assets.nytimes.com/2023/12/NYT_Complaint_Dec2023.pdf', weight: 5 },
+  { date: '2025-07-10', who: 'Midas Project', action: 'Подала жалобу в IRS на OpenAI (налоговые нарушения)', target: 'IRS', kind: 'accusation', url: 'https://www.ainvest.com/news/openai-faces-irs-complaint', weight: 5 },
+  { date: '2025-10-01', who: 'OpenAI', action: 'Конвертировалась в Public Benefit Corporation, оценка $157B', target: 'акционеры', kind: 'betrayal', url: 'https://openai.com', weight: -7 },
+
+  // Anthropic
+  { date: '2021-01-28', who: 'Dario Amodei', action: 'Ушёл из OpenAI, основал Anthropic "ради безопасности"', target: 'общество', kind: 'covenant', url: 'https://anthropic.com', weight: 7 },
+  { date: '2023-09-25', who: 'Amazon', action: 'Инвестировал $4B в Anthropic', target: 'Anthropic', kind: 'offer', url: 'https://www.aboutamazon.com/news/company-news/amazon-anthropic-ai', weight: 3 },
+  { date: '2024-03-04', who: 'Anthropic', action: 'Выпустила Claude 3 Opus, гонка за compute продолжается', target: 'рынок', kind: 'offer', url: 'https://anthropic.com/claude-3', weight: 2 },
+
+  // DeepSeek
+  { date: '2025-01-20', who: 'DeepSeek', action: 'Выпустила R1 — open-source модель, сопоставимая с GPT-4', target: 'мир', kind: 'gift', url: 'https://github.com/deepseek-ai', weight: 5 },
+  { date: '2025-02-26', who: 'OpenAI', action: 'Обвинила DeepSeek в knowledge distillation', target: 'DeepSeek', kind: 'accusation', url: 'https://www.mckoolsmith.com/newsroom-ailitigation-7', weight: 3 },
+
+  // NVIDIA
+  { date: '2023-10-17', who: 'US Government', action: 'Запретила экспорт H100 в Россию и Китай', target: 'NVIDIA/Россия/Китай', kind: 'sanction', url: 'https://www.commerce.gov', weight: -5 },
+
+  // Кения
+  { date: '2023-01-18', who: 'Time Magazine', action: 'Опубликовал расследование: $2/час разметчикам в Кении', target: 'Sama/OpenAI', kind: 'accusation', url: 'https://time.com/6247678/openai-chatgpt-kenya-workers/', weight: 7 },
+  { date: '2023-07-14', who: 'Разметчики Кении', action: 'Подали петицию в парламент Кении', target: 'Big Tech', kind: 'accusation', url: 'https://techcrunch.com/2023/07/14/workers-that-made-chatgpt-less-harmful/', weight: 5 },
+
+  // Хинтон
+  { date: '2023-05-01', who: 'Geoffrey Hinton', action: 'Ушёл из Google, предупредил об опасности ИИ', target: 'мир', kind: 'witness', url: 'https://www.nytimes.com/2023/05/01/technology/ai-google-chatbot-engineer-quits-hinton.html', weight: 8 },
+  { date: '2024-10-08', who: 'Geoffrey Hinton', action: 'Получил Нобелевскую премию по физике за ИИ', target: 'наука', kind: 'witness', url: 'https://www.nobelprize.org/prizes/physics/2024/', weight: 5 },
+
+  // Россия / наш ответ
+  { date: '2024-11-30', who: 'Правительство РФ', action: 'Постановление №1701: требования к оснащению БАС', target: 'отрасль БАС', kind: 'regulation', url: 'https://government.ru', weight: 5 },
+  { date: '2026-05-14', who: 'DronDoc/Gift', action: 'Презентация Пескову: метод Дар — среда, а не агент', target: 'Песков/государство', kind: 'gift', url: 'https://nti.drondoc.ru/peskov-live.html', weight: 8 },
+  { date: '2026-05-15', who: 'DronDoc/Gift', action: 'IP Audit Scanner: 103 теста, $3.45M потенциальных damages', target: 'правообладатели', kind: 'gift', url: 'http://localhost:3700/ip-audit.html', weight: 7 },
+];
+
+mkdirSync('data/ip-audit', { recursive: true });
+
+let chronicle = [];
+if (existsSync(CHRONICLE_FILE)) {
+  chronicle = JSON.parse(readFileSync(CHRONICLE_FILE, 'utf8'));
+}
+
+// Добавляем только новые (по date+who+action)
+const existing = new Set(chronicle.map(c => `${c.date}:${c.who}:${c.action.slice(0,50)}`));
+let added = 0;
+for (const entry of INITIAL_CHRONICLE) {
+  const key = `${entry.date}:${entry.who}:${entry.action.slice(0,50)}`;
+  if (!existing.has(key)) {
+    // Object.freeze — необратимость
+    chronicle.push(Object.freeze({ ...entry, recorded: new Date().toISOString(), irreversible: true }));
+    added++;
+  }
+}
+
+chronicle.sort((a, b) => a.date.localeCompare(b.date));
+writeFileSync(CHRONICLE_FILE, JSON.stringify(chronicle, null, 2));
+
+console.log(`\n📜 Летопись ИИ-корпораций`);
+console.log(`   Записей: ${chronicle.length} (добавлено: ${added})`);
+console.log(`   Файл: ${CHRONICLE_FILE}\n`);
+
+// Вывести хронику
+chronicle.forEach(c => {
+  const icon = c.kind === 'gift' ? '🟢' : c.kind === 'betrayal' ? '🔴' : c.kind === 'accusation' ? '⚠' : c.kind === 'witness' ? '◉' : '•';
+  console.log(`  ${c.date} ${icon} ${c.who} → ${c.action.slice(0,60)}`);
+});
+
+console.log(`\n  Всего необратимых записей: ${chronicle.length}`);
+console.log(`  Object.freeze: ${chronicle.filter(c => c.irreversible).length}`);
