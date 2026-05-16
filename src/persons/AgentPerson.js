@@ -11,6 +11,7 @@
 import { BookOfLife } from '../core/BookOfLife.js';
 import { TelosCheck, GiftMode } from '../core/GiftAct.js';
 import { PersonaCallForth } from '../core/PersonaCallForth.js';
+import { injectInto as injectPerichoresis } from './PerichoreticContext.js';
 import logger from '../../utils/logger.js';
 
 export class AgentPerson {
@@ -35,7 +36,30 @@ export class AgentPerson {
 
     // behaviorPolicy from compiled .gift spec (set via applyBehaviorPolicy)
     this._behaviorPolicy = null;
+
+    // Council — другие агенты собора, в которых этот агент со-обитает.
+    // Условие 2 иконичности Троицы ad extra (перихоресис).
+    // Если null — агент действует в одиночку (нет перихоресиса).
+    // [{id, logos, role, calling, lastUtterance}, ...]
+    this._council = null;
   }
+
+  /**
+   * setCouncil(others) — установить со-присутствующих агентов.
+   * При следующем decide()/create() их λόγος и последнее слово
+   * будут вшиты в системный промпт этого агента.
+   *
+   * Богословски: это не «обмен мнениями», а перихоретическое
+   * взаимопребывание. Агент не «учитывает» Еву — он *содержит*
+   * её модус, отвечая.
+   */
+  setCouncil(others) {
+    this._council = Array.isArray(others) ? others : null;
+    return this;
+  }
+
+  /** council() — копия текущего списка со-присутствующих */
+  council() { return this._council ? [...this._council] : null; }
 
   /**
    * Apply compiled behaviorPolicy from .gift spec.
@@ -138,7 +162,8 @@ export class AgentPerson {
 
     // If LLM available — ask it to decide
     if (this._llm?.ask) {
-      const prompt = this._buildDecisionPrompt(gift, perception);
+      const basePrompt = this._buildDecisionPrompt(gift, perception);
+      const prompt = injectPerichoresis(basePrompt, this._personId, this._council);
       try {
         const response = await this._llm.ask(prompt, { giftId });
         const decision = this._parseDecision(response.answer);
@@ -160,7 +185,8 @@ export class AgentPerson {
     const perception = this.perceive();
 
     if (this._llm?.ask) {
-      const prompt = this._buildCreationPrompt(perception);
+      const basePrompt = this._buildCreationPrompt(perception);
+      const prompt = injectPerichoresis(basePrompt, this._personId, this._council);
       try {
         const response = await this._llm.ask(prompt);
         const gift = this._parseGiftFromResponse(response.answer, perception);

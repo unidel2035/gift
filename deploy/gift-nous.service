@@ -1,0 +1,25 @@
+[Unit]
+Description=Gift Nous — memory server (душа)
+Documentation=https://github.com/unidel2035/gift
+After=network.target
+
+[Service]
+Type=simple
+User=hive
+Group=hive
+WorkingDirectory=/home/hive/gift
+ExecStart=/usr/bin/node /home/hive/gift/utils/nous-server.mjs
+Restart=on-failure
+RestartSec=5s
+Environment=PORT=8089
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/hive/gift/data
+
+[Install]
+WantedBy=multi-user.target

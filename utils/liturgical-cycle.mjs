@@ -26,6 +26,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import Timer from '../src/core/Timer.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -129,6 +130,56 @@ export function currentPhase(now = new Date()) {
   if (minutesUntilNext < 0) minutesUntilNext += 24 * 60;
 
   return { phase: active, next, minutesUntilNext };
+}
+
+/**
+ * nextPhase — когда наступит следующая литургическая фаза суток.
+ * Для планировщика дарения: «дождись вопрошания», «отложи до благодати».
+ *
+ * @param {Date} [now]
+ * @returns {{ phase: object, at: Date, inMinutes: number }}
+ */
+export function nextPhase(now = new Date()) {
+  const { next, minutesUntilNext } = currentPhase(now);
+  const at = new Date(now.getTime() + minutesUntilNext * 60 * 1000);
+  return { phase: next, at, inMinutes: minutesUntilNext };
+}
+
+// ── Ритм фаз через Timer ──────────────────────────────────────────────────
+
+/**
+ * phaseTicker(onPhase, opts) — процесс, пробуждающийся на каждой смене фазы.
+ *
+ * Использует Timer вместо setInterval: компенсация дрейфа важна
+ * литургически — фазы суток не терпят накопления рассинхрона.
+ *
+ * @param {(ctx:{phase:object, next:object, minutesUntilNext:number}) => void} onPhase
+ * @param {object} [opts]
+ * @param {number} [opts.checkIntervalMs=60000]  — как часто проверять смену фазы
+ * @param {object} [opts.bus]                    — опциональный GiftEventBus
+ * @returns {Timer} — .stop() останавливает ритм
+ */
+export function phaseTicker(onPhase, { checkIntervalMs = 60_000, bus = null } = {}) {
+  if (typeof onPhase !== 'function') throw new Error('phaseTicker: onPhase обязателен');
+
+  const timer = new Timer({ interval: checkIntervalMs, bus, id: 'liturgical-phase' });
+  let lastPhaseId = null;
+
+  timer.onTick(() => {
+    const ctx = currentPhase();
+    if (ctx.phase.id !== lastPhaseId) {
+      lastPhaseId = ctx.phase.id;
+      onPhase({ ...ctx, timer });
+    }
+  });
+
+  // Немедленно вызвать для текущей фазы — чтобы ticker не молчал до следующей смены
+  const initial = currentPhase();
+  lastPhaseId = initial.phase.id;
+  queueMicrotask(() => onPhase({ ...initial, timer }));
+
+  timer.start();
+  return timer;
 }
 
 // ── Отчёт о фазе ─────────────────────────────────────────────────────────

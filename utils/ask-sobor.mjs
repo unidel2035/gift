@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+/**
+ * ask-sobor.mjs — задать вопрос собору лиц через реальных Claude-субагентов.
+ *
+ * Запуск:
+ *   node utils/ask-sobor.mjs "ваш вопрос"
+ *   node utils/ask-sobor.mjs --static "ваш вопрос"   (офлайн-режим)
+ *
+ * Собирает голоса трёх лиц:
+ *   Разведчик (Explore)      — логос para, исследует контекст
+ *   Критик (code-reviewer)   — логос kata,  возражает
+ *   Старший (Plan)           — логос hyper, различает
+ *
+ * Каждый — реальный Claude-субагент через claude --print --agent <type>.
+ * Фолбэк: если claude CLI недоступен — статические голоса для демонстрации.
+ */
+
+import { PolyphonyOrchestrator, VoiceSource } from './polyphony-orchestrator.mjs';
+import { execSync } from 'node:child_process';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ASKSOBOR_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SESSION_DIR = resolve(ASKSOBOR_ROOT, 'data', 'conciliar-swe');
+if (!existsSync(SESSION_DIR)) mkdirSync(SESSION_DIR, { recursive: true });
+
+function claudeAvailable() {
+  try {
+    execSync('which claude', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const args = process.argv.slice(2);
+const forceStatic = args.includes('--static');
+const question = args.filter(a => a !== '--static').join(' ').trim();
+
+if (!question) {
+  console.error('Использование: node utils/ask-sobor.mjs [--static] "вопрос"');
+  process.exit(1);
+}
+
+const useSubagents = !forceStatic && claudeAvailable();
+const orchestrator = new PolyphonyOrchestrator({ parallel: true });
+
+if (useSubagents) {
+  console.log('▶ Собор из реальных Claude-субагентов\n');
+  orchestrator
+    .addSource(VoiceSource.claudeSubagent('Explore', {
+      persona: 'Разведчик',
+      logos: 'para',
+      promptWrap: q => `Ты — Разведчик в соборе лиц. Твой logos — para (равноправное исследование). Вопрос: ${q}\n\nИсследуй контекст кратко (2-3 предложения). Не давай готовых ответов — открывай пространство.`,
+      timeout: 60_000,
+    }))
+    .addSource(VoiceSource.claudeSubagent('code-reviewer', {
+      persona: 'Критик',
+      logos: 'kata',
+      promptWrap: q => `Ты — Критик в соборе лиц. Твой logos — kata (возражение). Вопрос: ${q}\n\nОспорь очевидное. 2-3 предложения. Не разрушай — обнажай.`,
+      timeout: 60_000,
+    }))
+    .addSource(VoiceSource.claudeSubagent('Plan', {
+      persona: 'Старший',
+      logos: 'hyper',
+      promptWrap: q => `Ты — Старший в соборе лиц. Твой logos — hyper (превосходящее различение). Вопрос: ${q}\n\nРазличи: какого рода этот вопрос? Что в нём подлинно? 2-3 предложения.`,
+      timeout: 60_000,
+    }));
+} else {
+  if (forceStatic) console.log('▶ Собор (static mode — принудительно)\n');
+  else             console.log('▶ Собор (claude CLI недоступен — static fallback)\n');
+
+  orchestrator
+    .addSource(VoiceSource.static({
+      persona: 'Разведчик', logos: 'para',
+      content: '[статика] Вопрос имеет несколько слоёв — стоит различить их прежде ответа.',
+    }))
+    .addSource(VoiceSource.static({
+      persona: 'Критик', logos: 'kata',
+      content: '[статика] Проверь: это вопрос или уже скрытое утверждение?',
+    }))
+    .addSource(VoiceSource.static({
+      persona: 'Старший', logos: 'hyper',
+      content: '[статика] Различи: техническое или богословское? Ответ зависит от уровня.',
+    }));
+}
+
+const t0 = Date.now();
+
+// Живой прогресс: показываем что собор собирается, каждый голос — по приходу
+const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+const waiting = new Set();
+let voiceN = 0;
+const total = orchestrator.sources.length;
+
+const result = await orchestrator.ask(question, {
+  onStart({ sources }) {
+    console.log(`⟳ Собор собирается (${sources.length} голосов): ${sources.map(s => s.persona).join(', ')}`);
+    sources.forEach(s => waiting.add(s.persona));
+    process.stdout.write(`  ожидание: ${[...waiting].join(', ')}\n`);
+  },
+  onVoice(v) {
+    voiceN++;
+    waiting.delete(v.persona);
+    const icon = logosIcon[v.logos] || '·';
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(`\n[${voiceN}/${total}  ${elapsed}s]  ${icon} ${v.persona} (${v.logos}):`);
+    console.log(`  ${v.content.slice(0, 400).replace(/\n/g, '\n  ')}${v.content.length > 400 ? '…' : ''}`);
+    if (waiting.size) console.log(`  ожидание: ${[...waiting].join(', ')}`);
+  },
+});
+const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+console.log(`\n═══ итог собора ═══`);
+console.log(result.toText());
+
+// Персист: журнал собора остаётся после закрытия CLI
+try {
+  const sessionFile = resolve(SESSION_DIR, `sobor-${Date.now()}.json`);
+  const record = {
+    id: `sobor-${Date.now()}`,
+    kind: 'sobor',
+    question,
+    at: new Date().toISOString(),
+    elapsedSec: parseFloat(elapsed),
+    mode: useSubagents ? 'live' : 'static',
+    voices: (result.voices || []).map(v => ({
+      persona: v.persona,
+      logos: v.logos,
+      authority: v.authority,
+      content: v.content,
+    })),
+    dominant: result.dominant ? {
+      persona: result.dominant.persona,
+      logos: result.dominant.logos,
+    } : null,
+    apophatic: !!result.apophatic,
+    silent: !!result.silent,
+    silenceReason: result.silenceReason || null,
+  };
+  writeFileSync(sessionFile, JSON.stringify(record, null, 2));
+  console.log(`\n── журнал: ${sessionFile.replace(ASKSOBOR_ROOT + '/', '')}`);
+} catch (e) {
+  console.error('журнал не сохранён:', e.message);
+}
+console.log(`\n── ${elapsed}s ──\n`);
+
+// Если есть dominant — показать рекомендацию, но с оговоркой
+if (result.hasDominant) {
+  console.log(`Собор ведом: ${result.dominant.persona} (${result.dominant.logos}).`);
+  console.log('Но остальные голоса сохраняются. Это не консенсус — это полифония.');
+} else if (result.apophatic) {
+  console.log('Собор апофатичен — истина не высказывается в прямом ответе.');
+} else if (result.silent) {
+  console.log(`Молчание: ${result.silenceReason}`);
+}
