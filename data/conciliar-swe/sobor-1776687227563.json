@@ -1,0 +1,35 @@
+{
+  "id": "sobor-1776687227563",
+  "kind": "sobor",
+  "question": "sanity",
+  "mode": "static",
+  "at": "2026-04-20T12:13:47.563Z",
+  "elapsedSec": 0,
+  "voices": [
+    {
+      "persona": "Разведчик",
+      "logos": "para",
+      "authority": 1,
+      "content": "[static] различим слои вопроса прежде ответа."
+    },
+    {
+      "persona": "Критик",
+      "logos": "kata",
+      "authority": 1,
+      "content": "[static] это вопрос или уже скрытое утверждение?"
+    },
+    {
+      "persona": "Старший",
+      "logos": "hyper",
+      "authority": 1,
+      "content": "[static] техническое или богословское — ответ зависит от уровня."
+    }
+  ],
+  "dominant": {
+    "persona": "Старший",
+    "logos": "hyper"
+  },
+  "apophatic": false,
+  "silent": false,
+  "via": "chat"
+}

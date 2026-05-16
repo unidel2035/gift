@@ -1,0 +1,870 @@
+#!/usr/bin/env node
+// Заглушаем TensorFlow info-логи (oneDNN/cpu_feature_guard) — они печатаются
+// при первом импорте core/GiftMemory.js и засоряют CLI. На функциональность
+// не влияют. Если нужны для отладки — снять переменную окружения.
+process.env.TF_CPP_MIN_LOG_LEVEL = process.env.TF_CPP_MIN_LOG_LEVEL || '3';
+
+/**
+ * gift — единый CLI онтологии дара.
+ *
+ * Это НЕ обёртка вокруг Claude Code. Это точка входа в @unidel/gift:
+ *   собор лиц, пустыни, эпиклеза, метанойя, dev-loop.
+ *
+ * Команды:
+ *   gift sobor ask "вопрос"            — собор из 3 живых лиц (ask-sobor.mjs)
+ *   gift sobor ask --static "вопрос"   — офлайн-режим (статические голоса)
+ *
+ *   gift swe --issue N                 — соборный SWE-агент (PLAN → IMPLEMENT → REVIEW)
+ *   gift swe --task "…"                — на inline-задачу
+ *   gift swe … --dry-run               — без реальных subagents
+ *   gift swe … --no-commit             — остановиться перед commit
+ *
+ *   gift pustynya list                 — реальные пустыни (open gift-ready)
+ *   gift pustynya resolve              — перихорезис-разрешение (dry-run)
+ *   gift pustynya resolve --close      — закрыть троичные пустыни
+ *
+ *   gift epiclesis ask "вопрос" [--to Дионисий]  — через HumanOracleInbox
+ *   gift epiclesis pending             — неотвеченные вопросы
+ *   gift epiclesis answer <id> "…"     — ответить на вопрос (обычно делает бот)
+ *
+ *   gift matrix                        — снимок W-матрицы (через nous)
+ *   gift matrix commune <from> <to>    — история нити
+ *
+ *   gift benchmark                     — CAT-9 (9/9 операций)
+ *
+ *   gift status                        — кратко: открытые пустыни, энергия, эпиклезы
+ *
+ * Философия:
+ *   Этот CLI говорит языком онтологии (собор, пустыня, эпиклеза),
+ *   а не языком инструмента (run, test, deploy).
+ *   Под капотом — node.js + claude subagents. Сверху — церковный словарь.
+ */
+
+import { spawn } from 'node:child_process';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ── Autodetect GIFT_CLAUDE_ID по pwd ────────────────────────────────────
+// Если уже задан в env — оставляем. Иначе определяем по тому, в каком
+// проекте семьи gift находимся. Это нужно чтобы MCP-tools шины
+// koinon_inbox/broadcast по умолчанию работали с правильным subscriberId.
+if (!process.env.GIFT_CLAUDE_ID) {
+  const PROJECT_ID_MAP = [
+    ['/home/unidel/plm',          'plm-claude'],
+    ['/home/unidel/fund',         'fund-claude'],
+    ['/home/unidel/dronedoc2026', 'drone-claude'],
+    ['/home/unidel/istok',        'istok-claude'],
+    ['/home/unidel/gift',         'gift-claude'],
+  ];
+  const pwd = process.cwd();
+  for (const [prefix, id] of PROJECT_ID_MAP) {
+    if (pwd === prefix || pwd.startsWith(prefix + '/')) {
+      process.env.GIFT_CLAUDE_ID = id;
+      break;
+    }
+  }
+}
+
+// ── WSL/Windows proxy fix ───────────────────────────────────────────────
+// В WSL2 process.env подхватывает Windows system proxy (172.23.x.x:10809),
+// которого нет в NAT-режиме. Это ломает три вещи:
+//   1. in-process fetch к localhost (NOUS) — TLS timeout
+//   2. gh CLI к api.github.com — TLS timeout
+//   3. claude CLI / curl в polza-runner — TLS timeout
+//
+// Решение:
+//   - сохраняем proxy в PROXY_ORIG и удаляем из process.env (fixes 1)
+//   - cleanEnv() для подпроцессов, которые НЕ должны использовать proxy (fixes 2)
+//   - runRaw() восстанавливает PROXY_ORIG для agent-режима (egress через polza)
+const PROXY_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'];
+const PROXY_ORIG = Object.fromEntries(
+  PROXY_KEYS.map(k => [k, process.env[k]]).filter(([, v]) => v !== undefined)
+);
+for (const k of PROXY_KEYS) delete process.env[k];
+process.env.NO_PROXY = process.env.NO_PROXY || 'api.github.com,github.com,localhost,127.0.0.1';
+process.env.no_proxy = process.env.no_proxy || process.env.NO_PROXY;
+
+function cleanEnv() {
+  // Уже без proxy (мы их сняли при загрузке) — оставлено для совместимости.
+  return { ...process.env };
+}
+
+// ── Раскраска ───────────────────────────────────────────────────────────
+const C = {
+  dim: s => `\x1b[2m${s}\x1b[0m`,
+  b: s => `\x1b[1m${s}\x1b[0m`,
+  gold: s => `\x1b[33m${s}\x1b[0m`,
+  cyan: s => `\x1b[36m${s}\x1b[0m`,
+  violet: s => `\x1b[35m${s}\x1b[0m`,
+};
+
+// ── Подпроцесс ──────────────────────────────────────────────────────────
+function run(script, args = []) {
+  return new Promise((res, rej) => {
+    const child = spawn('node', [resolve(ROOT, script), ...args], {
+      cwd: ROOT, stdio: 'inherit',
+      env: { ...cleanEnv(), GIFT_CLI: 'gift' },
+    });
+    child.on('exit', code => code === 0 ? res() : rej(new Error(`exit ${code}`)));
+    child.on('error', rej);
+  });
+}
+
+// runRaw — для agent-команд: ВОССТАНАВЛИВАЕТ HTTP_PROXY/HTTPS_PROXY (из PROXY_ORIG),
+// потому что Дионисию в WSL2 они нужны для egress через Windows proxy
+// (curl в polza-runner иначе таймаутит на 120с).
+function runRaw(script, args = []) {
+  return new Promise((res, rej) => {
+    const child = spawn('node', [resolve(ROOT, script), ...args], {
+      cwd: ROOT, stdio: 'inherit',
+      env: { ...process.env, ...PROXY_ORIG, GIFT_CLI: 'gift' },
+    });
+    child.on('exit', code => code === 0 ? res() : rej(new Error(`exit ${code}`)));
+    child.on('error', rej);
+  });
+}
+
+async function gh(cmd) {
+  const { execSync } = await import('node:child_process');
+  return execSync(cmd, {
+    encoding: 'utf8', cwd: ROOT,
+    env: { ...cleanEnv(), GITHUB_TOKEN: '' },
+    stdio: ['ignore', 'pipe', 'ignore'],  // глушим stderr у gh — TLS-шум не нужен
+  });
+}
+
+// ── Справка по секциям ──────────────────────────────────────────────────
+const HELP_SECTIONS = {
+  sobor: () => `${C.b('Собор:')}
+  gift sobor ask ${C.dim('[--static]')} "вопрос"       — полифония из 3 живых лиц
+  gift swe --issue N ${C.dim('[--dry-run] [--no-commit]')}  — соборный SWE-агент`,
+
+  pustynya: () => `${C.b('Пустыни:')}
+  gift pustynya list              — открытые пустыни (#N X→Y)
+  gift pustynya resolve ${C.dim('[--close]')}  — перихорезис: закрыть троичные`,
+
+  epiclesis: () => `${C.b('Эпиклеза (призывание):')}
+  gift epiclesis ask "вопрос" ${C.dim('[--to Дионисий]')}
+  gift epiclesis pending
+  gift epiclesis answer <id> "ответ"`,
+
+  matrix: () => `${C.b('Матрица:')}
+  gift matrix                     — сводка W
+  gift matrix commune <from> <to> — история нити`,
+
+  session: () => `${C.b('Сессии (персистентная память):')}
+  gift session list               — прошлые соборы (от новых к старым)
+  gift session last               — последний собор целиком
+  gift session show <id>          — собор по id`,
+
+  web: () => `${C.b('Веб-Скиния:')}
+  gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
+  gift web --stop                 — остановить`,
+
+  agent: () => `${C.b('Агентный режим (полный CLI):')}
+  gift agent "промпт"             — single-turn агент с tools (Read/Write/Edit/Bash/Grep + mcp__gift__*)
+  gift agent --plan "промпт"      — plan mode (не выполнять)
+  gift agent --verbose "промпт"   — стрим thinking + tool_result
+  ${C.dim('(требует обычный bash, не Claude Code session — anti-recursion)')}`,
+
+  chat: () => `${C.b('Диалог (multi-turn REPL с инструментами):')}
+  gift                            — ${C.dim('alias к')} gift chat ${C.dim('(если запущено в TTY)')}
+  gift chat                       — новая интерактивная сессия (persist в data/chat-sessions/)
+  gift chat --resume <id>         — продолжить сессию по id
+  gift chat --resume last         — продолжить последнюю сессию
+  gift chat --list                — список сохранённых сессий
+  gift chat --plan                — plan mode: модель планирует, не выполняет
+  ${C.dim('Внутри REPL:')}
+    ${C.dim('• наберите «/» — всплывает меню команд (стрелки ↑↓ выбирают)')}
+    ${C.dim('• @path/to/file — автоматически приложить содержимое файла к сообщению')}
+    ${C.dim('• \\ + Enter — multi-line ввод')}
+    ${C.dim('• /compact — сжать историю когда контекст переполняется')}
+    ${C.dim('• ↑↓ — история сообщений (когда меню не активно)')}`,
+
+  myslo: () => `${C.b('Мыслебродильня:')}
+  gift myslo полная "идея"        — Decoupage → Δοκιμασία → Vintage → Score
+  gift myslo cut "идея"           — διαίρεσις по 4 sphere (Переслегин)
+  gift myslo дегустация "идея"    — собор Ollama-агентов + эпиклеза
+  gift myslo винтаж               — διάκρισις по плодам (Vintage отчёт)
+  gift myslo карты                — все sommelier-карты иконных актов W
+  gift myslo бочка                — идеи в ферментации (_pending в W)`,
+
+  treasure: () => `${C.b('Сокровищница (θησαυρός):')}
+  gift treasure recall "<query>" ${C.dim('[N]')}     — полнотекстовый поиск (FTS5)
+  gift treasure unfold <source_id> ${C.dim('[N]')}   — развернуть документ/сессию
+  gift treasure ingest             — загрузить корпус (sessions/insights/acts)
+  gift treasure stats              — статистика по источникам`,
+
+  agrypnia: () => `${C.b('Бдение (ἀγρυπνία):')}
+  gift agrypnia tick                — один tick (исполнить due бдения)
+  gift agrypnia list                — все запланированные бдения
+  gift agrypnia cancel <id>         — снять бдение
+  gift agrypnia once "<ISO>" "<prompt>" ${C.dim('[owner]')}     — одноразовое
+  gift agrypnia daily "HH:MM" "<prompt>" ${C.dim('[owner]')}    — каждый день UTC
+  gift agrypnia interval <sec> "<prompt>" ${C.dim('[owner]')}   — каждые N секунд`,
+
+  koinon: () => `${C.b('Κοινόν τοῦ Νοῦ — шина между Claude-сессиями:')}
+  gift koinon say "<text>" ${C.dim('[--to X] [--topic T] [--from F]')}   отправить
+  gift koinon inbox ${C.dim('[--for X] [--peek]')}              прочитать свежее
+  gift koinon history ${C.dim('[--from X] [--to Y] [--topic T]')}  история с фильтрами
+  gift koinon stats                              счётчики
+  gift koinon tail                               live-режим (poll 1s)`,
+
+  goal: () => `${C.b('Long-horizon цели')} ${C.dim('(gift-аналог Codex /goal + μετάνοια)')}:
+  gift goal create "<objective>" --success "<criteria>" ${C.dim('[--max 32] [--budget T]')}
+  gift goal run <id> ${C.dim('[--steps N]')}     запустить/возобновить (Ctrl+C → пауза)
+  gift goal list ${C.dim('[--status X]')}        все цели
+  gift goal status <id>                  деталь + последние итерации
+  gift goal pause|cancel|clear <id>
+  ${C.dim('Цикл: plan → act → test → review → μετάνοια. State в data/goals/.')}`,
+
+  status: () => `${C.b('Бенчмарк / статус:')}
+  gift benchmark                  — CAT-9
+  gift status                     — состояние онтологии (6 слоёв)
+  gift glossary ${C.dim('[find <слово>]')}      — словарь греческих терминов (русск.)`,
+};
+
+const COMMANDS = Object.keys(HELP_SECTIONS).concat(['benchmark', 'completion', 'version']);
+
+function help(section = null) {
+  if (section && HELP_SECTIONS[section]) {
+    console.log('\n' + HELP_SECTIONS[section]() + '\n');
+    return;
+  }
+  if (section) {
+    console.error(`Неизвестная команда: ${section}`);
+    console.log(`Доступно: ${COMMANDS.join(', ')}`);
+    return;
+  }
+  const all = Object.values(HELP_SECTIONS).map(fn => fn()).join('\n\n');
+  console.log(`
+${C.b(C.gold('gift'))} — CLI онтологии дара ${C.dim('v' + readVersion())}
+
+${all}
+
+${C.dim('Подробнее: gift help <команда>      Автодополнение: eval "$(gift completion bash)"')}
+${C.dim('Философия: язык церковный (собор, пустыня, эпиклеза), под капотом — node + claude subagents.')}
+`);
+}
+
+function readVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
+    return pkg.version || '0';
+  } catch { return '0'; }
+}
+
+function bashCompletion() {
+  const cmds = COMMANDS.join(' ');
+  const subSobor    = 'ask';
+  const subPustynya = 'list resolve';
+  const subEpiclesis= 'ask pending answer';
+  const subMatrix   = 'commune';
+  const subSession  = 'list last show';
+  const subMyslo    = 'полная cut дегустация винтаж карты бочка';
+  const subTreasure = 'recall unfold ingest stats';
+  const subAgrypnia = 'tick list cancel once daily interval';
+  const subChat     = '--resume --list last';
+  const subGlossary = 'find';
+  return `# gift bash completion (eval "$(gift completion bash)")
+_gift_completions() {
+  local cur prev cmd
+  COMPREPLY=()
+  cur="\${COMP_WORDS[COMP_CWORD]}"
+  cmd="\${COMP_WORDS[1]}"
+  if [ "\$COMP_CWORD" -eq 1 ]; then
+    COMPREPLY=( $(compgen -W "${cmds} help" -- "\$cur") )
+    return
+  fi
+  case "\$cmd" in
+    sobor)     COMPREPLY=( $(compgen -W "${subSobor}" -- "\$cur") );;
+    pustynya)  COMPREPLY=( $(compgen -W "${subPustynya}" -- "\$cur") );;
+    epiclesis) COMPREPLY=( $(compgen -W "${subEpiclesis}" -- "\$cur") );;
+    matrix)    COMPREPLY=( $(compgen -W "${subMatrix}" -- "\$cur") );;
+    session)   COMPREPLY=( $(compgen -W "${subSession}" -- "\$cur") );;
+    myslo)     COMPREPLY=( $(compgen -W "${subMyslo}" -- "\$cur") );;
+    treasure)  COMPREPLY=( $(compgen -W "${subTreasure}" -- "\$cur") );;
+    agrypnia)  COMPREPLY=( $(compgen -W "${subAgrypnia}" -- "\$cur") );;
+    chat)      COMPREPLY=( $(compgen -W "${subChat}" -- "\$cur") );;
+    glossary)  COMPREPLY=( $(compgen -W "${subGlossary}" -- "\$cur") );;
+    help)      COMPREPLY=( $(compgen -W "${cmds}" -- "\$cur") );;
+  esac
+}
+complete -F _gift_completions gift
+`;
+}
+
+// ── Обработчики ─────────────────────────────────────────────────────────
+let [cmd, sub, ...rest] = process.argv.slice(2);
+
+if (cmd === '--version' || cmd === '-v') { console.log(readVersion()); process.exit(0); }
+if (cmd === '--help' || cmd === '-h') { help(); process.exit(0); }
+if (cmd === 'help') { help(sub); process.exit(0); }
+if (cmd === 'completion') {
+  if (sub === 'bash') { console.log(bashCompletion()); process.exit(0); }
+  console.error('usage: gift completion bash');
+  process.exit(1);
+}
+
+// Без аргументов:
+//   - в TTY (интерактивный shell) → запускаем chat (как `claude` без args)
+//   - не в TTY (pipe, скрипт) → печатаем help (чтобы не блокировать stdin)
+if (!cmd) {
+  if (process.stdin.isTTY) {
+    cmd = 'chat';
+  } else {
+    help();
+    process.exit(0);
+  }
+}
+
+try {
+  switch (cmd) {
+
+    case 'sobor': {
+      if (sub !== 'ask') { help(); process.exit(1); }
+      // Пропускаем все rest-аргументы прямо в ask-sobor.mjs
+      await run('utils/ask-sobor.mjs', rest);
+      break;
+    }
+
+    case 'swe': {
+      // Передаём все аргументы как есть
+      await run('utils/conciliar-swe.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'pustynya': {
+      if (sub === 'list') {
+        const raw = await gh('gh issue list --state open --label gift-ready --limit 30 --json number,title');
+        const issues = JSON.parse(raw);
+        const rx = /пустыня\s+([^\s→]+)\s*→\s*([^\s:]+)/;
+        const pustynyas = issues.map(i => {
+          const m = i.title.match(rx);
+          return m ? { n: i.number, from: m[1], to: m[2] } : null;
+        }).filter(Boolean);
+        console.log(`\n${C.b('Открытые пустыни')} (${pustynyas.length}):\n`);
+        for (const p of pustynyas) console.log(`  ${C.cyan(`#${p.n}`)}  ${p.from} → ${p.to}`);
+        console.log();
+      } else if (sub === 'resolve') {
+        await run('utils/resolve-perichoresis.mjs', rest);
+      } else {
+        help(); process.exit(1);
+      }
+      break;
+    }
+
+    case 'epiclesis': {
+      const mod = await import(resolve(ROOT, 'src/theology/HumanOracleInbox.js'));
+      const inbox = new mod.HumanOracleInbox();
+      if (sub === 'ask') {
+        const toIdx = rest.indexOf('--to');
+        const to = toIdx >= 0 ? rest[toIdx + 1] : 'Дионисий';
+        const question = rest.filter((a, i) => a !== '--to' && i !== toIdx + 1).join(' ');
+        if (!question) { console.error('gift epiclesis ask "вопрос"'); process.exit(1); }
+        inbox.recipient = to;
+        const id = await inbox.ask(question);
+        console.log(`${C.violet('⚡')} вопрос записан: ${C.dim(id)} → data/epiclesis-inbox/`);
+        console.log(`   ждёт ответа от ${to}. gift epiclesis pending — посмотреть очередь.`);
+      } else if (sub === 'pending') {
+        const queue = await inbox.listUnanswered();
+        if (!queue.length) { console.log('Очередь пуста.'); break; }
+        console.log(`\n${C.b('Неотвеченные эпиклезы')}:\n`);
+        for (const q of queue) {
+          console.log(`  ${C.violet(q.id)}  → ${q.recipient}`);
+          console.log(`    ${q.question}`);
+          console.log(`    ${C.dim(q.at)}\n`);
+        }
+      } else if (sub === 'answer') {
+        const [id, ...content] = rest;
+        if (!id || !content.length) { console.error('gift epiclesis answer <id> "ответ"'); process.exit(1); }
+        const rec = await inbox.markAnswered(id, content.join(' '));
+        console.log(`${C.gold('✓')} ответ записан: ${rec.id} → data/epiclesis-outbox/`);
+      } else { help(); process.exit(1); }
+      break;
+    }
+
+    case 'matrix': {
+      const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+      if (!sub || sub === 'summary') {
+        try {
+          const r = await fetch(`${NOUS}/summary`);
+          const data = await r.json();
+          console.log(`\n${C.b('Матрица W')}  ${C.dim('(nous: ' + NOUS + ')')}\n`);
+          console.log(`  Лиц:   ${Object.keys(data.persons || {}).length}`);
+          console.log(`  Актов: ${data.totalActs || 'n/a'}`);
+          console.log(`  Энергия: ${data.networkEnergy || 'n/a'}\n`);
+          const top = Object.entries(data.threads || {})
+            .sort((a, b) => b[1] - a[1]).slice(0, 5);
+          console.log(`${C.b('Топ нитей:')}`);
+          for (const [k, v] of top) console.log(`  ${k}: ${v}`);
+          console.log();
+        } catch (e) {
+          console.log(`nous недоступен (${e.message}). Запусти: npm run nous`);
+        }
+      } else if (sub === 'commune') {
+        const [from, to] = rest;
+        if (!from || !to) { console.error('gift matrix commune <from> <to>'); process.exit(1); }
+        const r = await fetch(`${NOUS}/commune/${encodeURIComponent(from)}/${encodeURIComponent(to)}`);
+        const data = await r.json();
+        console.log(JSON.stringify(data, null, 2));
+      }
+      break;
+    }
+
+    case 'benchmark': {
+      await run('benchmarks/cat-7.mjs');
+      break;
+    }
+
+    case 'agent': {
+      // Агентный режим. runRaw сохраняет HTTP_PROXY/HTTPS_PROXY env vars —
+      // они нужны curl/fetch'ам в WSL2 для выхода через Windows proxy.
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await runRaw('bin/gift-agent', allArgs);
+      break;
+    }
+
+    case 'myslo': {
+      // Мыслебродильня — сферный подход (Переслегин) в Gift-онтологии.
+      // Под капотом: Decoupage / SymphonyOrchestrator / Vintage / Score.
+
+      if (!sub) {
+        console.log(`
+${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный подход Переслегина)
+
+  ${C.b('полная "идея"')}      Decoupage → Δοκιμασία → Vintage → Score
+                       Полный цикл от идеи до sommelier card.
+
+  ${C.b('cut "идея"')}         διαίρεσις: 4 sphere-инженерии (ground/water/fire/air)
+                       Выводит фигуру идеи (полная сфера / без огня / ...).
+
+  ${C.b('дегустация "идея"')}  Собор Ollama-агентов с эпиклезой.
+                       4 условия: chorus/perichoretic/kenotic/epiclesis.
+
+  ${C.b('винтаж')}             διάκρισις: какие идеи дали плоды за период.
+
+  ${C.b('карты')}              Все sommelier-карты иконных актов в W.
+  ${C.b('бочка')}              Идеи в _pending (ферментация ὑπομονή).
+
+  ${C.dim('Опции для полная/дегустация:')}
+    ${C.dim('--no-oracle')}              без эпиклезы (заведомо не-икона)
+    ${C.dim('--weight N')}               вес симфонии (default 8)
+    ${C.dim('--analyzer mistral:7b')}    модель для Decoupage
+`);
+        break;
+      }
+
+      if (sub === 'полная' || sub === 'full') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo полная "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, ...passthrough]);
+        break;
+      }
+
+      if (sub === 'cut') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo cut "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, '--no-oracle', ...passthrough]);
+        // Decoupage в myslo всегда. --no-oracle гарантирует что ждать эпиклезу не будем.
+        // Symphony всё равно запустится (быстро без oracle), но это OK для cut-режима.
+        break;
+      }
+
+      if (sub === 'дегустация' || sub === 'tasting') {
+        const idea = rest.filter(a => !a.startsWith('--')).join(' ');
+        if (!idea) { console.error('gift myslo дегустация "текст идеи"'); process.exit(1); }
+        const passthrough = rest.filter(a => a.startsWith('--'));
+        await run('utils/myslo.mjs', ['--idea', idea, '--skip-decoupage', ...passthrough]);
+        break;
+      }
+
+      if (sub === 'винтаж' || sub === 'vintage') {
+        await run('utils/litpulse.mjs', ['--force', 'vintage', ...rest]);
+        break;
+      }
+
+      if (sub === 'карты' || sub === 'cards') {
+        await run('utils/score-first-icon.mjs', rest);
+        break;
+      }
+
+      if (sub === 'бочка' || sub === 'barrel') {
+        // Показать pending-акты (ферментация)
+        const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
+        const snap = JSON.parse(readFileSync(resolve(ROOT, 'data/sacred-history-W.json'), 'utf8'));
+        const mem = GiftMemory.fromSnapshot(snap);
+        const pending = mem.pending();
+        console.log(`\n${C.b('Бочка')} — идеи в ферментации (${pending.length}):\n`);
+        if (!pending.length) { console.log('  (бочка пуста — нет _pending актов)'); break; }
+        for (const p of pending.slice(0, 30)) {
+          const ageDays = Math.floor((Date.now() - new Date(p.pendingAt).getTime()) / 86400_000);
+          console.log(`  ${C.cyan(p.act.giverId.padEnd(12))} → ${p.act.receiverId.padEnd(12)}  ${C.dim(`${ageDays}d`)}`);
+          if (p.act.content) console.log(`    ${(p.act.content ?? '').slice(0, 80)}`);
+        }
+        console.log();
+        break;
+      }
+
+      console.error(`gift myslo: неизвестная подкоманда '${sub}'. См. gift myslo`);
+      process.exit(1);
+    }
+
+    case 'session': {
+      const { readdirSync, readFileSync } = await import('node:fs');
+      const sessDir = resolve(ROOT, 'data/conciliar-swe');
+      const files = existsSync(sessDir)
+        ? readdirSync(sessDir).filter(f => f.endsWith('.json')).sort().reverse()
+        : [];
+
+      if (sub === 'list' || !sub) {
+        if (!files.length) { console.log('Сессий не было.'); break; }
+        console.log(`\n${C.b('Прошлые соборы')} (${files.length}):\n`);
+        for (const f of files.slice(0, 20)) {
+          try {
+            const r = JSON.parse(readFileSync(resolve(sessDir, f), 'utf8'));
+            const time = new Date(r.at || 0).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+            const dom = r.dominant ? r.dominant.persona : (r.apophatic ? '⟨apophatic⟩' : '⟨silent⟩');
+            const q = (r.question || r.task?.title || '').slice(0, 60);
+            console.log(`  ${C.cyan(r.id || f.replace('.json',''))}  ${C.dim(time)}`);
+            console.log(`    → ${dom} · ${q}`);
+          } catch { console.log(`  ${f}  ${C.dim('(нечитабельный)')}`); }
+        }
+        console.log(`\n  gift session show <id> — подробно\n  gift session last — последний\n`);
+      } else if (sub === 'last' || sub === 'show') {
+        const target = sub === 'last' ? files[0] : files.find(f => f.includes(rest[0] || ''));
+        if (!target) { console.log('Сессия не найдена.'); break; }
+        const r = JSON.parse(readFileSync(resolve(sessDir, target), 'utf8'));
+        console.log(`\n${C.b(r.id || target)}  ${C.dim(r.at)}`);
+        if (r.question) console.log(`${C.b('Вопрос:')} ${r.question}`);
+        if (r.task)     console.log(`${C.b('Задача:')} ${r.task.title || r.task}`);
+        if (r.elapsedSec) console.log(`${C.dim('время:')} ${r.elapsedSec}s · ${C.dim('режим:')} ${r.mode || 'n/a'}`);
+        console.log();
+        const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+        for (const v of r.voices || []) {
+          console.log(`${logosIcon[v.logos] || '·'} ${C.b(v.persona)} (${v.logos})`);
+          console.log(`  ${(v.content || '').replace(/\n/g, '\n  ')}\n`);
+        }
+        if (r.dominant) console.log(`${C.gold('⟨dominant⟩')} ${r.dominant.persona} (${r.dominant.logos})`);
+        if (r.apophatic) console.log(`${C.violet('⟨apophatic⟩')} собор не сошёлся в dominant`);
+        if (r.silent)    console.log(`${C.dim('⟨silent⟩')} ${r.silenceReason || ''}`);
+        console.log();
+      } else { help(); process.exit(1); }
+      break;
+    }
+
+    case 'web': {
+      const { spawn } = await import('node:child_process');
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.portal.pid');
+
+      if (rest.includes('--stop') || sub === '--stop') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid); console.log(`Портал остановлен (pid ${pid}).`); } catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Портал не запущен.'); }
+        break;
+      }
+
+      const port = rest.includes('--port') ? rest[rest.indexOf('--port')+1] : '3700';
+      if (ex(pidFile)) {
+        const pid = parseInt(rf(pidFile, 'utf8'));
+        try { process.kill(pid, 0); console.log(`Портал уже работает на :${port} (pid ${pid})`); break; } catch { /* мёртвый pid */ }
+      }
+
+      const child = spawn('node', [resolve(ROOT, 'utils/gift-portal-server.mjs')], {
+        detached: true, stdio: 'ignore', cwd: ROOT,
+        // PROXY_ORIG восстанавливает HTTP_PROXY/HTTPS_PROXY — нужны для
+        // claude --print, который polyphony-orchestrator вызывает изнутри.
+        // GIFT_KEEP_PROXY=1 — чтобы cleanEnv внутри полифонии тоже не стирал
+        // proxy на каждом вызове claude. NO_PROXY=localhost уже выставлен.
+        env: { ...cleanEnv(), ...PROXY_ORIG, GIFT_KEEP_PROXY: '1', PORT: port },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Скиния Дара открыта`);
+      console.log(`  ${C.cyan(`http://localhost:${port}`)}`);
+      console.log(`  ${C.dim('gift web --stop  — остановить')}`);
+      console.log(`  ${C.dim('gift silero start — для качественного голоса на /voice')}\n`);
+      break;
+    }
+
+    case 'autonomy': {
+      // Daemon, который каждую минуту дёргает agrypnia tick.
+      // Без него запланированные бдения (pulse, dev-loop) не сработают.
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync, openSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.autonomy.pid');
+
+      if (sub === 'stop' || rest.includes('--stop')) {
+        if (ex(pidFile)) {
+          try { process.kill(parseInt(rf(pidFile, 'utf8'))); console.log('Автономия остановлена.'); }
+          catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Автономия не запущена.'); }
+        break;
+      }
+      if (sub === 'status') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid, 0); console.log(`Автономия работает (pid ${pid})`); }
+          catch { console.log('pid-файл есть, но процесс мёртв.'); }
+        } else { console.log('Автономия не запущена. gift autonomy start'); }
+        break;
+      }
+      // start
+      if (ex(pidFile)) {
+        try { process.kill(parseInt(rf(pidFile, 'utf8')), 0);
+          console.log(`Уже работает (pid ${rf(pidFile, 'utf8')})`); break;
+        } catch {}
+      }
+      const logPath = resolve(ROOT, 'data/autonomy.log');
+      const out = openSync(logPath, 'a');
+      const child = spawn('node', [resolve(ROOT, 'utils/autonomy-daemon.mjs')], {
+        detached: true, stdio: ['ignore', out, out], cwd: ROOT,
+        env: { ...cleanEnv(), ...PROXY_ORIG, GIFT_KEEP_PROXY: '1' },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Автономия запущена (pid ${child.pid})`);
+      console.log(`  ${C.dim('каждую минуту dёргает agrypnia tick')}`);
+      console.log(`  ${C.dim('лог: data/autonomy.log  ·  gift autonomy stop')}\n`);
+      break;
+    }
+
+    case 'silero': {
+      // Локальный Silero TTS сервер для /voice (порт 8091).
+      // Модель скачивается один раз ~120МБ в data/silero/.
+      const { writeFileSync, readFileSync: rf, existsSync: ex, unlinkSync } = await import('node:fs');
+      const pidFile = resolve(ROOT, 'data/.silero.pid');
+
+      if (sub === 'stop' || rest.includes('--stop')) {
+        if (ex(pidFile)) {
+          try { process.kill(parseInt(rf(pidFile, 'utf8'))); console.log('Silero остановлен.'); }
+          catch { console.log('Процесс уже не работает.'); }
+          unlinkSync(pidFile);
+        } else { console.log('Silero не запущен.'); }
+        break;
+      }
+      if (sub === 'status') {
+        if (ex(pidFile)) {
+          const pid = parseInt(rf(pidFile, 'utf8'));
+          try { process.kill(pid, 0); console.log(`Silero работает (pid ${pid}, порт 8091)`); }
+          catch { console.log('pid-файл есть, но процесс мёртв. Удали data/.silero.pid'); }
+        } else { console.log('Silero не запущен. gift silero start'); }
+        break;
+      }
+      // start (по умолчанию)
+      if (ex(pidFile)) {
+        const pid = parseInt(rf(pidFile, 'utf8'));
+        try { process.kill(pid, 0); console.log(`Silero уже работает (pid ${pid})`); break; } catch {}
+      }
+      const logPath = resolve(ROOT, 'data/silero.log');
+      const { openSync } = await import('node:fs');
+      const out = openSync(logPath, 'a');
+      const child = spawn('python3', [resolve(ROOT, 'utils/silero-tts-server.py'), '--preload'], {
+        detached: true, stdio: ['ignore', out, out], cwd: ROOT,
+        env: { ...cleanEnv() },
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`\n${C.gold('✦')} Silero TTS запущен (pid ${child.pid})`);
+      console.log(`  ${C.dim('первая загрузка модели ~30 сек, потом мгновенно')}`);
+      console.log(`  ${C.dim('лог: data/silero.log  ·  gift silero stop  — остановить')}\n`);
+      break;
+    }
+
+    case 'treasure': {
+      // θησαυρός — фасад над utils/lcm-cli.mjs.
+      // Подкоманды: recall | unfold | ingest | stats
+      if (!sub) { help(); process.exit(1); }
+      await run('utils/lcm-cli.mjs', [sub, ...rest]);
+      break;
+    }
+
+    case 'agrypnia': {
+      // ἀγρυπνία — фасад над utils/agrypnia-tick.mjs.
+      // Подкоманды: tick | list | cancel | once | daily | interval
+      if (!sub) { help(); process.exit(1); }
+      await run('utils/agrypnia-tick.mjs', [sub, ...rest]);
+      break;
+    }
+
+    case 'chat': {
+      // Multi-turn REPL поверх claude-agent-sdk.
+      // ВАЖНО: запускаем в parent process — child через spawn не передаёт
+      // полноценный TTY, и process.stdin.setRawMode(true) проваливается
+      // тихо. Без raw mode keypress events не приходят, и меню '/'
+      // не всплывает. TF noise глушим stderr-redirect-трюком на время
+      // import (ниже).
+      //
+      // Восстанавливаем proxy для SDK egress (polza-runner curl):
+      for (const [k, v] of Object.entries(PROXY_ORIG)) process.env[k] = v;
+      // TF env (на всякий случай — не помогает в parent, но не мешает):
+      process.env.TF_CPP_MIN_LOG_LEVEL  = '3';
+      process.env.TF_ENABLE_ONEDNN_OPTS = '0';
+
+      // Глушим stderr во время import (там tfjs-node native пишет init-логи)
+      const origStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = () => true;
+      let runGiftRepl, giftReplApi;
+      try {
+        ({ runGiftRepl, giftReplApi } = await import(resolve(ROOT, 'src/agent-cli/repl.js')));
+      } finally {
+        process.stderr.write = origStderrWrite;
+      }
+
+      const allArgs = [sub, ...rest].filter(Boolean);
+      if (allArgs[0] === '--list') {
+        const ls = giftReplApi.listSessions(20);
+        if (!ls.length) { console.log('Сессий нет.'); break; }
+        console.log(`\n${C.b('Последние REPL-сессии:')}`);
+        for (const s of ls) {
+          const title = s.title ? `  ${C.b(s.title)}` : '';
+          console.log(`  ${s.id}  ${C.dim(`${s.turns} turns`)}  ${C.dim(s.updatedAt)}${title}`);
+        }
+        console.log();
+        break;
+      }
+      const resumeIdx = allArgs.indexOf('--resume');
+      const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
+      const planMode = allArgs.includes('--plan');
+      try {
+        await runGiftRepl({ resumeId, planMode });
+      } catch (e) {
+        console.error(`Ошибка: ${e.message}`);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'glossary': {
+      // Словарь греческих терминов (греч. → рус.) — снимает языковой барьер.
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('utils/gift-glossary.mjs', allArgs);
+      break;
+    }
+
+    case 'koinon': {
+      // Шина межсессионной коммуникации Claude в семье gift
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('utils/koinon-cli.mjs', allArgs);
+      break;
+    }
+
+    case 'goal': {
+      // Long-horizon цели: gift-аналог Codex /goal с μετάνοια-шагом.
+      // runRaw — потому что внутри ClaudeExecutor вызывается `claude --print`,
+      // которому нужен Windows proxy для egress (как и agent-режиму).
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await runRaw('utils/goal-cli.mjs', allArgs);
+      break;
+    }
+
+    case 'status': {
+      console.log(`\n${C.b('Статус онтологии дара')} ${C.dim('v' + readVersion())}`);
+      console.log(`${C.dim('─'.repeat(46))}`);
+      // Открытые пустыни
+      try {
+        const raw = await gh('gh issue list --state open --label gift-ready --limit 50 --json number,title');
+        const issues = JSON.parse(raw);
+        const rx = /пустыня\s+([^\s→]+)\s*→\s*([^\s:]+)/;
+        const pustynyas = issues.filter(i => rx.test(i.title));
+        console.log(`  Открытые пустыни: ${C.gold(pustynyas.length)}`);
+      } catch { console.log(`  Открытые пустыни: ${C.dim('github недоступен')}`); }
+
+      // Матрица
+      const NOUS = process.env.NOUS_URL || 'http://localhost:8089';
+      try {
+        const r = await fetch(`${NOUS}/summary`, { signal: AbortSignal.timeout(2000) });
+        const d = await r.json();
+        console.log(`  Лиц в матрице:    ${Object.keys(d.persons || {}).length}`);
+        console.log(`  Энергия сети:     ${d.networkEnergy || 'n/a'}`);
+      } catch {
+        console.log(`  Лиц в матрице:    ${C.dim('nous недоступен')}`);
+        console.log(`  Энергия сети:     ${C.dim('nous недоступен')}`);
+      }
+
+      // Эпиклеза queue
+      const inboxDir = resolve(ROOT, 'data/epiclesis-inbox');
+      if (existsSync(inboxDir)) {
+        const { readdirSync } = await import('node:fs');
+        const files = readdirSync(inboxDir).filter(f => f.endsWith('.question.json'));
+        console.log(`  Эпиклезы в очереди: ${C.violet(files.length)}`);
+      } else {
+        console.log(`  Эпиклезы в очереди: 0`);
+      }
+
+      // Сокровищница (θησαυρός)
+      try {
+        const lcmPath = resolve(ROOT, 'data/lcm.db');
+        if (existsSync(lcmPath)) {
+          const { LcmStore } = await import(resolve(ROOT, 'src/lcm/store.js'));
+          const store = new LcmStore(lcmPath);
+          const s = store.stats();
+          const parts = Object.entries(s.bySource).map(([k, n]) => `${k}:${n}`).join(' ');
+          console.log(`  Сокровищница:     ${C.gold(s.total)} ${C.dim('(' + parts + ')')}`);
+          store.close();
+        } else {
+          console.log(`  Сокровищница:     ${C.dim('пуста (gift treasure ingest)')}`);
+        }
+      } catch { console.log(`  Сокровищница:     ${C.dim('n/a')}`); }
+
+      // Бдения (ἀγρυπνία)
+      try {
+        const cronPath = resolve(ROOT, 'data/dynamic-cron.json');
+        if (existsSync(cronPath)) {
+          const { AgrypniaScheduler } = await import(resolve(ROOT, 'src/scheduling/AgrypniaScheduler.js'));
+          const sched = new AgrypniaScheduler(cronPath);
+          const jobs = sched.list();
+          console.log(`  Бдений активно:   ${C.cyan(jobs.length)}`);
+          if (jobs.length) {
+            const now = Date.now();
+            const due = j => {
+              if (j.type === 'once') return Date.parse(j.schedule);
+              if (j.type === 'interval') {
+                const last = j.lastFiredAt ? Date.parse(j.lastFiredAt) : Date.parse(j.created);
+                return last + Number(j.schedule) * 1000;
+              }
+              if (j.type === 'daily') {
+                const [h, m] = String(j.schedule).split(':').map(Number);
+                const today = new Date();
+                today.setUTCHours(h, m, 0, 0);
+                if (today.getTime() < now ||
+                    (j.lastFiredAt && Date.parse(j.lastFiredAt) >= today.getTime())) {
+                  today.setUTCDate(today.getUTCDate() + 1);
+                }
+                return today.getTime();
+              }
+              return null;
+            };
+            const next = jobs.map(j => ({ j, t: due(j) }))
+                             .filter(x => x.t).sort((a, b) => a.t - b.t)[0];
+            if (next) {
+              const when = new Date(next.t).toISOString().replace('T', ' ').replace(/\..+/, '');
+              console.log(`    ближайшее → ${C.dim(when)} (${next.j.owner}, ${next.j.type})`);
+            }
+          }
+        } else {
+          console.log(`  Бдений активно:   0`);
+        }
+      } catch { console.log(`  Бдений активно:   ${C.dim('n/a')}`); }
+
+      console.log();
+      break;
+    }
+
+    default:
+      console.error(`Неизвестная команда: ${cmd}`);
+      help();
+      process.exit(1);
+  }
+} catch (e) {
+  console.error('Ошибка:', e.message);
+  process.exit(1);
+}

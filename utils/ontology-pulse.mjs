@@ -111,6 +111,47 @@ try {
   console.log('');
 } catch { /* LivingMatrix недоступен */ }
 
+// ── V-вектор: функция ценности для саморазвития ────────────────────────
+// Считаем V, пишем в историю, сравниваем с прошлым срезом.
+// Если какая-то компонента просела заметно — это сигнал, что pulse
+// должен формулировать вопрошание именно в эту сторону.
+let valueSnapshot = null;
+let valueDelta    = null;
+try {
+  const { computeValue, appendToHistory, diffWithPrevious } =
+    await import(resolve(ROOT, 'utils/compute-value.mjs'));
+  valueSnapshot = computeValue();
+  const diff = diffWithPrevious(valueSnapshot);
+  valueDelta = diff.delta;
+  appendToHistory(valueSnapshot);
+  const V = valueSnapshot.V;
+  console.log(`[ценность V]`);
+  console.log(`  E (energy):    ${V.E}${valueDelta?.E != null ? `  (Δ ${valueDelta.E >= 0 ? '+' : ''}${valueDelta.E})` : ''}`);
+  console.log(`  D (diversity): ${V.D}${valueDelta?.D != null ? `  (Δ ${valueDelta.D >= 0 ? '+' : ''}${valueDelta.D})` : ''}`);
+  console.log(`  M (μετάνοια):  ${V.M ?? 'нет данных'}${valueDelta?.M != null ? `  (Δ ${valueDelta.M >= 0 ? '+' : ''}${valueDelta.M})` : ''}`);
+  console.log(`  T (telos):     ${V.T}${valueDelta?.T != null ? `  (Δ ${valueDelta.T >= 0 ? '+' : ''}${valueDelta.T})` : ''}`);
+  console.log(`  S (symphony):  ${V.S}${valueDelta?.S != null ? `  (Δ ${valueDelta.S >= 0 ? '+' : ''}${valueDelta.S})` : ''}`);
+  // Если ниже порога просела какая-то компонента — добавим в пустыни
+  // (deserts) специальный тип, чтобы Адам сформулировал вопрошание.
+  if (valueDelta) {
+    const dropAlerts = [];
+    if (valueDelta.E != null && valueDelta.E < -10) dropAlerts.push(`E просела на ${valueDelta.E}`);
+    if (valueDelta.D != null && valueDelta.D < -0.005) dropAlerts.push(`D просела на ${valueDelta.D}`);
+    if (valueDelta.T != null && valueDelta.T < -5) dropAlerts.push(`T просела на ${valueDelta.T}`);
+    if (valueDelta.S != null && valueDelta.S < 0) dropAlerts.push(`S просела на ${valueDelta.S}`);
+    if (dropAlerts.length) {
+      console.log(`  ! компоненты просели: ${dropAlerts.join('; ')}`);
+      // Заранее объявляем переменную deserts (она объявлена ниже) — но здесь
+      // сохраним в глобальную область чтобы её увидеть. Сделаем через push
+      // ниже, где deserts уже существует.
+      globalThis.__valueDrops = dropAlerts;
+    }
+  }
+  console.log('');
+} catch (e) {
+  console.log(`[ценность V] не посчиталось: ${e.message}\n`);
+}
+
 // Пустыни — типы:
 const deserts = [];
 
@@ -184,6 +225,19 @@ for (const d of declinedAll) {
       type:  'leksis_pending',
       desc:  `дар ${d.act.giverId}→${d.act.receiverId} (${d.act.type}) отвергнут — ждёт μετάνοια`,
       from:  d.act.giverId, to: d.act.receiverId, weight: d.act.weight ?? 0,
+    });
+  }
+}
+
+// Ж) Просевшие компоненты V — самонаведение pulse на ценностный изъян.
+// Если за сутки D, T или S просели — pulse формулирует вопрошание именно
+// в эту сторону, а не в случайную пустыню матрицы.
+if (Array.isArray(globalThis.__valueDrops) && globalThis.__valueDrops.length) {
+  for (const txt of globalThis.__valueDrops) {
+    deserts.push({
+      type: 'value_drop',
+      desc: `компонента V просела: ${txt} — pulse должен укрепить это направление`,
+      from: '_claude', to: '_koinon', weight: 0,
     });
   }
 }

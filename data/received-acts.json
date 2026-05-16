@@ -1,0 +1,17 @@
+[
+  {
+    "id": "consent-1776888816385-1",
+    "giverId": "Дионисий",
+    "receiverId": "Ева",
+    "type": "word",
+    "weight": 6,
+    "content": "тест синергии",
+    "phase": "received",
+    "offeredAt": 1776888816385,
+    "receivedAt": 1776888821775,
+    "declinedAt": null,
+    "irreversible": true,
+    "reception": "accepted",
+    "consentBy": "Ева"
+  }
+]

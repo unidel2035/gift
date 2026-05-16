@@ -5,6 +5,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/claude-anamnesis.mjs 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Ἀνάμνησις — три слоя памяти..."
+          },
+          {
+            "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/gift-plan.mjs --pending 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Проверяю планы..."
@@ -26,6 +32,12 @@
             "command": "node \"$(git rev-parse --show-toplevel)/utils/matrix-context-hook.mjs\" 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Анамнезис матрицы W + сервера..."
+          },
+          {
+            "type": "command",
+            "command": "GIFT_CLAUDE_ID=gift-claude node \"$(git rev-parse --show-toplevel)/utils/koinon-pump.mjs\" 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Свежие сообщения шины Κοινόν..."
           }
         ]
       }

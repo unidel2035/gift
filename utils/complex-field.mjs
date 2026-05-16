@@ -87,7 +87,7 @@ function thetaFromDate(tsMs) {
 const DIVINE = new Set(['Отец', 'Сын', 'Христос', 'Дух']);
 
 // Тёмные / падшие лица — θ=π (удаление от Источника)
-const SHADOW = new Set(['Змей', 'Падший']);
+const SHADOW = new Set(['Змей', 'Человек']);
 
 function edgeTheta(fromId, toId) {
   // Богословские правила:

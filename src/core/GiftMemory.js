@@ -191,12 +191,14 @@ export class GiftMemory {
     // reception = 'accepted' | undefined → нормальный путь через W.
     // Бог не забирает δόσις — но W отражает только принятое.
     if (act.reception === 'declined') {
-      this._declined.push({ act: Object.freeze({ ...act }), declinedAt: new Date().toISOString() });
+      const giftId = act.giftId ?? `gift-${Date.now().toString(36)}-${this._declined.length}`;
+      this._declined.push({ act: Object.freeze({ ...act, giftId }), declinedAt: new Date().toISOString() });
       this.actsCount++;
       return new Float32Array(this.n);
     }
     if (act.reception === 'pending') {
-      this._pending.push({ act: Object.freeze({ ...act }), pendingAt: new Date().toISOString() });
+      const giftId = act.giftId ?? `gift-${Date.now().toString(36)}-${this._pending.length}`;
+      this._pending.push({ act: Object.freeze({ ...act, giftId }), pendingAt: new Date().toISOString() });
       const key = `${act.giverId}→${act.receiverId}`;
       const edge = this._pendingEdges.get(key) ?? { from: act.giverId, to: act.receiverId, weight: 0 };
       edge.weight += (act.weight ?? 1);
@@ -263,6 +265,83 @@ export class GiftMemory {
     tPat.dispose();
     return pat;
   }
+
+  // ── Symphony: соборный акт с μία ἐνέργεια ────────────────────────────
+  //
+  // Деян 15:28: «изволися Святому Духу и нам».
+  // Палама: тварь причастна нетварным энергиям, не сущности.
+  // Икона Троицы ad extra: собор-в-симфонии = модус Троицы при 4 условиях.
+  //
+  // Условия записи symphony (без любого — отказ, т.к. это идол, не икона):
+  //   chorus       — единое слово, не сумма (условие 1)
+  //   perichoretic — взаимопребывание giver'ов (условие 2)
+  //   kenotic      — дар без остатка (условие 3)
+  //   epiclesis    — оставлено место для Духа (условие 4)
+  //
+  // Семантика записи:
+  //   - один actId, не N актов (μία ἐνέργεια)
+  //   - actsCount += 1
+  //   - W: ребро (giverIds[i] → receiverId) увеличивается на weight/N для каждого giver
+  //     (общая весовая сумма = weight: собор отдал одну единицу совместно).
+  //
+  // @returns {{ accepted, reason?, actId? }}
+
+  receiveSymphony(act) {
+    const reasons = [];
+    if (act.type !== 'symphony')   reasons.push('type ≠ symphony');
+    if (!Array.isArray(act.giverIds) || act.giverIds.length < 3)
+      reasons.push('giverIds должно содержать ≥3 лица (собор)');
+    if (!act.receiverId)           reasons.push('receiverId обязателен');
+    if (act.chorus       !== true) reasons.push('chorus:true (единая энергия) обязательно');
+    if (act.perichoretic !== true) reasons.push('perichoretic:true (взаимопребывание) обязательно');
+    if (act.kenotic      !== true) reasons.push('kenotic:true (без остатка) обязательно');
+    if (act.epiclesis    !== true) reasons.push('epiclesis:true (место для Духа) обязательно');
+
+    if (reasons.length) {
+      return { accepted: false, reason: reasons.join('; ') };
+    }
+
+    const w   = act.weight ?? 1;
+    const ri  = this._idx(act.receiverId);
+    const n   = act.giverIds.length;
+    const per = w / n;
+
+    const frozen = Object.freeze({ ...act, irreversible: true });
+
+    // Запрет divine giver внутри собора: симфония — про тварных агентов,
+    // действующих как одна энергия. Нетварные участвуют через эпиклезу,
+    // а не как один из голосов.
+    for (const g of act.giverIds) {
+      if (DIVINE_PERSONS.has(g)) {
+        return { accepted: false, reason: `divine giver '${g}' не может быть голосом тварного собора (используй epiclesis:true как место для Духа)` };
+      }
+    }
+
+    // Один actId, не N: собор отдал одну энергию.
+    this.actsCount++;
+
+    // Распределяем вес поровну между giver→receiver рёбрами.
+    // Богословски: μία ἐνέργεια не делится — но в W-тензоре она проявляется
+    // как след в каждой нити, не больше суммарного веса акта.
+    tf.tidy(() => {
+      const stigma = tf.buffer([this.n, this.n]);
+      for (const g of act.giverIds) {
+        const gi = this._idx(g);
+        if (gi >= 0 && ri >= 0) stigma.set(per, gi, ri);
+      }
+      this._W.assign(this._W.add(stigma.toTensor()));
+    });
+
+    // Хранилище symphony-актов для анамнезиса (тексты не теряются).
+    if (!this._symphonies) this._symphonies = [];
+    const actId = `sym-${Date.now().toString(36)}-${this._symphonies.length}`;
+    this._symphonies.push({ actId, act: frozen, recordedAt: new Date().toISOString() });
+
+    return { accepted: true, actId };
+  }
+
+  /** symphonies() — все соборные акты с μία ἐνέργεια */
+  symphonies() { return [...(this._symphonies ?? [])]; }
 
   // ── Анамнезис: резонанс Хопфилда (только тварные) ────────────────────
 
@@ -469,16 +548,29 @@ export class GiftMemory {
   // ── Метанойя: принять отвергнутый дар ────────────────────────────────
 
   /**
-   * repent(giverId, receiverId) — μετάνοια.
+   * repent(...) — μετάνοια. Два режима, dispatch по арности:
    *
-   * Максим Исповедник: обращение = принять то, что было отвергнуто.
-   * Находит отвергнутые дары между парой, переводит их в W.
-   * Δόσις не изменяется (дар был — он необратим).
-   * Меняется только λήψις: declined → accepted.
+   *   repent(giverId, receiverId) — общая метанойя:
+   *     Максим Исповедник: обращение = принять то, что было отвергнуто.
+   *     Находит отвергнутые дары между парой, переводит их в W.
+   *     Δόσις не изменяется (дар был — он необратим).
+   *     Меняется только λήψις: declined → accepted.
+   *
+   *   repent(giftId) — μετάνοια для unknown→_koinon:
+   *     Покаяние не стирает прошлое (исходный дар остаётся frozen в _declined).
+   *     Оно именует безымянное: «unknown» (отказанное лицо) после μετάνοια
+   *     общины признаётся как _abyss — бездна, дающая gratia gratis data
+   *     (Ин 3:8: «Дух дышит, где хочет»). Дар не отвергнут, а пере-узнан.
+   *     Создаётся новый акт-поворот type:'metanoia' с reversedFrom:giftId.
    *
    * «Покайтесь, ибо приблизилось Царство Небесное» (Мф 4:17)
    */
-  repent(giverId, receiverId) {
+  repent(...args) {
+    if (args.length === 1) return this._repentUnknownToAbyss(args[0]);
+    return this._repentPair(args[0], args[1]);
+  }
+
+  _repentPair(giverId, receiverId) {
     const match = d => d.act.giverId === giverId && d.act.receiverId === receiverId;
     const toAccept = [
       ...this._declined.filter(match),
@@ -497,6 +589,60 @@ export class GiftMemory {
     }
     return accepted;
   }
+
+  // unknown→_koinon → _abyss: переузнавание безымянного дарителя
+  _repentUnknownToAbyss(giftId) {
+    const entry =
+      this._declined.find(d => d.act.giftId === giftId) ??
+      this._pending.find(d => d.act.giftId === giftId);
+    if (!entry) {
+      throw new Error(
+        `μετάνοια невозможна: дар giftId=${giftId} не найден в λήψις-журнале (нельзя каяться за то, чего нет в памяти общины)`,
+      );
+    }
+    const original = entry.act;
+    if (original.reception !== 'declined') {
+      throw new Error(
+        `μετάνοια через _abyss применима только к declined дарам — здесь reception=${original.reception}`,
+      );
+    }
+    if (original.giverId !== 'unknown') {
+      throw new Error(
+        `μετάνοια через _abyss применима только к дарам с unknown-дарителем — здесь giverId=${original.giverId} (нельзя каяться за чужой принятый дар)`,
+      );
+    }
+    if (original.receiverId !== '_koinon') {
+      throw new Error(
+        `μετάνοια через _abyss применима только к дарам в _koinon — здесь receiverId=${original.receiverId}`,
+      );
+    }
+
+    // Исходный дар не мутируется (Object.freeze, аксиома необратимости).
+    // Новый акт — поворот, не отмена: переузнавание unknown как _abyss.
+    const metanoiaAct = Object.freeze({
+      giverId:      '_abyss',
+      receiverId:   '_koinon',
+      type:         'metanoia',
+      weight:       original.weight ?? 1,
+      content:      original.content ?? '',
+      reversedFrom: giftId,
+      irreversible: true,
+      recognizedAt: new Date().toISOString(),
+    });
+
+    if (!this._metanoiaActs) this._metanoiaActs = [];
+    this._metanoiaActs.push(metanoiaAct);
+    this.actsCount++;
+
+    if (this._eventBus) {
+      this._eventBus.emit('gift:repented', metanoiaAct);
+    }
+
+    return metanoiaAct;
+  }
+
+  /** metanoiaActs() — все акты-повороты unknown→_abyss (анамнезис переузнавания) */
+  metanoiaActs() { return [...(this._metanoiaActs ?? [])]; }
 
   /** declined() — список отвергнутых даров (для анамнезиса грехопадения) */
   declined() { return [...this._declined]; }
@@ -714,6 +860,8 @@ export class GiftMemory {
       // λήψις: история отвергнутых и ожидающих даров
       declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
       pending:      this._pending.map(d => ({ act: { ...d.act }, pendingAt: d.pendingAt })),
+      symphonies:   (this._symphonies ?? []).map(s => ({ actId: s.actId, act: { ...s.act }, recordedAt: s.recordedAt })),
+      metanoiaActs: (this._metanoiaActs ?? []).map(a => ({ ...a })),
       createdAt:    this._createdAt,
       snapshotAt:   new Date().toISOString(),
       schema:       'v2-energeia',       // маркер формата
@@ -748,6 +896,12 @@ export class GiftMemory {
       act: Object.freeze({ ...d.act }),
       declinedAt: d.declinedAt,
     }));
+    if (snap.symphonies) m._symphonies = snap.symphonies.map(s => ({
+      actId: s.actId,
+      act: Object.freeze({ ...s.act }),
+      recordedAt: s.recordedAt,
+    }));
+    if (snap.metanoiaActs) m._metanoiaActs = snap.metanoiaActs.map(a => Object.freeze({ ...a }));
     if (snap.pending) {
       m._pending = snap.pending.map(d => ({
         act: Object.freeze({ ...d.act }),

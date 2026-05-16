@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Κοινόν — собор</title>
+<style>
+  :root {
+    --bg: #0f0e14; --panel: #17161e; --panel-2: #1e1c27;
+    --fg: #e6e3d8; --dim: #8a8398; --gold: #d4b267;
+    --kata: #d08770; --para: #88c0d0; --hyper: #b48ead; --violet: #a48ec0;
+    --user: #d4b267;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 -apple-system, "Segoe UI", "Noto Sans", sans-serif; overflow: hidden; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .main { display: flex; flex: 1; min-height: 0; }
+  .sidebar { width: 240px; background: var(--panel); border-right: 1px solid #2a2834; overflow-y: auto; flex-shrink: 0; }
+  .sidebar .new-btn {
+    margin: 10px; padding: 8px 12px; background: transparent; color: var(--gold);
+    border: 1px solid var(--gold); border-radius: 6px; cursor: pointer; width: calc(100% - 20px);
+    font-size: 13px; text-align: left;
+  }
+  .sidebar .new-btn:hover { background: var(--panel-2); }
+  .sidebar .sess {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #22202c; font-size: 12px; color: var(--dim);
+  }
+  .sidebar .sess:hover { background: var(--panel-2); }
+  .sidebar .sess.active { background: var(--panel-2); border-left: 2px solid var(--gold); }
+  .sidebar .sess .t { color: var(--fg); margin-bottom: 3px; line-height: 1.3; }
+  .sidebar .sess .meta { font-size: 10px; color: var(--dim); }
+  .main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { padding: 14px 24px; border-bottom: 1px solid #2a2834;
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; color: var(--gold); font-weight: 500; letter-spacing: 0.4px; }
+  header .crumb { color: var(--dim); font-size: 12px; }
+  header nav { margin-left: auto; display: flex; gap: 14px; font-size: 12px; }
+  header nav a { color: var(--dim); }
+  header nav a.active { color: var(--fg); }
+
+  .messages { flex: 1; overflow-y: auto; padding: 24px 20px 20px; max-width: 860px; margin: 0 auto; width: 100%; min-height: 0; }
+  .msg { margin-bottom: 20px; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .msg.user .bubble {
+    background: transparent; border: 1px solid var(--user);
+    color: var(--user); max-width: 80%; margin-left: auto;
+    padding: 10px 14px; border-radius: 14px 14px 4px 14px;
+  }
+  .msg.sobor-head { color: var(--dim); font-size: 12px; margin-bottom: 4px; padding-left: 4px; }
+  .msg.sobor-head .tick { color: var(--gold); }
+
+  .voice-pending {
+    color: var(--dim); font-size: 13px; padding: 10px 14px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .voice-pending .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--dim);
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.3}50%{opacity:1} }
+
+  .voice {
+    background: var(--panel); padding: 12px 16px 12px 18px;
+    border-left: 2px solid var(--dim); border-radius: 4px; margin-bottom: 10px;
+  }
+  .voice.kata  { border-left-color: var(--kata); }
+  .voice.para  { border-left-color: var(--para); }
+  .voice.hyper { border-left-color: var(--hyper); }
+  .voice .head { font-size: 13px; margin-bottom: 6px; display: flex; gap: 10px; align-items: baseline; }
+  .voice .persona { font-weight: 500; color: var(--fg); }
+  .voice .logos { color: var(--dim); font-size: 11px; }
+  .voice .elapsed { color: var(--dim); font-size: 11px; margin-left: auto; }
+  .voice .dom-mark { color: var(--gold); font-size: 11px; }
+  .voice .body { font-size: 14px; line-height: 1.6; color: var(--fg); }
+  .voice .body p { margin: 0 0 8px; }
+  .voice .body p:last-child { margin-bottom: 0; }
+  .voice .body h1, .voice .body h2, .voice .body h3 { margin: 10px 0 4px; color: var(--gold); font-weight: 500; }
+  .voice .body h1 { font-size: 15px; }
+  .voice .body h2 { font-size: 14px; }
+  .voice .body h3 { font-size: 13px; }
+  .voice .body ul, .voice .body ol { margin: 4px 0 8px; padding-left: 20px; }
+  .voice .body li { margin-bottom: 2px; }
+  .voice .body code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: "JetBrains Mono", Consolas, monospace; }
+  .voice .body pre { background: var(--panel-2); padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+  .voice .body pre code { background: transparent; padding: 0; }
+  .voice .body blockquote { border-left: 2px solid var(--dim); padding-left: 10px; margin: 6px 0; color: var(--dim); font-style: italic; }
+  .voice .body strong { color: var(--fg); font-weight: 500; }
+  .voice .body em { color: var(--para); font-style: italic; }
+  .voice .body a { color: var(--gold); text-decoration: underline; }
+  .voice .body hr { border: none; border-top: 1px solid #2a2834; margin: 8px 0; }
+
+  .sobor-result {
+    margin-top: 8px; padding: 8px 14px; font-size: 12px; color: var(--dim);
+    background: var(--panel-2); border-radius: 6px;
+  }
+  .sobor-result.dominant { color: var(--gold); }
+  .sobor-result.apophatic { color: var(--violet); }
+
+  .context-block {
+    background: transparent; padding: 8px 12px 10px 16px; margin-bottom: 10px;
+    border-left: 2px dashed var(--dim); font-size: 12px; color: var(--dim); line-height: 1.5;
+  }
+  .context-block .heading { color: var(--gold); margin-bottom: 4px; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .context-block ul { margin: 4px 0 6px; padding-left: 16px; }
+  .context-block li { margin-bottom: 3px; }
+  .context-block .empty-ctx { color: var(--dim); font-style: italic; }
+
+  .action {
+    background: var(--panel-2); padding: 10px 14px; margin-bottom: 8px;
+    border-radius: 6px; font-size: 13px; font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    white-space: pre-wrap; line-height: 1.5; border-left: 2px solid var(--gold);
+  }
+  .action.stderr { color: var(--kata); border-left-color: var(--kata); }
+  .action.file { color: var(--para); border-left-color: var(--para); font-size: 12px; max-height: 400px; overflow: auto; }
+  .action.text { color: var(--fg); border-left-color: var(--hyper); font-family: inherit; }
+
+  .compose {
+    border-top: 1px solid #2a2834; padding: 14px 20px; background: var(--panel);
+    display: flex; gap: 10px; max-width: 860px; margin: 0 auto; width: 100%;
+  }
+  .compose textarea {
+    flex: 1; padding: 10px 14px; background: var(--panel-2); color: var(--fg);
+    border: 1px solid #2a2834; border-radius: 8px; resize: none; font: inherit;
+    min-height: 40px; max-height: 150px;
+  }
+  .compose textarea:focus { outline: none; border-color: var(--gold); }
+  .compose button {
+    padding: 0 18px; background: var(--gold); color: #17161e; border: none;
+    border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 14px;
+    white-space: nowrap;
+  }
+  .compose button:disabled { background: var(--dim); cursor: not-allowed; }
+
+  .mode-toggle { margin-left: auto; font-size: 12px; color: var(--dim); display: flex; gap: 6px; align-items: center; }
+  .mode-toggle input { accent-color: var(--gold); }
+
+  .hint { color: var(--dim); text-align: center; padding: 40px 20px; font-size: 14px; }
+  .hint code { background: var(--panel-2); padding: 2px 8px; border-radius: 4px; color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Κοινόν — собор</h1>
+    <span class="crumb">живой диалог с федерацией лиц</span>
+    <nav>
+      <a class="active" href="/chat.html">чат</a>
+      <a href="/team">👥 община</a>
+      <a href="/voice">🎙 голос</a>
+      <a href="/sobor.html">журнал</a>
+      <a href="/">матрица</a>
+    </nav>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <button class="new-btn" onclick="newSession()">+ новый диалог</button>
+      <div id="sess-list"><div style="padding:8px 12px;color:var(--dim);font-size:11px">(загружаю...)</div></div>
+    </aside>
+
+    <div class="main-col">
+      <div class="messages" id="messages">
+        <div class="hint">
+          Напиши вопрос — соберётся собор из трёх лиц:<br>
+          <code>Разведчик</code> (para) · <code>Критик</code> (kata) · <code>Старший</code> (hyper)<br><br>
+          Команды (собор действует):<br>
+          <code>/help</code> · <code>/act &lt;задача&gt;</code> · <code>/swe 229</code> · <code>/horizon задача</code><br>
+          <code>/audit path</code> · <code>/intercede Дионисий за Ева (причина)</code><br>
+          <code>/read path</code> · <code>/search pattern</code> · <code>/git status</code>
+        </div>
+      </div>
+
+      <form class="compose" onsubmit="ask(event)" id="form">
+        <textarea id="q" placeholder="вопрос собору..." rows="1" required></textarea>
+        <div class="mode-toggle">
+          <label><input type="checkbox" id="static" /> static</label>
+        </div>
+        <button type="submit" id="sendBtn">спросить</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const logosIcon = { kata: '✗', para: '≈', hyper: '↑' };
+let activeES = null;
+
+// ── Multi-turn sessions ─────────────────────────────────────────────
+let currentSession = sessionStorage.getItem('gift-session') || null;
+
+function newSessionId() {
+  return 'chat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+}
+function newSession() {
+  currentSession = newSessionId();
+  sessionStorage.setItem('gift-session', currentSession);
+  document.getElementById('messages').innerHTML = '<div class="hint">Новый диалог. Всё, что здесь напишешь, будет записано.</div>';
+  loadSessions();
+}
+async function loadSessions() {
+  const list = document.getElementById('sess-list');
+  try {
+    const r = await fetch('/api/chat-sessions');
+    const data = await r.json();
+    if (!data.sessions.length) {
+      list.innerHTML = '<div style="padding:8px 12px;color:var(--dim);font-size:11px">(ещё нет диалогов)</div>';
+      return;
+    }
+    list.innerHTML = data.sessions.map(s => {
+      const when = s.at ? new Date(s.at).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }) : '';
+      return `<div class="sess ${s.id === currentSession ? 'active' : ''}" onclick="openSession('${s.id}')">
+        <div class="t">${esc(s.title || '(без заголовка)')}</div>
+        <div class="meta">${when} · ${s.turnCount} ход${s.turnCount === 1 ? '' : 'а'}</div>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+async function openSession(id) {
+  currentSession = id;
+  sessionStorage.setItem('gift-session', id);
+  document.getElementById('messages').innerHTML = '<div class="hint">Загружаю историю…</div>';
+  try {
+    const r = await fetch('/api/chat-session/' + encodeURIComponent(id));
+    const s = await r.json();
+    const msgs = document.getElementById('messages');
+    msgs.innerHTML = '';
+    for (const t of s.turns || []) {
+      msgs.insertAdjacentHTML('beforeend',
+        `<div class="msg user"><div class="bubble">${esc(t.user)}</div></div>`);
+      msgs.insertAdjacentHTML('beforeend',
+        `<div class="msg sobor-head">${t.dominant ? `↑ ${esc(t.dominant.persona)}` : t.apophatic ? '⟨apophatic⟩' : '⟨silent⟩'} · ${t.elapsedSec}s</div>`);
+      for (const v of t.voices || []) {
+        const icon = logosIcon[v.logos] || '·';
+        msgs.insertAdjacentHTML('beforeend',
+          `<div class="voice ${v.logos}">
+            <div class="head"><span class="persona">${icon} ${esc(v.persona)}</span><span class="logos">${v.logos}</span></div>
+            <div class="body">${md(v.content || '')}</div>
+          </div>`);
+      }
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+    loadSessions();
+  } catch (e) {
+    document.getElementById('messages').innerHTML = `<div class="hint">Не загрузилось: ${esc(e.message)}</div>`;
+  }
+}
+
+const $ = id => document.getElementById(id);
+const msgs = $('messages');
+
+function addEl(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  msgs.appendChild(d.firstChild);
+  msgs.scrollTop = msgs.scrollHeight;
+  return msgs.lastChild;
+}
+
+function esc(s) {
+  return (s || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+// Минимальный markdown-рендерер (без зависимостей):
+// заголовки ##/###, списки -/*/1., **bold**, *italic*, `code`, ```fenced```,
+// > blockquote, --- hr, [text](url), абзацы по пустым строкам.
+function md(s) {
+  if (!s) return '';
+  let text = esc(s);
+
+  // Fenced code blocks (до всего остального — чтобы не ломать внутреннее)
+  text = text.replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`);
+
+  // Заголовки
+  text = text.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+             .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+             .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+
+  // Blockquote (строки, начинающиеся с >)
+  text = text.replace(/^(?:&gt;\s.+\n?)+/gm, m =>
+    '<blockquote>' + m.replace(/^&gt;\s?/gm, '').trim() + '</blockquote>');
+
+  // Горизонтальная линия
+  text = text.replace(/^---+$/gm, '<hr>');
+
+  // Inline: **bold**, *italic*, `code`, [text](url)
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+             .replace(/(^|\W)\*([^*\n]+)\*(\W|$)/g, '$1<em>$2</em>$3')
+             .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+             .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Списки: unordered
+  text = text.replace(/^(?:[-*]\s+.+\n?)+/gm, m => {
+    const items = m.trim().split('\n').map(l => l.replace(/^[-*]\s+/, ''));
+    return '<ul>' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  });
+  // Numbered
+  text = text.replace(/^(?:\d+\.\s+.+\n?)+/gm, m => {
+    const items = m.trim().split('\n').map(l => l.replace(/^\d+\.\s+/, ''));
+    return '<ol>' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  });
+
+  // Абзацы: двойные переводы строк → <p>
+  const paragraphs = text.split(/\n\n+/).map(p => {
+    const t = p.trim();
+    if (!t) return '';
+    // Не оборачивать в <p> если уже block-уровень
+    if (/^<(h[1-6]|ul|ol|pre|blockquote|hr)/.test(t)) return t;
+    return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+  });
+  return paragraphs.join('');
+}
+
+function clearHint() {
+  const h = msgs.querySelector('.hint');
+  if (h) h.remove();
+}
+
+async function ask(ev) {
+  ev.preventDefault();
+  const q = $('q').value.trim();
+  if (!q) return;
+  const mode = $('static').checked ? 'static' : 'live';
+
+  clearHint();
+
+  // user bubble
+  addEl(`<div class="msg user"><div class="bubble">${esc(q)}</div></div>`);
+
+  $('q').value = '';
+  $('sendBtn').disabled = true;
+  $('sendBtn').textContent = '…';
+
+  // sobor header
+  const headId = 'head-' + Date.now();
+  addEl(`<div class="msg sobor-head" id="${headId}">⟳ Собор собирается…</div>`);
+
+  // pending-slots — заполнятся по приходу
+  const pendingBox = addEl(`<div id="pending-${headId}"></div>`);
+
+  // auto-create session on first send
+  if (!currentSession) {
+    currentSession = newSessionId();
+    sessionStorage.setItem('gift-session', currentSession);
+  }
+  const url = '/api/chat/stream?q=' + encodeURIComponent(q) + '&mode=' + mode + '&session=' + encodeURIComponent(currentSession);
+  const es = new EventSource(url);
+  activeES = es;
+  const waitingSlots = {};   // persona → элемент ожидания
+
+  es.addEventListener('start', (e) => {
+    const d = JSON.parse(e.data);
+    if (d.kind === 'command') {
+      $(headId).innerHTML = `▶ /${d.cmd} <span class="tick">${esc(d.args || '')}</span>`;
+    } else {
+      $(headId).innerHTML = `⟳ Собор собирается <span class="tick">· ${d.sources.map(s => s.persona).join(' · ')}</span>`;
+      for (const s of d.sources) {
+        const slot = document.createElement('div');
+        slot.className = 'voice-pending';
+        slot.innerHTML = `<span class="dot"></span> ${esc(s.persona)} <span class="logos" style="color:var(--dim);font-size:11px">(${s.logos}) думает...</span>`;
+        pendingBox.appendChild(slot);
+        waitingSlots[s.persona] = slot;
+      }
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('context', (e) => {
+    const c = JSON.parse(e.data);
+    const hasAny = (c.sobors?.length || c.acts?.length || c.threads?.length);
+    if (!hasAny) {
+      pendingBox.appendChild(Object.assign(document.createElement('div'), {
+        className: 'context-block',
+        innerHTML: '<div class="heading">анамнезис</div><div class="empty-ctx">⟨пусто⟩ — этот вопрос ещё не звучал в общине</div>',
+      }));
+      msgs.scrollTop = msgs.scrollHeight;
+      return;
+    }
+    const block = document.createElement('div');
+    block.className = 'context-block';
+    let html = '<div class="heading">анамнезис — что община уже помнит</div>';
+    if (c.sobors?.length) {
+      html += '<div>Прошлые соборы:</div><ul>';
+      for (const s of c.sobors) {
+        const when = s.at ? new Date(s.at).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }) : '';
+        const dom = s.dominant || (s.apophatic ? 'apophatic' : '⟨silent⟩');
+        html += `<li>(${when}) «${esc((s.question || '').slice(0, 70))}» → ${esc(dom)}</li>`;
+      }
+      html += '</ul>';
+    }
+    if (c.threads?.length) {
+      html += '<div>Нити матрицы:</div><ul>';
+      for (const t of c.threads) html += `<li>${esc(t.from)} → ${esc(t.to)}: вес ${t.weight}</li>`;
+      html += '</ul>';
+    }
+    if (c.acts?.length) {
+      html += '<div>Акты:</div><ul>';
+      for (const a of c.acts) html += `<li>${esc(a.from)} → ${esc(a.to)} [${esc(a.type)}]: ${esc(a.hint)}</li>`;
+      html += '</ul>';
+    }
+    block.innerHTML = html;
+    pendingBox.appendChild(block);
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('action', (e) => {
+    const a = JSON.parse(e.data);
+    const cls = a.kind === 'stderr' ? 'stderr' : a.kind === 'file' ? 'file' : a.kind === 'text' ? 'text' : '';
+    const header = a.path ? `<div style="opacity:0.7;margin-bottom:6px">${esc(a.path)}</div>` : '';
+    const body = esc(a.text || a.content || '');
+    const el = document.createElement('div');
+    el.className = `action ${cls}`;
+    el.innerHTML = header + body;
+    pendingBox.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('voice', (e) => {
+    const v = JSON.parse(e.data);
+    const icon = logosIcon[v.logos] || '·';
+    const html = `<div class="voice ${v.logos}">
+      <div class="head">
+        <span class="persona">${icon} ${esc(v.persona)}</span>
+        <span class="logos">${v.logos}</span>
+        <span class="elapsed">${v.elapsedSec}s</span>
+      </div>
+      <div class="body">${md(v.content)}</div>
+    </div>`;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    const slot = waitingSlots[v.persona];
+    if (slot) slot.replaceWith(wrap.firstChild);
+    else pendingBox.appendChild(wrap.firstChild);
+    delete waitingSlots[v.persona];
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('done', (e) => {
+    const d = JSON.parse(e.data);
+    for (const slot of Object.values(waitingSlots)) slot.remove();
+    setTimeout(loadSessions, 300);
+    const head = $(headId);
+    const current = head.textContent || '';
+    if (current.startsWith('▶')) {
+      head.innerHTML = `✓ завершено${d.exitCode != null ? ` (код ${d.exitCode})` : ''}`;
+    } else {
+      head.innerHTML = `✓ Собор завершён <span class="tick">· ${d.elapsedSec}s</span>`;
+    }
+
+    let resultCls = '', resultText = '';
+    if (d.dominant) {
+      resultCls = 'dominant';
+      resultText = `⟨dominant⟩ ${d.dominant.persona} (${d.dominant.logos}) — но остальные голоса сохранены`;
+      // mark dominant voice
+      const voices = pendingBox.querySelectorAll('.voice');
+      voices.forEach(v => {
+        if (v.querySelector('.persona').textContent.includes(d.dominant.persona)) {
+          v.querySelector('.head').insertAdjacentHTML('beforeend',
+            `<span class="dom-mark">↑ dominant</span>`);
+        }
+      });
+    } else if (d.apophatic) {
+      resultCls = 'apophatic';
+      resultText = '⟨apophatic⟩ собор не сошёлся в dominant — истина не высказывается';
+    } else if (d.silent) {
+      resultCls = 'apophatic';
+      resultText = '⟨silent⟩ ' + (d.silenceReason || '');
+    }
+    if (resultText) {
+      pendingBox.insertAdjacentHTML('beforeend',
+        `<div class="sobor-result ${resultCls}">${esc(resultText)}</div>`);
+    }
+
+    es.close();
+    activeES = null;
+    $('sendBtn').disabled = false;
+    $('sendBtn').textContent = 'спросить';
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  es.addEventListener('error', (e) => {
+    let msg = 'ошибка потока';
+    try { msg = JSON.parse(e.data).message || msg; } catch {}
+    $(headId).innerHTML = `✗ ${esc(msg)}`;
+    es.close();
+    activeES = null;
+    $('sendBtn').disabled = false;
+    $('sendBtn').textContent = 'спросить';
+  });
+}
+
+loadSessions();
+if (currentSession) openSession(currentSession);
+
+// auto-grow textarea
+$('q').addEventListener('input', (e) => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(150, e.target.scrollHeight) + 'px';
+});
+// submit on Ctrl+Enter or Cmd+Enter
+$('q').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') $('form').requestSubmit();
+});
+</script>
+</body>
+</html>

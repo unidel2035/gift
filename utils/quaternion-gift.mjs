@@ -160,7 +160,7 @@ function inferType(fromId, toId) {
   if (DIVINE.has(fromId)) return SACRED[fromId] || 'blessing';
   if (fromId === '_koinon') return 'grace';
   if (fromId === '_abyss')  return 'gift';     // gratia gratis data = чистый скаляр
-  if (fromId === 'Змей' || fromId === 'Падший') return 'gift'; // скаляр без ипостасного модуса
+  if (fromId === 'Змей' || fromId === 'Человек') return 'gift'; // скаляр без ипостасного модуса
   if (toId === '_koinon') return 'offering';
   return 'gift';
 }

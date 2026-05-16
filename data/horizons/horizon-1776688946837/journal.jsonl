@@ -1,0 +1,13 @@
+{"at":"2026-04-20T12:42:26.840Z","event":"horizon-start","task":"тест декомпозиции","stepCount":10}
+{"at":"2026-04-20T12:42:26.840Z","event":"step-start","step":{"n":1,"title":"[dry] Разведать контекст в репо","type":"exploration"}}
+{"at":"2026-04-20T12:42:26.840Z","event":"step-start","step":{"n":2,"title":"[dry] Создать скелет модуля","type":"code"}}
+{"at":"2026-04-20T12:42:26.841Z","event":"step-start","step":{"n":3,"title":"[dry] Написать интерфейс","type":"code"}}
+{"at":"2026-04-20T12:42:26.841Z","event":"step-start","step":{"n":4,"title":"[dry] Реализовать базовую логику","type":"code"}}
+{"at":"2026-04-20T12:42:26.842Z","event":"step-start","step":{"n":5,"title":"[dry] Тесты базового пути","type":"test"}}
+{"at":"2026-04-20T12:42:26.842Z","event":"step-start","step":{"n":6,"title":"[dry] Интегрировать с матрицей W","type":"integration"}}
+{"at":"2026-04-20T12:42:26.843Z","event":"step-start","step":{"n":7,"title":"[dry] Sabbath — пауза соборного дыхания","type":"sabbath"}}
+{"at":"2026-04-20T12:42:26.843Z","event":"sabbath","step":{"n":7,"title":"[dry] Sabbath — пауза соборного дыхания","type":"sabbath"}}
+{"at":"2026-04-20T12:42:26.843Z","event":"step-start","step":{"n":8,"title":"[dry] Провести review полифонией","type":"review"}}
+{"at":"2026-04-20T12:42:26.844Z","event":"step-start","step":{"n":9,"title":"[dry] Записать анамнезис","type":"memory"}}
+{"at":"2026-04-20T12:42:26.844Z","event":"memory","step":{"n":9,"title":"[dry] Записать анамнезис","type":"memory"},"matrix":"updated via hook"}
+{"at":"2026-04-20T12:42:26.844Z","event":"step-start","step":{"n":10,"title":"[dry] Коммит как дар","type":"commit"}}

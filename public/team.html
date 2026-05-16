@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Наша община — сейчас</title>
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --panel: #fff;
+    --ink: #2d2a25;
+    --dim: #888;
+    --gold: #b08a3e;
+    --green: #4a7c3f;
+    --red: #b04030;
+    --line: #e7e0d4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 1.5rem;
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, "Segoe UI", Georgia, serif;
+    max-width: 1100px; margin-inline: auto;
+  }
+  h1 { font-size: 1.6rem; font-weight: 500; margin: 0 0 0.3rem 0; color: var(--gold); }
+  .lead { color: var(--dim); margin-bottom: 1.5rem; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 0.6rem 0; font-weight: 600; }
+  .card .help { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
+  .row { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row .who { color: var(--ink); }
+  .row .what { color: var(--dim); font-size: 0.9rem; }
+
+  .health { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
+  .health .h {
+    border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem;
+    text-align: center;
+  }
+  .health .h .v { font-size: 1.4rem; font-weight: 600; color: var(--ink); }
+  .health .h .l { color: var(--dim); font-size: 0.78rem; margin-top: 0.1rem; }
+  .health .h.good .v { color: var(--green); }
+  .health .h.warn .v { color: var(--gold); }
+  .health .h.bad  .v { color: var(--red); }
+
+  .goal { padding: 0.4rem 0; border-bottom: 1px dashed var(--line); }
+  .goal:last-child { border-bottom: none; }
+  .goal .o { font-weight: 500; }
+  .goal .s { color: var(--dim); font-size: 0.85rem; }
+  .goal .meta { color: var(--dim); font-size: 0.78rem; margin-top: 0.15rem; }
+
+  .empty { color: var(--dim); font-style: italic; padding: 0.5rem 0; }
+  .footer { color: var(--dim); font-size: 0.8rem; margin-top: 1.5rem; text-align: center; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .badge {
+    display: inline-block; padding: 0.05rem 0.4rem; border-radius: 10px;
+    font-size: 0.75rem; vertical-align: middle;
+  }
+  .badge.pending  { background: #fef7e0; color: #9c7800; }
+  .badge.running  { background: #e0f0fe; color: #0070c4; }
+  .badge.done     { background: #e6f3e0; color: var(--green); }
+  .badge.failed   { background: #fbe5e0; color: var(--red); }
+</style>
+</head>
+<body>
+  <h1>Наша община — сейчас</h1>
+  <p class="lead">состояние сети, что в работе, кто что внёс</p>
+
+  <div class="grid">
+    <!-- Здоровье общины -->
+    <div class="card">
+      <h2>Здоровье сети</h2>
+      <div class="health" id="health">
+        <div class="h"><div class="v">…</div><div class="l">баланс</div></div>
+        <div class="h"><div class="v">…</div><div class="l">связи</div></div>
+        <div class="h"><div class="v">…</div><div class="l">учимся</div></div>
+      </div>
+      <div class="help" id="health-help">загружаю…</div>
+    </div>
+
+    <!-- Активные цели -->
+    <div class="card">
+      <h2>Что в работе</h2>
+      <div id="goals"><div class="empty">загружаю…</div></div>
+    </div>
+
+    <!-- Последние акты -->
+    <div class="card">
+      <h2>Последние дары</h2>
+      <div id="acts"><div class="empty">загружаю…</div></div>
+    </div>
+
+    <!-- Открытые вопросы -->
+    <div class="card">
+      <h2>Открытые вопросы общине</h2>
+      <div id="questions"><div class="empty">загружаю…</div></div>
+      <div class="help">Когда нужно решение, которое не из кода — это сюда.</div>
+    </div>
+
+    <!-- Главные нити -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Главные нити сейчас</h2>
+      <div id="threads"><div class="empty">загружаю…</div></div>
+      <div class="help">Кто кому давал больше всего — суммарно за всё время общины.</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Хочешь больше? — <a href="/chat.html">обычный чат</a> · <a href="/voice">говорить голосом</a>
+  </div>
+
+<script>
+async function fetchJSON(u) {
+  const r = await fetch(u);
+  if (!r.ok) throw new Error(u + ' → ' + r.status);
+  return r.json();
+}
+function tag(parent, t, cls, text) {
+  const e = document.createElement(t);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+function ageMin(iso) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 60) return m + ' мин';
+  const h = Math.round(m / 60);
+  if (h < 24) return h + ' ч';
+  return Math.round(h / 24) + ' дн';
+}
+
+(async () => {
+  // ── здоровье из value-history ──────────────────────────────────────
+  try {
+    const r = await fetch('/api/value');
+    const hd = document.getElementById('health');
+    const help = document.getElementById('health-help');
+    if (r.ok) {
+      const d = await r.json();
+      const V = d.V || {};
+      hd.innerHTML = '';
+      const bal = V.E ?? 0;
+      const balCls = bal > -200 ? 'good' : bal > -1500 ? 'warn' : 'bad';
+      const balShow = Math.round(bal);
+      const links = Math.round((V.D || 0) * d.possiblePairs);
+      const dCls = (V.D || 0) > 0.05 ? 'good' : (V.D || 0) > 0.01 ? 'warn' : 'bad';
+      const m = V.M;
+      const mShow = m == null ? '—' : Math.round(m * 100) + '%';
+      const mCls = m == null ? 'warn' : m > 0.3 ? 'good' : 'warn';
+
+      const items = [
+        { v: balShow,   l: 'баланс',  cls: balCls },
+        { v: links,     l: 'живых нитей', cls: dCls },
+        { v: mShow,     l: 'учимся',  cls: mCls },
+      ];
+      for (const it of items) {
+        const h = tag(hd, 'div', 'h ' + it.cls);
+        tag(h, 'div', 'v', it.v);
+        tag(h, 'div', 'l', it.l);
+      }
+      help.textContent = `${d.persons} человек, ${d.acts} даров записано`;
+    } else {
+      help.textContent = 'нет данных (запусти ontology-pulse)';
+    }
+  } catch (e) {
+    document.getElementById('health-help').textContent = 'ошибка: ' + e.message;
+  }
+
+  // ── активные цели ──────────────────────────────────────────────────
+  try {
+    const goals = await fetchJSON('/api/goals');
+    const el = document.getElementById('goals');
+    el.innerHTML = '';
+    const active = goals.filter(g => g.status === 'running' || g.status === 'paused' || g.status === 'pending');
+    if (!active.length && !goals.length) {
+      el.innerHTML = '<div class="empty">пока ни одной цели</div>'; return;
+    }
+    const shown = (active.length ? active : goals).slice(0, 5);
+    for (const g of shown) {
+      const d = tag(el, 'div', 'goal');
+      tag(d, 'div', 'o', g.objective);
+      tag(d, 'div', 's', 'готово если: ' + g.successCriteria);
+      const meta = tag(d, 'div', 'meta');
+      meta.innerHTML = `шаг ${g.iteration}/${g.maxIterations} · <span class="badge ${g.status}">${g.status}</span>`;
+    }
+  } catch (e) {
+    document.getElementById('goals').textContent = 'ошибка: ' + e.message;
+  }
+
+  // ── последние акты (insights) ──────────────────────────────────────
+  try {
+    const acts = await fetchJSON('/api/acts');
+    const el = document.getElementById('acts');
+    el.innerHTML = '';
+    const last = acts.slice(-7).reverse();
+    if (!last.length) { el.innerHTML = '<div class="empty">пока пусто</div>'; return; }
+    for (const a of last) {
+      const r = tag(el, 'div', 'row');
+      tag(r, 'span', 'who', `${a.from || a.giverId || '?'} → ${a.to || a.receiverId || '?'}`);
+      const content = a.content || a.summary || a.text || '';
+      tag(r, 'span', 'what', content.slice(0, 60) || a.type || '—');
+    }
+  } catch (e) {
+    document.getElementById('acts').textContent = 'ошибка: ' + e.message;
+  }
+
+  // ── вопросы общине (эпиклеза) ──────────────────────────────────────
+  try {
+    const qs = await fetchJSON('/api/epiclesis');
+    const el = document.getElementById('questions');
+    el.innerHTML = '';
+    if (!qs.length) { el.innerHTML = '<div class="empty">сейчас никто никого не спрашивает</div>'; return; }
+    for (const q of qs.slice(0, 5)) {
+      const r = tag(el, 'div', 'row');
+      tag(r, 'span', 'who', q.question.slice(0, 60));
+      tag(r, 'span', 'what', `→ ${q.recipient} · ${ageMin(q.at)} назад`);
+    }
+  } catch (e) {
+    document.getElementById('questions').textContent = 'ошибка: ' + e.message;
+  }
+
+  // ── главные нити ───────────────────────────────────────────────────
+  try {
+    const matrix = await fetchJSON('/api/matrix');
+    const el = document.getElementById('threads');
+    el.innerHTML = '';
+    // sacred-history-W.json: смотрим персон и W
+    const persons = matrix.persons || [];
+    const W = matrix.W || [];
+    const tops = [];
+    for (let i = 0; i < W.length; i++) {
+      for (let j = 0; j < (W[i] || []).length; j++) {
+        if (i === j) continue;
+        const w = Number(W[i][j]) || 0;
+        if (w > 5) tops.push({ from: persons[i], to: persons[j], w });
+      }
+    }
+    tops.sort((a, b) => b.w - a.w);
+    for (const t of tops.slice(0, 8)) {
+      const r = tag(el, 'div', 'row');
+      tag(r, 'span', 'who', `${t.from} → ${t.to}`);
+      tag(r, 'span', 'what', t.w.toFixed(0));
+    }
+    if (!tops.length) el.innerHTML = '<div class="empty">главных нитей пока нет</div>';
+  } catch (e) {
+    document.getElementById('threads').textContent = 'ошибка: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

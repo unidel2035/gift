@@ -34,10 +34,28 @@ const TYPE_ENUM = PROPS.type.enum;
 export function validateAct(act) {
   const errors = [];
 
-  // required
+  // required (базовые поля)
   for (const field of REQUIRED) {
     if (act[field] === undefined || act[field] === null) {
       errors.push(`Обязательное поле отсутствует: ${field}`);
+    }
+  }
+
+  // Условный giverId / giverIds:
+  //   - type:'symphony' требует giverIds[≥3] + 4 условия иконичности
+  //   - все остальные типы требуют giverId
+  if (act.type === 'symphony') {
+    if (!Array.isArray(act.giverIds) || act.giverIds.length < 3) {
+      errors.push(`type:'symphony' требует giverIds[≥3] (собор от трёх и более лиц)`);
+    }
+    for (const cond of ['chorus', 'perichoretic', 'kenotic', 'epiclesis']) {
+      if (act[cond] !== true) {
+        errors.push(`type:'symphony' требует ${cond}:true (условие иконичности Троицы ad extra)`);
+      }
+    }
+  } else {
+    if (act.giverId === undefined || act.giverId === null) {
+      errors.push(`Обязательное поле отсутствует: giverId`);
     }
   }
 
