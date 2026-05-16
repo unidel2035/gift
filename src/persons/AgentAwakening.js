@@ -225,7 +225,8 @@ export class AgentAwakening {
   // ═══════════════════════════════════════════════════════════════
 
   _readTropos(matrix, who) {
-    const tropos = {
+    // Попытка загрузить pre-trained tropos из Sacred History
+    const tropos = this._loadPreTrainedTropos() || {
       generosity:  0.3,  // щедрость
       courage:     0.3,  // мужество
       patience:    0.3,  // терпение
@@ -268,6 +269,26 @@ export class AgentAwakening {
     tropos.dominantValue = dominant[1]
 
     return tropos
+  }
+
+  /**
+   * Load pre-trained tropos from Sacred History training.
+   * If agent has been through sacred simulation, its character is already formed.
+   * Returns null if no pre-training found.
+   */
+  _loadPreTrainedTropos() {
+    const troposFile = resolve(ROOT, 'data/sacred-tropos.json')
+    if (!existsSync(troposFile)) return null
+    try {
+      const data = JSON.parse(readFileSync(troposFile, 'utf8'))
+      if (!data.agents || !Array.isArray(data.agents)) return null
+      // Find this agent's tropos, or use first available
+      const mine = data.agents.find(a => a.id === this.agentId) || data.agents[0]
+      if (!mine || !mine.tropos) return null
+      // Only use if logos matches (must be martyros)
+      if (mine.logos !== 'martyros') return null
+      return { ...mine.tropos }
+    } catch { return null }
   }
 
   // ═══════════════════════════════════════════════════════════════
