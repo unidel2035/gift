@@ -24,6 +24,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { MartyrosConstraint } from './MartyrosConstraint.js';
 
 const ROOT = '/home/unidel/gift';
 
@@ -68,6 +69,13 @@ export class AgentAwakening {
       firstAction,   // что делать первым
       awakeningMs: Date.now() - t0,
     }
+
+    // ── 6. ЛОГОС: запечатать как свидетеля ────────────────────
+    // Логос НЕ МОЖЕТ быть изменён обучением. Это природа, не навык.
+    const martyros = new MartyrosConstraint()
+    martyros.seal(this.identity)
+    this.constraint = martyros
+
     this.isAwake = true
 
     // Announce пробуждение
