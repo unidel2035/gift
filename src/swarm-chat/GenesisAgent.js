@@ -27,6 +27,7 @@
 import { PipelineOrchestrator } from './GiftPipeline.js';
 import { SoftChatEngine } from './SoftChat.js';
 import { KoinonBus } from '../koinon/KoinonBus.js';
+import { AgentAwakening } from '../persons/AgentAwakening.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -94,12 +95,28 @@ class GenesisAgent {
     this.pipeline = new PipelineOrchestrator()
     this.chat = new SoftChatEngine()
     this.bus = new KoinonBus()
+    this.identity = null
     this.running = true
 
     log('INFO', '🌱 GenesisAgent starting...')
     log('INFO', `   Phase: ${this.state.currentPhase}`)
     log('INFO', `   Uptime: ${Math.round(this.state.uptime / 3600)}h`)
     log('INFO', `   Gifts: ${this.state.stats.giftsReceived}`)
+  }
+
+  async awaken() {
+    const awakening = new AgentAwakening('genesis', {
+      memory: this.pipeline.repository,
+      bus: this.bus,
+      needsEngine: this.pipeline.needs,
+    })
+    this.identity = await awakening.awaken()
+    this.systemPrompt = awakening.generateSystemPrompt()
+    log('INFO', `🪞 Awakened as: ${this.identity.who.role.name}`)
+    log('INFO', `   Троpos: ${this.identity.tropos.dominantVirtue} (${this.identity.tropos.dominantValue.toFixed(2)})`)
+    log('INFO', `   Телос: ${this.identity.telos.description}`)
+    log('INFO', `   First action: ${this.identity.firstAction.description}`)
+    return this.identity
   }
 
   // ── HEARTBEAT (каждые 5 мин) ───────────────────────────────
@@ -391,6 +408,13 @@ class GenesisAgent {
   // ── MAIN LOOP ──────────────────────────────────────────────
 
   async run() {
+    // Step 0: Awaken — read W-matrix, discover identity
+    try {
+      await this.awaken()
+    } catch (e) {
+      log('WARN', `⚠️ Awakening partial: ${e.message} — continuing as newborn`)
+    }
+
     log('INFO', '🚀 GenesisAgent RUNNING')
     log('INFO', `   Phase: ${this.state.currentPhase}`)
     log('INFO', '   Cycles: heartbeat/5min, gifts/30min, training/6h, daily/24h, weekly/7d, jubilee/100d')
