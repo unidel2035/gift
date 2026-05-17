@@ -1,0 +1,112 @@
+[
+  {
+    "cycle": 1,
+    "composite": 0.476,
+    "mutuality": 0.043,
+    "gratitude": 0.01,
+    "distinction": 0.789,
+    "immunity": 0.6,
+    "best": 0.565,
+    "worst": 0.362,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 2,
+    "composite": 0.479,
+    "mutuality": 0.05,
+    "gratitude": 0.006,
+    "distinction": 0.726,
+    "immunity": 0.8,
+    "best": 0.521,
+    "worst": 0.345,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 3,
+    "composite": 0.498,
+    "mutuality": 0.047,
+    "gratitude": 0.007,
+    "distinction": 0.768,
+    "immunity": 0.8,
+    "best": 0.59,
+    "worst": 0.359,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 4,
+    "composite": 0.355,
+    "mutuality": 0.06,
+    "gratitude": 0.008,
+    "distinction": 0.378,
+    "immunity": 0.4,
+    "best": 0.424,
+    "worst": 0.234,
+    "verdict": "Среды стагнируют"
+  },
+  {
+    "cycle": 5,
+    "composite": 0.283,
+    "mutuality": 0.033,
+    "gratitude": 0.006,
+    "distinction": 0.75,
+    "immunity": 0,
+    "best": 0.379,
+    "worst": 0.154,
+    "verdict": "Среды стагнируют"
+  },
+  {
+    "cycle": 6,
+    "composite": 0.436,
+    "mutuality": 0.05,
+    "gratitude": 0.005,
+    "distinction": 0.625,
+    "immunity": 0.6,
+    "best": 0.548,
+    "worst": 0.347,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 7,
+    "composite": 0.461,
+    "mutuality": 0.043,
+    "gratitude": 0.007,
+    "distinction": 0.785,
+    "immunity": 0.6,
+    "best": 0.556,
+    "worst": 0.35,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 8,
+    "composite": 0.445,
+    "mutuality": 0.043,
+    "gratitude": 0.004,
+    "distinction": 0.68,
+    "immunity": 0.6,
+    "best": 0.59,
+    "worst": 0.362,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 9,
+    "composite": 0.469,
+    "mutuality": 0.047,
+    "gratitude": 0.005,
+    "distinction": 0.641,
+    "immunity": 0.8,
+    "best": 0.562,
+    "worst": 0.362,
+    "verdict": "Среды углубляются"
+  },
+  {
+    "cycle": 10,
+    "composite": 0.334,
+    "mutuality": 0.043,
+    "gratitude": 0.005,
+    "distinction": 0.615,
+    "immunity": 0.2,
+    "best": 0.56,
+    "worst": 0.171,
+    "verdict": "Среды углубляются"
+  }
+]

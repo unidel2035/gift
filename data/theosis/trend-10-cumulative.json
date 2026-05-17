@@ -1,0 +1,102 @@
+[
+  {
+    "cycle": 1,
+    "composite": 0.385,
+    "mutuality": 0.05,
+    "gratitude": 0.0047,
+    "distinction": 0.866,
+    "immunity": 0,
+    "coopRate": 0.8,
+    "acts": 212
+  },
+  {
+    "cycle": 2,
+    "composite": 0.236,
+    "mutuality": 0.067,
+    "gratitude": 0.0087,
+    "distinction": 0.072,
+    "immunity": 0,
+    "coopRate": 0.9833333333333333,
+    "acts": 231
+  },
+  {
+    "cycle": 3,
+    "composite": 0.269,
+    "mutuality": 0.067,
+    "gratitude": 0.0119,
+    "distinction": 0.217,
+    "immunity": 0,
+    "coopRate": 0.95,
+    "acts": 252
+  },
+  {
+    "cycle": 4,
+    "composite": 0.234,
+    "mutuality": 0.067,
+    "gratitude": 0.017,
+    "distinction": 0,
+    "immunity": 0,
+    "coopRate": 1,
+    "acts": 235
+  },
+  {
+    "cycle": 5,
+    "composite": 0.254,
+    "mutuality": 0.067,
+    "gratitude": 0.021,
+    "distinction": 0.072,
+    "immunity": 0,
+    "coopRate": 0.9833333333333333,
+    "acts": 238
+  },
+  {
+    "cycle": 6,
+    "composite": 0.258,
+    "mutuality": 0.067,
+    "gratitude": 0.0237,
+    "distinction": 0.072,
+    "immunity": 0,
+    "coopRate": 0.9833333333333333,
+    "acts": 253
+  },
+  {
+    "cycle": 7,
+    "composite": 0.4,
+    "mutuality": 0.05,
+    "gratitude": 0.0288,
+    "distinction": 0.758,
+    "immunity": 0,
+    "coopRate": 0.7666666666666667,
+    "acts": 243
+  },
+  {
+    "cycle": 8,
+    "composite": 0.416,
+    "mutuality": 0.05,
+    "gratitude": 0.0335,
+    "distinction": 0.804,
+    "immunity": 0,
+    "coopRate": 0.7833333333333333,
+    "acts": 239
+  },
+  {
+    "cycle": 9,
+    "composite": 0.418,
+    "mutuality": 0.05,
+    "gratitude": 0.035,
+    "distinction": 0.804,
+    "immunity": 0,
+    "coopRate": 0.7833333333333333,
+    "acts": 257
+  },
+  {
+    "cycle": 10,
+    "composite": 0.288,
+    "mutuality": 0.067,
+    "gratitude": 0.042,
+    "distinction": 0.083,
+    "immunity": 0,
+    "coopRate": 0.9666666666666667,
+    "acts": 238
+  }
+]
