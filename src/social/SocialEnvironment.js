@@ -441,7 +441,7 @@ export class IrreversibleEnvironment {
   }
 
   // Записать результат дилеммы
-  recordDilemmaResult(agentId, choice, dilemmaId) {
+  recordDilemmaResult(agentId, choice, dilemmaId, opponentId = null) {
     const agent = this.agents.get(agentId);
     if (!agent) return;
 
@@ -456,10 +456,42 @@ export class IrreversibleEnvironment {
     agent.history.cooperationRate =
       agent.history.cooperations / (agent.history.cooperations + agent.history.defections || 1);
 
+    const weight = choice === 'gift' ? 3 : choice === 'cooperate' ? 2 : choice === 'sacrifice' ? 5 : -1;
+
+    // Акт к собору
+    this.memory.record(agentId, '_sobor', choice, weight, { dilemma: dilemmaId, choice });
+
+    // ═══ ВЗАИМНОСТЬ: акты МЕЖДУ агентами ═══
+    // Если есть оппонент — запись парного акта
+    if (opponentId) {
+      this.memory.record(agentId, opponentId, choice, weight, { dilemma: dilemmaId });
+    } else {
+      // Если оппонент не указан — записать ко всем другим (слабые нити)
+      for (const [otherId] of this.agents) {
+        if (otherId !== agentId) {
+          this.memory.record(agentId, otherId, choice, Math.round(weight * 0.5), { dilemma: dilemmaId, indirect: true });
+        }
+      }
+    }
+
+    // ═══ АВТОМАТИЧЕСКОЕ БЛАГОДАРЕНИЕ ═══
+    // Если агент получил gift/cooperate от другого → 20% шанс ответить благодарением
+    if (opponentId) {
+      const opponentChoice = this.memory.acts
+        .filter(a => a.from === opponentId && a.to === agentId)
+        .slice(-1)[0];
+      if (opponentChoice && ['gift', 'cooperate', 'sacrifice'].includes(opponentChoice.kind)) {
+        if (Math.random() < 0.2) { // 20% шанс
+          this.memory.record(agentId, opponentId, 'eucharistia', 2, { response_to: opponentChoice.kind });
+          this.events.emit('eucharistia:auto', { from: agentId, to: opponentId });
+        }
+      }
+    }
+
     // Обновить доверие
     agent.history.trustScore = this.memory.getTrust(agentId, '_sobor');
 
-    this.memory.record(agentId, '_sobor', choice, choice === 'gift' ? 3 : choice === 'cooperate' ? 2 : -1, {
+    this.memory.record(agentId, '_sobor', choice, weight, {
       dilemma: dilemmaId, choice
     });
   }

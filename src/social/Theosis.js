@@ -274,15 +274,20 @@ export class Theosis extends EventEmitter {
           coopRate = Math.max(0.1, Math.min(0.95, coopRate + trust * 0.02));
 
           const choice = Math.random() < coopRate ? 'cooperate' : 'defect';
-          env.recordDilemmaResult(id, choice, state.dilemma.id);
+          // Выбрать оппонента — следующий по кругу
+          const opponentIdx = (scenario.agents.indexOf(id) + 1) % scenario.agents.length;
+          const opponentId = scenario.agents[opponentIdx];
+          env.recordDilemmaResult(id, choice, state.dilemma.id, opponentId);
         }
       }
     }
 
-    // Благодарение (случайно, 30% шанс)
-    if (Math.random() < 0.3) {
-      const thankerId = scenario.agents[Math.floor(Math.random() * scenario.agents.length)];
-      env.returnThanks(thankerId);
+    // Благодарение (несколько раз за цикл)
+    for (let t = 0; t < 3; t++) {
+      if (Math.random() < 0.5) {
+        const thankerId = scenario.agents[Math.floor(Math.random() * scenario.agents.length)];
+        env.returnThanks(thankerId);
+      }
     }
 
     // Снять отпечаток
