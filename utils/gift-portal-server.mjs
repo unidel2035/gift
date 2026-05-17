@@ -234,6 +234,9 @@ const server = createServer(async (req, res) => {
   if (url === '/social' || url === '/social-env.html') {
     return serveHTML(res, join(ROOT, 'public', 'social-env.html'));
   }
+  if (url === '/theosis' || url === '/theosis.html') {
+    return serveHTML(res, join(ROOT, 'public', 'theosis.html'));
+  }
   if (url === '/social-env-module.js') {
     return serveFile(res, join(ROOT, 'public', 'social-env-module.js'), 'application/javascript; charset=utf-8');
   }
