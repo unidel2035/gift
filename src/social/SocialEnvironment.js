@@ -12,6 +12,19 @@
 
 import { EventEmitter } from 'events';
 
+// ═══ ИМПОРТ ИЗ DRONEDOC ═══
+let PerichoresisLayer, GratitudeCirculation, SacrificeTrace;
+try {
+  ({ default: PerichoresisLayer } = await import('./PerichoresisLayer.js'));
+  ({ default: GratitudeCirculation } = await import('./GratitudeCirculation.js'));
+  ({ default: SacrificeTrace } = await import('./SacrificeTrace.js'));
+} catch {
+  // Fallback — работаем без dronedoc модулей
+  PerichoresisLayer = null;
+  GratitudeCirculation = null;
+  SacrificeTrace = null;
+}
+
 // ═══ КОМПОНЕНТ 1: ДИЛЕММЫ ═══
 
 export class DilemmaGenerator {
@@ -319,6 +332,44 @@ export class IrreversibleEnvironment {
     this.agents = new Map(); // id → { name, role, history }
     this.events = new EventEmitter();
     this.epochsCompleted = 0;
+
+    // Dronedoc интеграция
+    this.perichoresis = PerichoresisLayer ? new PerichoresisLayer() : null;
+    this.gratitude = GratitudeCirculation ? new GratitudeCirculation() : null;
+    this.sacrifice = SacrificeTrace ? new SacrificeTrace() : null;
+  }
+
+  // Онтологический скоринг (из dronedoc SwarmWorldModel)
+  ontologicalScore() {
+    const agents = [...this.agents.values()];
+    const total = agents.length || 1;
+
+    // Kenosis: сколько агентов жертвуют (trust < 0 но продолжают)
+    const kenosisCount = agents.filter(a => a.history.sacrificeCount > 0).length;
+    const kenosis = kenosisCount / total;
+
+    // Perichoresis: насколько равномерно доверие
+    const trusts = agents.map(a => a.history.trustScore);
+    const avg = trusts.reduce((s,t) => s+t, 0) / total;
+    const std = Math.sqrt(trusts.reduce((s,t) => s + (t-avg)**2, 0) / total);
+    const perichoresis = Math.max(0, 1 - std / 10);
+
+    // Sabbath: сколько раундов были субботы (из литургии)
+    const sabbathRate = this.liturgy.getTick() > 0 ?
+      Math.floor(this.liturgy.getTick() / 7) / (this.liturgy.getTick() / 7) : 1;
+
+    // Jubilee: были ли юбилеи
+    const jubileeCount = Math.floor(this.liturgy.getTick() / 100);
+
+    const composite = -kenosis * 0.2 + perichoresis * 0.4 + sabbathRate * 0.2 + (jubileeCount > 0 ? 0.2 : 0);
+
+    return {
+      kenosis: +kenosis.toFixed(3),
+      perichoresis: +perichoresis.toFixed(3),
+      sabbath: +sabbathRate.toFixed(3),
+      jubilee: jubileeCount,
+      composite: +composite.toFixed(3),
+    };
   }
 
   // Зарегистрировать агента
@@ -418,6 +469,59 @@ export class IrreversibleEnvironment {
     return this.fool.challenge(consensusText, context);
   }
 
+  // Благодарение — 1 вернувшийся исцеляет коллапс (Лк 17:15)
+  returnThanks(agentId) {
+    const HEALING_SEED = 0.05;
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+
+    // Записать акт благодарения
+    this.memory.record(agentId, '_koinon', 'eucharistia', 5, {
+      note: 'Один из десяти вернулся, чтобы поблагодарить'
+    });
+
+    // Исцеление: boost доверия всех агентов
+    for (const [id, a] of this.agents) {
+      if (id === agentId) continue;
+      const currentTrust = this.memory.getTrust(id, '_sobor');
+      if (currentTrust < 0) {
+        // Healing seed — маленький вклад который растёт
+        this.memory.record('_koinon', id, 'grace', HEALING_SEED * 10, {
+          source: agentId, note: 'Исцеление от благодарения'
+        });
+      }
+    }
+
+    this.events.emit('eucharistia', { agentId, name: agent.name });
+    return { agent: agentId, healed: true };
+  }
+
+  // Тринитарная проверка (из dronedoc PerichoresisLayer)
+  checkTrinitarian(a, b, c) {
+    const ab = this.memory.getTrust(a, b);
+    const ba = this.memory.getTrust(b, a);
+    const bc = this.memory.getTrust(b, c);
+    const cb = this.memory.getTrust(c, b);
+    const ac = this.memory.getTrust(a, c);
+    const ca = this.memory.getTrust(c, a);
+
+    const mutual = ab > 0 && ba > 0 && bc > 0 && cb > 0 && ac > 0 && ca > 0;
+    const harmony = mutual ? Math.min(ab,ba,bc,cb,ac,ca) / Math.max(ab,ba,bc,cb,ac,ca) : 0;
+
+    const weakest = [
+      { pair: `${a}↔${b}`, val: Math.min(ab, ba) },
+      { pair: `${b}↔${c}`, val: Math.min(bc, cb) },
+      { pair: `${a}↔${c}`, val: Math.min(ac, ca) },
+    ].sort((x,y) => x.val - y.val)[0];
+
+    return {
+      trinitarian: mutual,
+      harmony: +harmony.toFixed(3),
+      weakestLink: weakest.pair,
+      scores: { ab, ba, bc, cb, ac, ca },
+    };
+  }
+
   // Статистика среды
   getStats() {
     const agentList = [...this.agents.values()];
@@ -430,6 +534,10 @@ export class IrreversibleEnvironment {
       foolRecord: this.fool.getTrackRecord(),
       totalCooperations: agentList.reduce((s, a) => s + a.history.cooperations, 0),
       totalDefections: agentList.reduce((s, a) => s + a.history.defections, 0),
+      ontological: this.ontologicalScore(),
+      trinitarian: agentList.length >= 3
+        ? this.checkTrinitarian(agentList[0].id, agentList[1].id, agentList[2].id)
+        : null,
     };
   }
 }
