@@ -118,16 +118,20 @@ function computeDepth(stats, norms, crystallized, serpentDetection, memory) {
   const variance = trusts.reduce((s,v) => s + (v-avg)**2, 0) / trusts.length;
   const distinction = Math.min(1, Math.sqrt(variance) / maxTrust);
 
-  // mutuality: min pair / max pair
-  const pairTrusts = [];
+  // mutuality: средняя взаимность (harmony) всех пар
+  const pairHarmonies = [];
   for (let i = 0; i < agents.length; i++) for (let j = i+1; j < agents.length; j++) {
     const ab = memory.getTrust(agents[i], agents[j]);
     const ba = memory.getTrust(agents[j], agents[i]);
-    pairTrusts.push(Math.min(Math.abs(ab), Math.abs(ba)));
+    if (ab > 0 && ba > 0) {
+      pairHarmonies.push(Math.min(ab, ba) / Math.max(ab, ba));
+    } else if (ab > 0 || ba > 0) {
+      pairHarmonies.push(0.1); // асимметрия
+    } else {
+      pairHarmonies.push(0); // нет взаимодействия
+    }
   }
-  const maxPair = Math.max(...pairTrusts, 1);
-  const minPair = Math.min(...pairTrusts);
-  const mutuality = maxPair > 0 ? minPair / maxPair : 0;
+  const mutuality = pairHarmonies.length > 0 ? pairHarmonies.reduce((s,v) => s+v, 0) / pairHarmonies.length : 0;
 
   // antifragility
   const antifragility = crystallized.length * 0.3;
