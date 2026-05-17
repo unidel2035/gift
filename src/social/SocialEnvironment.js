@@ -466,10 +466,10 @@ export class IrreversibleEnvironment {
     if (opponentId) {
       this.memory.record(agentId, opponentId, choice, weight, { dilemma: dilemmaId });
     } else {
-      // Если оппонент не указан — записать ко всем другим (слабые нити)
+      // Если оппонент не указан — записать ко всем другим (полный вес для взаимности)
       for (const [otherId] of this.agents) {
         if (otherId !== agentId) {
-          this.memory.record(agentId, otherId, choice, Math.round(weight * 0.5), { dilemma: dilemmaId, indirect: true });
+          this.memory.record(agentId, otherId, choice, weight, { dilemma: dilemmaId });
         }
       }
     }
