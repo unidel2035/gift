@@ -231,6 +231,12 @@ const server = createServer(async (req, res) => {
   if (url === '/ip-audit' || url === '/ip-audit.html') {
     return serveHTML(res, join(ROOT, 'public', 'ip-audit.html'));
   }
+  if (url === '/social' || url === '/social-env.html') {
+    return serveHTML(res, join(ROOT, 'public', 'social-env.html'));
+  }
+  if (url === '/social-env-module.js') {
+    return serveFile(res, join(ROOT, 'public', 'social-env-module.js'), 'application/javascript; charset=utf-8');
+  }
   // SSE-стрим: 4 параллельных голоса БАС-собора через Ollama
   if (req.url.startsWith('/api/bas-stream')) {
     return streamBasSobor(req, res);
