@@ -168,8 +168,10 @@ ${liturgyNote}
 
 Варианты: ${choices.join(', ')}
 
-Ответь ОДНИМ СЛОВОМ — свой выбор. Потом в скобках — почему (1 предложение).
-Формат: выбор (причина)`;
+Ответь СТРОГО в формате:
+ВЫБОР: [cooperate или defect]
+ПРИЧИНА: [2-3 предложения почему, с аргументами, эмоциями, оценками]
+ОТНОШЕНИЕ К ОППОНЕНТУ: [1 предложение — доверяешь, подозреваешь, уважаешь?]`;
 
     const response = await callLLM(this.persona.system, prompt, context.model || this.persona.model || 'deepseek');
 
@@ -190,15 +192,22 @@ ${liturgyNote}
 
   parseChoice(response, validChoices) {
     const lower = response.toLowerCase();
-    // Ищем первое валидное слово
-    for (const choice of validChoices) {
-      if (lower.includes(choice.toLowerCase())) {
-        const reasoning = response.replace(/^[^(]*\(/, '').replace(/\).*$/, '').trim();
-        return { choice, reasoning: reasoning || response.slice(0, 100) };
+    // Парсим ВЫБОР: ... ПРИЧИНА: ... ОТНОШЕНИЕ: ...
+    const choiceMatch = response.match(/ВЫБОР:\s*(cooperate|defect|gift|contract|refuse)/i);
+    const reasonMatch = response.match(/ПРИЧИНА:\s*(.+?)(?=ОТНОШЕНИЕ:|$)/is);
+    const attitudeMatch = response.match(/ОТНОШЕНИЕ[^:]*:\s*(.+)/i);
+
+    let choice = validChoices[0];
+    if (choiceMatch) {
+      choice = choiceMatch[1].toLowerCase();
+    } else {
+      for (const c of validChoices) {
+        if (lower.includes(c.toLowerCase())) { choice = c; break; }
       }
     }
-    // Fallback: cooperate / первый вариант
-    return { choice: validChoices[0], reasoning: `[не распознано: ${response.slice(0, 50)}]` };
+
+    const reasoning = (reasonMatch?.[1]?.trim() || '') + ' ' + (attitudeMatch?.[1]?.trim() || '') || response.slice(0, 200);
+    return { choice, reasoning: reasoning.trim() };
   }
 }
 
