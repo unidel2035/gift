@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, writeFileSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const _root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ── Структурные тесты — без запуска SDK (избегаем anti-recursion в CI) ──
 
@@ -124,8 +128,8 @@ test('agent-cli — runGiftAgent экспорт + сигнатура', async (t)
 });
 
 test('agent-cli — bin/gift-agent существует и исполняемый', async () => {
-  assert.ok(existsSync('/home/unidel/gift/bin/gift-agent'));
-  const content = readFileSync('/home/unidel/gift/bin/gift-agent', 'utf8');
+  assert.ok(existsSync(resolve(_root, 'bin/gift-agent')));
+  const content = readFileSync(resolve(_root, 'bin/gift-agent'), 'utf8');
   assert.match(content, /^#!\/usr\/bin\/env node/);
   assert.match(content, /runGiftAgent/);
   assert.match(content, /--plan/);
@@ -136,7 +140,7 @@ test('agent-cli — bin/gift-agent существует и исполняемы�
 });
 
 test('agent-cli — gift cli знает agent подкоманду', async () => {
-  const giftCli = readFileSync('/home/unidel/gift/bin/gift', 'utf8');
+  const giftCli = readFileSync(resolve(_root, 'bin/gift'), 'utf8');
   assert.match(giftCli, /case 'agent':/);
   assert.match(giftCli, /bin\/gift-agent/);
   // в справке упомянут

@@ -7,9 +7,11 @@
  */
 
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const LOG = '/home/unidel/gift/data/agent-cli.log';
+const _dir = dirname(fileURLToPath(import.meta.url));
+const LOG = resolve(_dir, '../../data/agent-cli.log');
 
 function logLine(line) {
   if (!existsSync(dirname(LOG))) mkdirSync(dirname(LOG), { recursive: true });
