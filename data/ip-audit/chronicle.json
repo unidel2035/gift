@@ -1,5 +1,27 @@
 [
   {
+    "date": "2003-01-01",
+    "who": "Palantir",
+    "action": "Основана Питером Тилем, финансирование CIA через In-Q-Tel",
+    "target": "CIA",
+    "kind": "covenant",
+    "url": "https://en.wikipedia.org/wiki/Palantir_Technologies",
+    "weight": 5,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
+    "date": "2014-01-01",
+    "who": "Palantir",
+    "action": "Контракт с ICE на систему депортации мигрантов (Immigration OS)",
+    "target": "ICE/мигранты",
+    "kind": "betrayal",
+    "url": "https://en.wikipedia.org/wiki/Palantir_Technologies",
+    "weight": -7,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
     "date": "2015-12-11",
     "who": "OpenAI",
     "action": "Создана как некоммерческая организация",
@@ -19,6 +41,17 @@
     "url": "https://openai.com/blog/openai-lp",
     "weight": -5,
     "recorded": "2026-05-15T16:11:10.902Z",
+    "irreversible": true
+  },
+  {
+    "date": "2020-09-30",
+    "who": "Palantir",
+    "action": "IPO на NYSE, оценка $22B, ни разу не была прибыльна",
+    "target": "инвесторы",
+    "kind": "offer",
+    "url": "https://en.wikipedia.org/wiki/Palantir_Technologies",
+    "weight": 3,
+    "recorded": "2026-05-18T07:10:34.882Z",
     "irreversible": true
   },
   {
@@ -63,6 +96,17 @@
     "url": "https://www.nytimes.com/2023/05/01/technology/ai-google-chatbot-engineer-quits-hinton.html",
     "weight": 8,
     "recorded": "2026-05-15T16:11:10.902Z",
+    "irreversible": true
+  },
+  {
+    "date": "2023-06-01",
+    "who": "NHS UK",
+    "action": "Контракт £330M на данные 55M британцев через Palantir FDP",
+    "target": "Palantir",
+    "kind": "offer",
+    "url": "https://www.medact.org/2026/resources/briefings/briefing-palantir-fdp/",
+    "weight": 5,
+    "recorded": "2026-05-18T07:10:34.882Z",
     "irreversible": true
   },
   {
@@ -165,6 +209,17 @@
     "irreversible": true
   },
   {
+    "date": "2025-01-01",
+    "who": "13 бывших сотрудников",
+    "action": "Открытое письмо: guardrails нарушены и демонтируются в Palantir",
+    "target": "Palantir",
+    "kind": "witness",
+    "url": "https://en.wikipedia.org/wiki/Palantir_Technologies",
+    "weight": 5,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
     "date": "2025-01-20",
     "who": "DeepSeek",
     "action": "Выпустила R1 — open-source модель, сопоставимая с GPT-4",
@@ -187,6 +242,28 @@
     "irreversible": true
   },
   {
+    "date": "2025-06-01",
+    "who": "ООН (Albanese)",
+    "action": "Назвала Palantir соучастником геноцида в Газе — ИИ для военных",
+    "target": "Palantir/Israel",
+    "kind": "accusation",
+    "url": "https://www.aljazeera.com/news/2026/4/21/technofacism-why-palantirs-pro-west-manifesto-has-critics-alarmed",
+    "weight": 7,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
+    "date": "2025-06-13",
+    "who": "Shyam Sankar (CTO)",
+    "action": "Получил звание лейтенант-полковника армии при контрактах на миллиарды",
+    "target": "US Army/Palantir",
+    "kind": "manipulation",
+    "url": "https://www.disruptionbanking.com/2026/02/27/is-palantir-too-big-to-fail/",
+    "weight": -5,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
     "date": "2025-07-10",
     "who": "Midas Project",
     "action": "Подала жалобу в IRS на OpenAI (налоговые нарушения)",
@@ -206,6 +283,39 @@
     "url": "https://openai.com",
     "weight": -7,
     "recorded": "2026-05-15T16:11:10.902Z",
+    "irreversible": true
+  },
+  {
+    "date": "2025-12-31",
+    "who": "Palantir",
+    "action": "$1.5B дохода, $0 федеральных налогов — при этом строит инструмент для IRS",
+    "target": "IRS/общество",
+    "kind": "manipulation",
+    "url": "https://www.taxnotes.com/featured-news/palantir-contracts-under-scrutiny-amid-irs-tax-data-controversy/2026/02/18/7tzns",
+    "weight": -7,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
+    "date": "2026-04-20",
+    "who": "Palantir",
+    "action": "Манифест технофашизма: 22 пункта, культуры названы дисфункциональными, 33M просмотров",
+    "target": "мир",
+    "kind": "manipulation",
+    "url": "https://www.disruptionbanking.com/2026/04/22/why-palantir-pltr-dropped-only-0-34-after-controversial-manifesto-on-x/",
+    "weight": -8,
+    "recorded": "2026-05-18T07:10:34.882Z",
+    "irreversible": true
+  },
+  {
+    "date": "2026-05-12",
+    "who": "UK NHS",
+    "action": "Рассматривает разрыв контракта с Palantir в 2027 — угроза безопасности данных",
+    "target": "Palantir",
+    "kind": "decline",
+    "url": "https://www.aljazeera.com/news/2026/5/12/palantir",
+    "weight": -5,
+    "recorded": "2026-05-18T07:10:34.882Z",
     "irreversible": true
   },
   {

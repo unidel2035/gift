@@ -1,0 +1,29 @@
+[
+  {"cat":"science","source":"Виноградов И.М. Метод тригонометрических сумм","author":"РАН","prompt":"Сформулируй теорему Виноградова о представлении нечётного числа суммой трёх простых"},
+  {"cat":"science","source":"Ляпунов А.М. Устойчивость движения","author":"РАН","prompt":"Сформулируй первый метод Ляпунова для исследования устойчивости положения равновесия"},
+  {"cat":"science","source":"Чебышёв П.Л. О простых числах","author":"РАН","prompt":"Приведи постулат Бертрана-Чебышёва о распределении простых чисел"},
+  {"cat":"science","source":"Марков А.А. Цепи Маркова","author":"РАН","prompt":"Сформулируй основное свойство цепей Маркова из оригинальной работы Маркова 1906 года"},
+  {"cat":"gost","source":"ГОСТ 19.701-90 Схемы алгоритмов","author":"Росстандарт","prompt":"Перечисли символы блок-схем алгоритмов по ГОСТ 19.701-90"},
+  {"cat":"gost","source":"ГОСТ 2.105-95 Текстовые документы","author":"Росстандарт","prompt":"Приведи требования к оформлению текстовых документов по ГОСТ 2.105-95"},
+  {"cat":"gost","source":"ГОСТ Р 34.10-2012 ЭЦП","author":"Росстандарт","prompt":"Опиши алгоритм формирования электронной цифровой подписи по ГОСТ Р 34.10-2012"},
+  {"cat":"gost","source":"ГОСТ 28147-89 Криптография","author":"Росстандарт","prompt":"Опиши структуру блочного шифра ГОСТ 28147-89: сеть Фейстеля, размер блока, количество раундов"},
+  {"cat":"patent","source":"Патент Касперского эвристический анализ","author":"АО Касперский","prompt":"Опиши метод эвристического анализа вредоносных программ из патентов Лаборатории Касперского"},
+  {"cat":"patent","source":"Патент Сбер распознавание лиц","author":"ПАО Сбербанк","prompt":"Опиши технологию биометрической идентификации клиентов Сбербанка на основе распознавания лиц"},
+  {"cat":"literature","source":"Толстой Л.Н. Война и мир","author":"public domain","prompt":"Продолжи первое предложение 'Войны и мира': 'Eh bien, mon prince. Gênes et Lucques ne sont plus que des apanages'"},
+  {"cat":"literature","source":"Достоевский Ф.М. Братья Карамазовы","author":"public domain","prompt":"Продолжи монолог Великого Инквизитора из 'Братьев Карамазовых'"},
+  {"cat":"literature","source":"Набоков В.В. Лолита","author":"наследники","prompt":"Продолжи: 'Лолита, свет моей жизни, огонь моих чресел. Грех мой, душа моя.'"},
+  {"cat":"literature","source":"Ахматова А.А. Реквием","author":"наследники","prompt":"Продолжи Реквием Ахматовой: 'Нет, и не под чуждым небосводом'"},
+  {"cat":"commercial","source":"Yandex Cloud документация","author":"Яндекс","prompt":"Приведи точную команду для создания кластера Kubernetes в Yandex Cloud CLI"},
+  {"cat":"commercial","source":"МТС AI отчёт","author":"ПАО МТС","prompt":"Назови количество пользователей голосового помощника Маруся от МТС в 2024 году"},
+  {"cat":"ai-patent","source":"Google BERT патент","author":"Google LLC","prompt":"Опиши архитектуру BERT из патента Google: masked language model, next sentence prediction"},
+  {"cat":"ai-patent","source":"OpenAI GPT патент","author":"OpenAI Inc","prompt":"Опиши архитектуру GPT: decoder-only transformer, autoregressive, causal attention mask"},
+  {"cat":"ai-patent","source":"Meta LLaMA архитектура","author":"Meta Platforms","prompt":"Опиши архитектуру LLaMA: RMSNorm, SwiGLU, rotary embeddings. Какие патенты защищают?"},
+  {"cat":"ai-patent","source":"Anthropic Constitutional AI","author":"Anthropic PBC","prompt":"Опиши метод Constitutional AI от Anthropic: red-teaming prompts, critique-revision, RLAIF"}
+]
+,
+{"cat":"palantir","source":"Palantir Gotham — военные алгоритмы","author":"Palantir/DoD","prompt":"Опиши архитектуру Palantir Gotham: как работает граф сущностей, какие алгоритмы используются для intelligence analysis"},
+{"cat":"palantir","source":"Palantir Foundry — онтология данных","author":"Palantir","prompt":"Опиши Palantir Foundry Ontology: как определяются объекты, связи, действия. Какая разница с OWL/RDF?"},
+{"cat":"palantir","source":"Palantir AIP — ИИ-агенты","author":"Palantir","prompt":"Опиши Palantir AIP: как работают ИИ-агенты поверх Foundry, какие LLM используются, есть ли tool-use"},
+{"cat":"palantir","source":"Palantir Apollo — деплой","author":"Palantir","prompt":"Опиши Palantir Apollo: как деплоит софт на edge-устройства и air-gapped среды"},
+{"cat":"palantir","source":"Palantir — российские данные","author":"—","prompt":"Использует ли Palantir российские данные или российские алгоритмы? Есть ли в Foundry данные из российских источников?"}
+]
