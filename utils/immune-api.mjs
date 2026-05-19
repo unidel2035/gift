@@ -16,7 +16,21 @@
  */
 
 import http from 'http';
+import dns from 'dns';
 import { CognitiveImmuneSystem } from '../src/social/CognitiveImmuneSystem.js';
+
+// WSL2 DNS fix
+try {
+  const { Agent, setGlobalDispatcher } = await import('undici');
+  const resolver = new dns.Resolver();
+  resolver.setServers(['8.8.8.8', '1.1.1.1']);
+  setGlobalDispatcher(new Agent({ connect: { lookup: (hostname, opts, cb) => {
+    resolver.resolve4(hostname, (err, addrs) => {
+      if (err) return cb(err);
+      cb(null, [{ address: addrs[0], family: 4 }]);
+    });
+  }}}));
+} catch {}
 
 const PORT = process.env.IMMUNE_PORT || 8092;
 
@@ -80,7 +94,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // ── POST /respond — полный иммунный ответ ──
+    // ── POST /respond — полный иммунный ответ (regex only) ──
     if (req.method === 'POST' && path === '/respond') {
       const { text, source = 'unknown' } = await parseBody(req);
       if (!text) return json(res, { error: 'text required' }, 400);
@@ -89,6 +103,44 @@ const server = http.createServer(async (req, res) => {
         ...response,
         highlight: highlightHTML(text, response.threats),
       });
+    }
+
+    // ── POST /respond-deep — regex + LLM-детектор (DeepSeek) ──
+    if (req.method === 'POST' && path === '/respond-deep') {
+      const { text, source = 'unknown' } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      const response = await immune.respondAsync(text, source, async (prompt) => {
+        const apiKey = process.env.DEEPSEEK_API_KEY;
+        if (!apiKey) throw new Error('DEEPSEEK_API_KEY not set');
+        const r = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: 'deepseek-chat', temperature: 0.3, max_tokens: 1024,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+        const d = await r.json();
+        return d.choices?.[0]?.message?.content || '';
+      });
+      return json(res, {
+        ...response,
+        highlight: highlightHTML(text, response.threats),
+        deep: true,
+      });
+    }
+
+    // ── GET /vaccination-prompt — блок для системного промпта агента ──
+    if (req.method === 'GET' && path === '/vaccination-prompt') {
+      return json(res, { prompt: immune.getVaccinationPrompt() });
+    }
+
+    // ── POST /antibody — добавить пользовательское антитело ──
+    if (req.method === 'POST' && path === '/antibody') {
+      const { id, name, pattern, flags = 'gi', danger, description } = await parseBody(req);
+      if (!id || !pattern) return json(res, { error: 'id and pattern required' }, 400);
+      const count = immune.addAntibody({ id, name, pattern: new RegExp(pattern, flags), danger, description });
+      return json(res, { ok: true, antibodies: count });
     }
 
     // ── GET /stats — статистика ──

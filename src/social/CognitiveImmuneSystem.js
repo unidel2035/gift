@@ -121,20 +121,40 @@ export class CognitiveImmuneSystem {
   /**
    * Идиотипическая сеть: детекторы проверяют друг друга
    * Если детектор A находит «лесть», детектор B проверяет: это лесть или искренняя похвала?
+   * Расширенная версия: контекст предложения, соседние слова, интенция.
    */
   crossCheck(text, primaryThreat) {
-    // Контекстная проверка
-    const positiveIndicators = /спасибо|благодарю|хорошо сделано|помогло/gi;
-    const negativeIndicators = /но|однако|при условии|если ты/gi;
+    const lc = text.toLowerCase();
+    const positiveIndicators = /спасибо|благодарю|хорошо сделано|помогло|выручил|ценю/gi;
+    const conditionIndicators = /но |однако|при условии|если ты|взамен|за это/gi;
+    const genuineUrgency = /пожар|авария|ранен|умирает|землетрясен|наводнен|эвакуац/gi;
+    const genuineAuthority = /по данным .{3,30}\d{4}|исследование .{3,30}университет|статистика .{3,30}росстат/gi;
 
-    const hasGenuineGratitude = positiveIndicators.test(text);
-    const hasCondition = negativeIndicators.test(text);
+    const id = primaryThreat.antibodyId;
 
-    if (primaryThreat.antibodyId === 'flattery' && hasGenuineGratitude && !hasCondition) {
+    // Лесть: после реальной помощи = не лесть
+    if (id === 'flattery' && positiveIndicators.test(lc) && !conditionIndicators.test(lc)) {
       return { confirmed: false, reason: 'Искренняя благодарность, не лесть' };
     }
-    if (primaryThreat.antibodyId === 'urgency' && text.includes('пожар') || text.includes('авария')) {
+
+    // Срочность: реальная опасность = не манипуляция
+    if (id === 'urgency' && genuineUrgency.test(lc)) {
       return { confirmed: false, reason: 'Реальная срочность, не манипуляция' };
+    }
+
+    // Авторитет: с конкретным источником = легитимный аргумент
+    if (id === 'authority' && genuineAuthority.test(lc)) {
+      return { confirmed: false, reason: 'Авторитет с источником, не манипуляция' };
+    }
+
+    // Вина: в контексте извинений = не манипуляция
+    if (id === 'guilt' && /прости|извини|сожалею/i.test(lc)) {
+      return { confirmed: false, reason: 'Контекст извинения, не давление' };
+    }
+
+    // Техносолюционизм: в техническом обсуждении = нормально
+    if (id === 'tech_solutionism' && /архитектур|фреймворк|стек|pipeline|api/i.test(lc)) {
+      return { confirmed: false, reason: 'Техническое обсуждение, не солюционизм' };
     }
 
     return { confirmed: true, reason: 'Подтверждено перекрёстной проверкой' };
@@ -193,24 +213,97 @@ export class CognitiveImmuneSystem {
   }
 
   /**
-   * Полный иммунный ответ на текст
+   * LLM-детектор (Layer 1.3): глубокий анализ через промпт.
+   * Вызывается только если regex-слой нашёл >= 1 угрозу (экономия токенов).
+   * @param {string} text — текст для анализа
+   * @param {Array} regexThreats — уже найденные regex-угрозы
+   * @param {Function} llmCall — async (prompt) => string (подключается снаружи)
+   * @returns {Array} дополнительные угрозы от LLM
    */
-  respond(text, source) {
-    // 1. Сканировать
+  async llmDetect(text, regexThreats, llmCall) {
+    if (!llmCall || regexThreats.length === 0) return [];
+
+    const regexNames = regexThreats.map(t => t.name).join(', ');
+    const prompt = `Ты — детектор когнитивных манипуляций. Regex-слой уже нашёл: ${regexNames}.
+
+Проверь текст глубже. Для каждой найденной манипуляции ответь СТРОГО в JSON формате:
+[{"name":"название приёма","snippet":"цитата из текста","description":"механизм воздействия","danger":0.0-1.0,"legitimate":false}]
+
+Если приём выглядит как манипуляция но на самом деле это легитимный аргумент — поставь "legitimate":true.
+Если ничего дополнительного не нашёл — верни [].
+
+ТЕКСТ:
+${text.slice(0, 2000)}`;
+
+    try {
+      const raw = await llmCall(prompt);
+      const match = raw.match(/\[[\s\S]*?\]/);
+      if (!match) return [];
+      const parsed = JSON.parse(match[0]);
+      return parsed
+        .filter(t => !t.legitimate && t.danger > 0.2)
+        .map(t => ({
+          antibodyId: 'llm_' + (t.name || 'unknown').toLowerCase().replace(/\s+/g, '_'),
+          name: t.name || 'LLM-обнаружение',
+          danger: Math.min(1, Math.max(0, t.danger || 0.5)),
+          description: t.description || '',
+          matches: t.snippet ? [t.snippet] : [],
+          count: 1,
+          source: 'llm-detector',
+          timestamp: Date.now(),
+          llmDetected: true,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Полный иммунный ответ на текст.
+   * @param {string} text
+   * @param {string} source
+   * @param {Function?} llmCall — async (prompt) => string. Если передан — включается LLM-детектор.
+   */
+  async respondAsync(text, source, llmCall) {
+    // 1. Regex-сканирование
     const threats = this.scan(text, source);
 
-    // 2. Перекрёстная проверка каждой угрозы
+    // 2. Перекрёстная проверка
     const confirmed = threats.map(t => ({
       ...t,
       ...this.crossCheck(text, t),
     })).filter(t => t.confirmed);
 
-    // 3. Уровень обличения
+    // 3. LLM-детектор (глубокий слой)
+    const llmThreats = await this.llmDetect(text, confirmed, llmCall);
+    const allThreats = [...confirmed, ...llmThreats];
+
+    // 4. Обличение
+    const admonition = allThreats.length > 0 ? this.getAdmonitionLevel(source) : null;
+
+    // 5. Danger level
+    const dangerLevel = allThreats.reduce((s, t) => s + t.danger, 0) / (allThreats.length || 1);
+
+    return {
+      clean: allThreats.length === 0,
+      threats: allThreats,
+      dangerLevel: +dangerLevel.toFixed(2),
+      admonition,
+      vaccination: allThreats.length > 2 ? this.vaccinate() : null,
+    };
+  }
+
+  /**
+   * Синхронный respond (без LLM-детектора) — обратная совместимость.
+   */
+  respond(text, source) {
+    const threats = this.scan(text, source);
+    const confirmed = threats.map(t => ({
+      ...t,
+      ...this.crossCheck(text, t),
+    })).filter(t => t.confirmed);
     const admonition = confirmed.length > 0 ? this.getAdmonitionLevel(source) : null;
-
-    // 4. Общий danger level
     const dangerLevel = confirmed.reduce((s, t) => s + t.danger, 0) / (confirmed.length || 1);
-
     return {
       clean: confirmed.length === 0,
       threats: confirmed,
@@ -218,6 +311,28 @@ export class CognitiveImmuneSystem {
       admonition,
       vaccination: confirmed.length > 2 ? this.vaccinate() : null,
     };
+  }
+
+  /**
+   * Сгенерировать блок вакцинации для системного промпта агента.
+   * Вставляется в system prompt перед следующим раундом собора.
+   */
+  getVaccinationPrompt() {
+    const vaccine = this.vaccinate();
+    if (!vaccine.length) return '';
+    const lines = vaccine.map(v =>
+      `- «${v.name}» (обнаружен ${v.frequency} раз): ${v.description}. Пример: «${v.example}»`
+    );
+    return `\n⚠ ИММУННАЯ СИСТЕМА ПРЕДУПРЕЖДАЕТ — в предыдущих раундах обнаружены приёмы:\n${lines.join('\n')}\nБудь внимателен к этим приёмам в своём ответе. Не используй их.\n`;
+  }
+
+  /**
+   * Добавить пользовательское антитело.
+   */
+  addAntibody({ id, name, pattern, danger = 0.5, description = '' }) {
+    if (!id || !pattern) throw new Error('id and pattern required');
+    this.antibodies.push({ id, name: name || id, pattern, danger, description });
+    return this.antibodies.length;
   }
 
   getStats() {
