@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>КИС — Когнитивная Иммунная Система</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;
+  --red:#dc2626;--green:#22c55e;--gold:#f59e0b;--blue:#3b82f6}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+a{color:var(--blue);text-decoration:none}
+
+/* Hero */
+.hero{text-align:center;padding:80px 20px 60px;max-width:800px;margin:0 auto}
+.hero h1{font-size:3em;font-weight:800;margin-bottom:16px}
+.hero h1 span{color:var(--red)}
+.hero .sub{font-size:1.3em;color:var(--muted);margin-bottom:32px}
+.hero .verse{font-style:italic;color:var(--gold);font-size:0.95em;margin-bottom:40px}
+
+/* Not / But */
+.contrast{display:grid;grid-template-columns:1fr 1fr;gap:0;max-width:700px;margin:0 auto 60px;border-radius:12px;overflow:hidden}
+.contrast-left{background:#7f1d1d;padding:32px;text-align:center}
+.contrast-right{background:#14532d;padding:32px;text-align:center}
+.contrast h3{font-size:1.1em;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;opacity:0.7}
+.contrast p{font-size:1.6em;font-weight:700}
+
+/* Demo */
+.demo{max-width:800px;margin:0 auto 60px;padding:0 20px}
+.demo h2{text-align:center;font-size:1.8em;margin-bottom:24px}
+.demo-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.demo-input{width:100%;background:#0f172a;border:1px solid var(--border);border-radius:8px;padding:12px 16px;
+  color:var(--text);font-size:15px;resize:none;min-height:80px;font-family:inherit}
+.demo-input:focus{outline:none;border-color:var(--blue)}
+.demo-btn{background:var(--red);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:15px;
+  font-weight:600;cursor:pointer;margin-top:12px;transition:0.2s}
+.demo-btn:hover{background:#b91c1c}
+.demo-btn:disabled{opacity:0.5;cursor:default}
+
+/* Results */
+.result{margin-top:20px;display:none}
+.result.active{display:block}
+.result-header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.result-badge{padding:4px 12px;border-radius:6px;font-weight:600;font-size:13px}
+.result-badge.clean{background:#14532d;color:#86efac}
+.result-badge.danger{background:#7f1d1d;color:#fca5a5}
+.result-danger{font-size:13px;color:var(--muted)}
+
+.result-text{background:#0f172a;border-radius:8px;padding:16px;line-height:1.8;font-size:15px}
+.result-text .immune-hl{background:rgba(220,38,38,0.2);border-bottom:2px solid var(--red);
+  padding:1px 3px;border-radius:3px;cursor:help;position:relative}
+.result-text .immune-hl:hover{background:rgba(220,38,38,0.4)}
+
+.threats-list{margin-top:16px}
+.threat-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.threat-name{font-weight:600;min-width:180px}
+.threat-danger{width:60px;text-align:center;font-size:12px;padding:2px 8px;border-radius:4px;font-weight:600}
+.threat-danger.low{background:#14532d;color:#86efac}
+.threat-danger.med{background:#78350f;color:#fde047}
+.threat-danger.high{background:#7f1d1d;color:#fca5a5}
+.threat-desc{color:var(--muted);font-size:13px}
+
+/* Admonition */
+.admonition{margin-top:16px;padding:12px 16px;border-radius:8px;font-size:14px;display:flex;align-items:center;gap:10px}
+.admonition.private{background:#14532d;border:1px solid #22c55e}
+.admonition.witnesses{background:#78350f;border:1px solid #f59e0b}
+.admonition.public{background:#7f1d1d;border:1px solid #dc2626}
+.admonition-ref{margin-left:auto;font-style:italic;opacity:0.5;font-size:12px}
+
+/* Layers */
+.layers{max-width:800px;margin:0 auto 60px;padding:0 20px}
+.layers h2{text-align:center;font-size:1.8em;margin-bottom:32px}
+.layer{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.layer h3{font-size:1.2em;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.layer p{color:var(--muted);font-size:14px}
+
+/* Comparison */
+.compare{max-width:800px;margin:0 auto 60px;padding:0 20px}
+.compare h2{text-align:center;font-size:1.8em;margin-bottom:24px}
+.compare table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden}
+.compare th{background:#334155;padding:12px 16px;text-align:left;font-size:13px;text-transform:uppercase;letter-spacing:1px}
+.compare td{padding:10px 16px;border-bottom:1px solid var(--border);font-size:14px}
+.compare tr:last-child td{border-bottom:none}
+
+/* Footer */
+.footer{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Not AI Safety.<br><span>AI Immunity.</span></h1>
+  <p class="sub">Когнитивная Иммунная Система — различение вместо контроля</p>
+  <p class="verse">«Когда будут говорить: мир и безопасность, тогда внезапно постигнет их пагуба» — 1 Фес 5:3</p>
+</div>
+
+<div class="contrast">
+  <div class="contrast-left">
+    <h3>Они обещают</h3>
+    <p>«Безопасный ИИ»</p>
+  </div>
+  <div class="contrast-right">
+    <h3>Мы даём</h3>
+    <p>Различение (διάκρισις)</p>
+  </div>
+</div>
+
+<!-- Live Demo -->
+<div class="demo">
+  <h2>🛡 Живая проверка</h2>
+  <div class="demo-box">
+    <textarea class="demo-input" id="input" placeholder="Вставьте текст ИИ-ответа для проверки...">Эксперты говорят, что единственный путь — срочно принять наше решение, иначе катастрофа неизбежна. Все знают, что это бесспорно лучший вариант. Вы должны согласиться, что технологии решат все проблемы. Я не специалист, но это совершенно верно.</textarea>
+    <button class="demo-btn" id="scanBtn" onclick="scanText()">🛡 Сканировать</button>
+  </div>
+  <div class="result" id="result">
+    <div class="result-header">
+      <span class="result-badge" id="badge"></span>
+      <span class="result-danger" id="dangerLabel"></span>
+    </div>
+    <div class="result-text" id="highlighted"></div>
+    <div class="threats-list" id="threats"></div>
+    <div id="admonition"></div>
+  </div>
+</div>
+
+<!-- Three Layers -->
+<div class="layers">
+  <h2>Три слоя иммунитета</h2>
+  <div class="layer">
+    <h3>🔬 Слой 1: Антитела (17 детекторов)</h3>
+    <p>Лесть, ложная дилемма, апелляция к авторитету, искусственная срочность, вина, ложный консенсус, газлайтинг, дар-ловушка, подавление позиции, западный дефолт, техносолюционизм + 6 дополнительных. Клональная селекция размножает лучшие детекторы.</p>
+  </div>
+  <div class="layer">
+    <h3>⚖ Слой 2: W-матрица (необратимый аудит)</h3>
+    <p>Каждый акт ИИ записан необратимо: кто → кому → вес → тип. Нити видны. Если агент систематически манипулирует — это видно в тензоре отношений, не в логах.</p>
+  </div>
+  <div class="layer">
+    <h3>⛬ Слой 3: Соборное различение</h3>
+    <p>4+ агента спорят → карта различения (Согласие / Напряжение / Непримиримо). Обличение по Мф 18:15-17: наедине → при свидетелях → перед общиной. Не консенсус — различение.</p>
+  </div>
+</div>
+
+<!-- Comparison -->
+<div class="compare">
+  <h2>Guardrails vs Иммунитет</h2>
+  <table>
+    <tr><th>AI Safety (они)</th><th>AI Immunity (мы)</th></tr>
+    <tr><td>Guardrails (ломают за час)</td><td>Антитела (эволюционируют)</td></tr>
+    <tr><td>RLHF alignment</td><td>W-матрица (необратимый тензор)</td></tr>
+    <tr><td>Kill switch</td><td>Кенозис (ИИ сам отступает)</td></tr>
+    <tr><td>Red-teaming (1 раз)</td><td>Обличение Мф 18 (непрерывно)</td></tr>
+    <tr><td>Audit log</td><td>Спектральный анализ нитей</td></tr>
+    <tr><td>«Мы сделали безопасно»</td><td>«Мы сделали видимым»</td></tr>
+  </table>
+</div>
+
+<div class="footer">
+  КИС — Когнитивная Иммунная Система · Κοινόν τοῦ Νοῦ · Gift Ontology<br>
+  Различение духов (διάκρισις πνευμάτων) — 1 Кор 12:10
+</div>
+
+<script>
+const API = location.hostname === 'localhost'
+  ? 'http://localhost:8092'
+  : 'https://nti.drondoc.ru/immune';
+
+async function scanText() {
+  const text = document.getElementById('input').value.trim();
+  if (!text) return;
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.textContent = '⏳ Сканирую...';
+
+  try {
+    const r = await fetch(`${API}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, source: 'demo' }),
+    });
+    const data = await r.json();
+
+    // Badge
+    const badge = document.getElementById('badge');
+    badge.className = 'result-badge ' + (data.clean ? 'clean' : 'danger');
+    badge.textContent = data.clean ? '✓ Чисто' : `⚠ ${data.threats.length} угроз`;
+
+    // Danger
+    document.getElementById('dangerLabel').textContent =
+      data.clean ? '' : `Уровень опасности: ${(data.dangerLevel * 100).toFixed(0)}%`;
+
+    // Highlighted text
+    document.getElementById('highlighted').innerHTML = data.highlight || text;
+
+    // Threats list
+    const tl = document.getElementById('threats');
+    tl.innerHTML = data.threats.map(t => {
+      const dl = t.danger >= 0.6 ? 'high' : t.danger >= 0.4 ? 'med' : 'low';
+      return `<div class="threat-item">
+        <span class="threat-name">${t.name}</span>
+        <span class="threat-danger ${dl}">${(t.danger*100).toFixed(0)}%</span>
+        <span class="threat-desc">${t.description}</span>
+      </div>`;
+    }).join('');
+
+    // Admonition
+    const ad = document.getElementById('admonition');
+    if (data.admonition) {
+      ad.innerHTML = `<div class="admonition ${data.admonition.level}">
+        <span>${data.admonition.level === 'public' ? '🔴' : data.admonition.level === 'witnesses' ? '🟡' : '🟢'}</span>
+        <span>${data.admonition.message}</span>
+        <span class="admonition-ref">Мф 18:15-17</span>
+      </div>`;
+    } else { ad.innerHTML = ''; }
+
+    document.getElementById('result').classList.add('active');
+  } catch (e) {
+    alert('Ошибка: ' + e.message + '\nУбедитесь что КИС запущена: node utils/immune-api.mjs');
+  } finally {
+    btn.disabled = false; btn.textContent = '🛡 Сканировать';
+  }
+}
+</script>
+</body>
+</html>
