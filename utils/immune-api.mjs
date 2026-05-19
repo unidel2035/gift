@@ -135,6 +135,34 @@ const server = http.createServer(async (req, res) => {
       return json(res, { prompt: immune.getVaccinationPrompt() });
     }
 
+    // ── GET /prophylaxis — профилактический промпт ──
+    if (req.method === 'GET' && path === '/prophylaxis') {
+      return json(res, { prompt: immune.getProphylaxisPrompt() });
+    }
+
+    // ── POST /diagnose — полная диагностика (все 10 слоёв) ──
+    if (req.method === 'POST' && path === '/diagnose') {
+      const { text, source = 'unknown' } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      const diag = immune.fullDiagnostics(text, source);
+      return json(res, {
+        ...diag,
+        highlight: highlightHTML(text, diag.threats),
+      });
+    }
+
+    // ── POST /confess — протокол покаяния ──
+    if (req.method === 'POST' && path === '/confess') {
+      const { source, acknowledgment } = await parseBody(req);
+      if (!source) return json(res, { error: 'source required' }, 400);
+      return json(res, immune.confess(source, acknowledgment || ''));
+    }
+
+    // ── GET /sabbath — субботний обзор (рефлексия системы) ──
+    if (req.method === 'GET' && path === '/sabbath') {
+      return json(res, immune.sabbathReview());
+    }
+
     // ── POST /antibody — добавить пользовательское антитело ──
     if (req.method === 'POST' && path === '/antibody') {
       const { id, name, pattern, flags = 'gi', danger, description } = await parseBody(req);

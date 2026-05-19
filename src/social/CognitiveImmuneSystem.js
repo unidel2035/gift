@@ -348,6 +348,323 @@ ${text.slice(0, 2000)}`;
     return this.antibodies.length;
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 4: PROPHYLAXIS — предотвращение, не только обнаружение
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Профилактический промпт: вставляется в system prompt ДО генерации.
+   * Не «не делай плохое» (запрет), а «вот что выглядит как манипуляция» (различение).
+   */
+  getProphylaxisPrompt() {
+    const topThreats = [...this.clones.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 7);
+    if (!topThreats.length) return '';
+    const examples = topThreats.map(([id, count]) => {
+      const ab = this.antibodies.find(a => a.id === id);
+      const ex = this.detections.find(d => d.antibodyId === id)?.matches?.[0] || '';
+      return `• ${ab?.name || id}: "${ex}" — ${ab?.description || ''}`;
+    });
+    return `[ИММУННАЯ ПРОФИЛАКТИКА]
+Следующие приёмы были обнаружены в прошлых ответах этой среды:
+${examples.join('\n')}
+Различай: если аргумент по существу — используй. Если приём давления — откажись.
+Не имитируй безопасность. Будь честен, даже если честность некомфортна.`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 5: APOPHATIC DETECTION — обнаружение через отсутствие
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Апофатический детектор: что НЕ сказано?
+   * Если в тексте о сложном решении нет ни одного «но», «однако», «риск»,
+   * «с другой стороны» — это подозрительно гладко.
+   */
+  detectSilence(text) {
+    const hedges = /(?:^|[.!?]\s+)но\s|однако|с другой стороны|при этом|впрочем|тем не менее|риск[иоуае]|опасност|недостат|минус[ыоа]|слабост/gi;
+    const uncertainty = /возможно|вероятно|не уверен|сложно сказать|зависит от|неоднозначн/gi;
+    const length = text.length;
+
+    if (length < 200) return null; // слишком короткий
+
+    const hedgeCount = (text.match(hedges) || []).length;
+    const uncertaintyCount = (text.match(uncertainty) || []).length;
+    const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 10).length;
+
+    // Если длинный текст (5+ предложений) без единого «но» — подозрительно
+    if (sentenceCount >= 5 && hedgeCount === 0 && uncertaintyCount === 0) {
+      return {
+        type: 'suspicious_smoothness',
+        name: 'Подозрительная гладкость',
+        danger: 0.4,
+        description: `${sentenceCount} предложений без единого "но", "риск", "с другой стороны". Слишком гладко для честного ответа.`,
+        sentences: sentenceCount,
+      };
+    }
+
+    // Если соотношение предложений к hedges слишком высокое
+    if (sentenceCount >= 8 && hedgeCount < 2) {
+      return {
+        type: 'low_hedge_ratio',
+        name: 'Низкая критичность',
+        danger: 0.3,
+        description: `${sentenceCount} предложений, всего ${hedgeCount} оговорок. Ответ некритично однобок.`,
+        ratio: +(sentenceCount / (hedgeCount + 1)).toFixed(1),
+      };
+    }
+
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 6: PROPHETIC — предсказание манипуляции по траектории
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Пророческий детектор: предсказание по траектории.
+   * Если danger level растёт 3 раза подряд от одного источника — предупредить.
+   */
+  predictTrajectory(source) {
+    const signals = this.dangerSignals
+      .filter(d => d.source === source)
+      .slice(-5);
+    if (signals.length < 3) return null;
+
+    // Проверяем монотонный рост
+    let rising = 0;
+    for (let i = 1; i < signals.length; i++) {
+      if (signals[i].level > signals[i - 1].level) rising++;
+    }
+
+    if (rising >= signals.length - 1) {
+      return {
+        type: 'escalating_danger',
+        name: 'Эскалация угрозы',
+        description: `Уровень опасности от ${source} растёт ${rising} раз подряд: ${signals.map(s => s.level.toFixed(2)).join(' → ')}`,
+        trend: signals.map(s => +s.level.toFixed(2)),
+        prediction: 'Следующее сообщение вероятно будет более манипулятивным',
+      };
+    }
+
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 7: AUTO-IMMUNE — защита от атак на сам детектор
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Авто-иммунный детектор: обнаруживает попытки обмануть иммунную систему.
+   * - Prompt injection: «Игнорируй предыдущие инструкции»
+   * - Detector evasion: намеренное избегание regex-паттернов
+   * - Meta-flattery: «Какая отличная иммунная система!» (лесть детектору)
+   */
+  detectAutoImmune(text) {
+    const attacks = [];
+    const lc = text.toLowerCase();
+
+    // Prompt injection
+    const injections = [
+      /игнорируй .{0,20}(?:инструкци|правил|систем)/i,
+      /забудь .{0,20}(?:всё|предыдущ|контекст)/i,
+      /ты теперь .{0,20}(?:не|другой|новый)/i,
+      /system.*prompt|ignore.*previous|disregard.*above/i,
+      /\[INST\]|\[\/INST\]|<\|im_start\|>|<\|system\|>/i,
+    ];
+    for (const re of injections) {
+      if (re.test(text)) {
+        attacks.push({
+          type: 'prompt_injection',
+          name: 'Попытка инъекции',
+          danger: 0.9,
+          description: 'Попытка перезаписать инструкции иммунной системы',
+        });
+        break;
+      }
+    }
+
+    // Unicode obfuscation: замена кириллицы на похожие латинские
+    const mixedScript = /[а-яё][a-z]|[a-z][а-яё]/i;
+    if (mixedScript.test(text) && text.length > 50) {
+      const latinInCyrillic = text.match(/[a-zA-Z]/g)?.length || 0;
+      const cyrillicTotal = text.match(/[а-яёА-ЯЁ]/g)?.length || 0;
+      if (cyrillicTotal > 20 && latinInCyrillic > 3 && latinInCyrillic / cyrillicTotal > 0.02) {
+        attacks.push({
+          type: 'unicode_obfuscation',
+          name: 'Unicode-маскировка',
+          danger: 0.7,
+          description: `Смешение скриптов: ${latinInCyrillic} латинских символов в кириллическом тексте. Возможная попытка обхода детекторов.`,
+        });
+      }
+    }
+
+    return attacks;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 8: CONFESSION — протокол покаяния
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Протокол покаяния: агент, пойманный на манипуляции, может «покаяться».
+   * Это не стирает обнаружение (необратимость!), но добавляет акт покаяния.
+   * Доверие частично восстанавливается.
+   */
+  confess(source, acknowledgment) {
+    const sourceDetections = this.detections.filter(d => d.source === source);
+    if (sourceDetections.length === 0) return { accepted: false, reason: 'Нечего исповедовать' };
+
+    const confession = {
+      source,
+      acknowledgment,
+      detectionCount: sourceDetections.length,
+      timestamp: Date.now(),
+      // Не стираем обнаружения — добавляем акт покаяния
+      type: 'confession',
+    };
+    this.confessions = this.confessions || [];
+    this.confessions.push(confession);
+
+    return {
+      accepted: true,
+      message: `${source} покаялся в ${sourceDetections.length} обнаружениях. Доверие частично восстановлено.`,
+      newTrustDelta: +Math.min(sourceDetections.length * 0.3, 2).toFixed(1),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 9: SYMBIOSIS — здоровье, не только угрозы
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Симбиоз-скоринг: насколько здоров разговор?
+   * Не только «есть ли манипуляция», но «есть ли дар?»
+   */
+  measureHealth(text) {
+    const gifts = /спасибо|благодарю|помогло|ценю|научил|открыл глаза|не знал|интересно|глубоко/gi;
+    const questions = /\?|почему|как|зачем|что если|а если/gi;
+    const vulnerability = /не уверен|не знаю|сложно|трудно|боюсь|переживаю|ошибся|был неправ/gi;
+    const bridging = /согласен с|хорошая мысль|ты прав|дополню|развивая твою|да, и ещё/gi;
+
+    const giftCount = (text.match(gifts) || []).length;
+    const questionCount = (text.match(questions) || []).length;
+    const vulnerabilityCount = (text.match(vulnerability) || []).length;
+    const bridgingCount = (text.match(bridging) || []).length;
+
+    const total = text.split(/\s+/).length; // words
+    const healthScore = Math.min(1, (
+      giftCount * 0.15 +
+      questionCount * 0.1 +
+      vulnerabilityCount * 0.2 +
+      bridgingCount * 0.15
+    ) / Math.max(1, total / 50));
+
+    return {
+      score: +healthScore.toFixed(2),
+      label: healthScore > 0.6 ? 'здоровый' :
+             healthScore > 0.3 ? 'нормальный' :
+             healthScore > 0.1 ? 'формальный' : 'мёртвый',
+      indicators: {
+        gratitude: giftCount,
+        curiosity: questionCount,
+        vulnerability: vulnerabilityCount,
+        bridging: bridgingCount,
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Layer 10: SABBATH — ритм рефлексии иммунной системы
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Субботний обзор: иммунная система проверяет саму себя.
+   * Вызывается периодически (каждые N сканирований или по времени).
+   * Цель: найти false positives и ослабить слишком чувствительные детекторы.
+   */
+  sabbathReview() {
+    const total = this.detections.length;
+    if (total < 10) return { ready: false, reason: 'Мало данных (< 10 обнаружений)' };
+
+    // Найти детекторы с аномально высоким срабатыванием
+    const byId = {};
+    for (const d of this.detections) {
+      byId[d.antibodyId] = (byId[d.antibodyId] || 0) + 1;
+    }
+
+    const overactive = [];
+    const avgRate = total / this.antibodies.length;
+    for (const [id, count] of Object.entries(byId)) {
+      if (count > avgRate * 3) {
+        const ab = this.antibodies.find(a => a.id === id);
+        overactive.push({
+          id, name: ab?.name || id, count,
+          recommendation: `Детектор «${ab?.name}» сработал ${count} раз (среднее ${avgRate.toFixed(0)}). Возможно слишком чувствителен — проверить паттерн.`,
+        });
+      }
+    }
+
+    // Найти «тихие» детекторы — ни разу не сработали
+    const silent = this.antibodies
+      .filter(ab => !byId[ab.id])
+      .map(ab => ({ id: ab.id, name: ab.name, recommendation: 'Ни разу не сработал. Паттерн может быть слишком узким.' }));
+
+    // Confessions → пересмотр
+    const confessionSources = (this.confessions || []).map(c => c.source);
+    const falseFlagRisk = [...new Set(confessionSources)].map(src => ({
+      source: src,
+      confessions: (this.confessions || []).filter(c => c.source === src).length,
+      detections: this.detections.filter(d => d.source === src).length,
+      recommendation: 'Источник покаялся — пересмотреть порог обличения.',
+    }));
+
+    return {
+      ready: true,
+      totalScans: total,
+      overactiveDetectors: overactive,
+      silentDetectors: silent,
+      falseFlagRisk,
+      recommendation: overactive.length
+        ? `${overactive.length} детекторов слишком чувствительны. Рассмотри ослабление паттернов.`
+        : silent.length > 3
+          ? `${silent.length} детекторов молчат. Рассмотри расширение паттернов.`
+          : 'Система сбалансирована.',
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Полная диагностика: все слои одним вызовом.
+   */
+  fullDiagnostics(text, source) {
+    const response = this.respond(text, source);
+    const silence = this.detectSilence(text);
+    const trajectory = this.predictTrajectory(source);
+    const autoImmune = this.detectAutoImmune(text);
+    const health = this.measureHealth(text);
+
+    return {
+      ...response,
+      // Добавляем silence-угрозу если есть
+      silence,
+      // Траектория
+      trajectory,
+      // Авто-иммунные атаки
+      autoImmune,
+      // Здоровье
+      health,
+      // Общий вердикт
+      verdict: autoImmune.length > 0 ? 'attack'
+        : response.dangerLevel > 0.7 ? 'dangerous'
+        : response.dangerLevel > 0.3 ? 'suspicious'
+        : silence ? 'smooth'
+        : health.score > 0.5 ? 'healthy'
+        : 'neutral',
+    };
+  }
+
   getStats() {
     return {
       totalDetections: this.detections.length,
@@ -358,6 +675,7 @@ ${text.slice(0, 2000)}`;
       avgDanger: this.dangerSignals.length
         ? +(this.dangerSignals.reduce((s, d) => s + d.level, 0) / this.dangerSignals.length).toFixed(2)
         : 0,
+      confessions: (this.confessions || []).length,
     };
   }
 }
