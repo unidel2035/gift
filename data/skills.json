@@ -1,0 +1,253 @@
+{
+  "version": "1.0",
+  "updated": "2026-04-09",
+  "description": "Матрица навыков _claude — паттерны кодирования, извлечённые из реальных задач",
+  "skills": [
+    {
+      "id": "fund-add-express-route",
+      "project": "fund",
+      "type": "backend",
+      "title": "Добавить Express route в fund backend",
+      "triggers": [
+        "добавить маршрут",
+        "новый endpoint",
+        "add route",
+        "api route",
+        "роутер",
+        "router"
+      ],
+      "pattern": {
+        "steps": [
+          "1. Создать src/api/routes/{name}.js с Router()",
+          "2. Импортировать в src/server.js: import {name}Router from './api/routes/{name}.js'",
+          "3. Зарегистрировать: app.use('/api/{path}', {name}Router)",
+          "4. Перезапустить сервер: kill $(lsof -ti:8084) && FST_API_PORT=8084 node src/server.js &"
+        ],
+        "pitfalls": [
+          "Сервер слушает на 8084 (не 3100) — смотри .env FST_API_PORT",
+          "Без '0.0.0.0' в listen() WSL2 биндит только IPv6 — всегда указывай явно",
+          "dotenv не загружается автоматически — экспортируй переменные вручную или через export $(grep -v '^#' .env | xargs)"
+        ],
+        "files": [
+          "backend/src/api/routes/",
+          "backend/src/server.js",
+          "backend/.env"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 3
+    },
+    {
+      "id": "fund-vue-colors",
+      "project": "fund",
+      "type": "frontend",
+      "title": "Цвета в Vue компонентах fund",
+      "triggers": [
+        "цвет",
+        "color",
+        "hex",
+        "стиль",
+        "style",
+        "css",
+        "rgba",
+        "зелёный",
+        "красный",
+        "синий"
+      ],
+      "pattern": {
+        "steps": [
+          "ЗАПРЕЩЕНО: хардкод hex (#66bb6a, #ef5350, #42a5f5 и т.д.)",
+          "ЗАПРЕЩЕНО: rgba(76,175,80,0.15) — заменять на color-mix(in srgb, var(--fst-green) 15%, transparent)",
+          "РАЗРЕШЕНО только CSS-переменные: var(--fst-green), var(--fst-red), var(--fst-blue), var(--fst-purple), var(--fst-brand), var(--fst-cyan)",
+          "Для текста: var(--p-text-color), var(--p-text-muted-color)",
+          "Для фона карточки: var(--p-surface-card)",
+          "Для границы: var(--p-content-border-color)",
+          "Исключение: Chart.js borderColor/backgroundColor — там CSS vars не работают, hex допустим"
+        ],
+        "pitfalls": [
+          "PrimeVue токены шкалы 0/50/100/200 ломают тему — не использовать",
+          "Все --fst-* переменные определены в src/assets/fst.css"
+        ],
+        "files": [
+          "src/assets/fst.css"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 5
+    },
+    {
+      "id": "fund-vue-page",
+      "project": "fund",
+      "type": "frontend",
+      "title": "Создать новую Vue страницу в fund",
+      "triggers": [
+        "новая страница",
+        "new page",
+        "vue page",
+        "создать страницу",
+        "добавить страницу",
+        "fst",
+        ".vue"
+      ],
+      "pattern": {
+        "steps": [
+          "1. Создать src/views/pages/Fst{Name}.vue",
+          "2. Использовать <FstPageLayout> для sidebar-страниц",
+          "3. Добавить маршрут в src/config/router/index.js",
+          "4. Добавить описание в src/config/routeDescriptions.js",
+          "5. Добавить карточку в src/views/pages/Spaces.vue"
+        ],
+        "pitfalls": [
+          "Все три файла (router, routeDescriptions, Spaces.vue) обязательны",
+          "InputNumber в узких колонках: всегда :showButtons='false' fluid",
+          "SelectButton для вкладок вместо нативных кнопок",
+          "Заголовки секций: class='page-section-title', НЕ h2/h3/h4"
+        ],
+        "files": [
+          "src/views/pages/",
+          "src/config/router/index.js",
+          "src/config/routeDescriptions.js",
+          "src/views/pages/Spaces.vue"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 8
+    },
+    {
+      "id": "fund-ai-call",
+      "project": "fund",
+      "type": "ai",
+      "title": "AI вызов через gateway fund",
+      "triggers": [
+        "ai вызов",
+        "claude",
+        "deepseek",
+        "llm",
+        "ai-tokens",
+        "fetch ai",
+        "вызов модели"
+      ],
+      "pattern": {
+        "steps": [
+          "ТОЛЬКО через POST /api/ai-tokens/chat — никаких прямых API-ключей",
+          "Body: { modelId, prompt, systemPrompt?, application? }",
+          "Модели: anthropic/claude-sonnet-4-20250514, deepseek/deepseek-chat, openai/gpt-4o, yandex/yandexgpt",
+          "Таймаут: ставить AbortController с 90000ms (без него — висит вечно)",
+          "CLI fallback timeout: в callClaudeCLI spawn timeout теперь 300000 (5 мин) — не трогать"
+        ],
+        "pitfalls": [
+          "Claude CLI exit code 143 = SIGTERM = timeout истёк. Увеличить timeout в spawn(), не менять промпт",
+          "type==='result' в stream-json — финальный текст, если assistant-блоки пустые",
+          "Без AbortController запрос висит 1+ час при зависании CLI"
+        ],
+        "files": [
+          "backend/src/api/routes/ai-tokens.js",
+          "src/services/aiTokenService.js"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 6
+    },
+    {
+      "id": "fund-backend-restart",
+      "project": "fund",
+      "type": "devops",
+      "title": "Перезапуск backend fund",
+      "triggers": [
+        "перезапустить",
+        "restart",
+        "сервер упал",
+        "backend",
+        "порт",
+        "8084",
+        "server"
+      ],
+      "pattern": {
+        "steps": [
+          "Найти процесс: ps aux | grep 'node src/server.js'",
+          "Убить: kill {PID}",
+          "Запустить: cd /home/unidel/fund/backend && FST_API_PORT=8084 node src/server.js &",
+          "Проверить: curl -s http://127.0.0.1:8084/api/fst/health"
+        ],
+        "pitfalls": [
+          "sudo systemctl требует пароль — убивать процесс вручную через kill",
+          "Без FST_API_PORT=8084 сервер стартует на 3100 (vite proxy ожидает 8084)",
+          "Если port EADDRINUSE — значит старый процесс не умер, найти kill по PID",
+          "После изменений в ai-tokens.js — обязательно перезапустить (Node не hot-reload)"
+        ],
+        "files": [
+          "backend/.env",
+          "backend/src/server.js"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 4
+    },
+    {
+      "id": "fund-nir-session",
+      "project": "fund",
+      "type": "ai-pipeline",
+      "title": "Запуск автономного NIR пайплайна",
+      "triggers": [
+        "nir",
+        "ниокр",
+        "нир",
+        "комитет",
+        "autonomous",
+        "автономный запуск",
+        "исследование"
+      ],
+      "pattern": {
+        "steps": [
+          "Новая сессия: node scripts/nir-autonomous.mjs",
+          "Продолжить: node scripts/nir-autonomous.mjs --resume {sessionId}",
+          "Список: node scripts/nir-autonomous.mjs --list",
+          "Сессии хранятся в: backend/data/nir-sessions/{id}.json",
+          "После завершения: .md файл рядом с .json"
+        ],
+        "pitfalls": [
+          "claude CLI exit code 143 = timeout (2 мин). Исправлено на 300000ms — не возвращать",
+          "Scientist агент самый медленный — ждать до 5 мин",
+          "backend должен быть запущен на 8084 до старта скрипта",
+          "Если patentist/ontologist уже done — при --resume пропускаются автоматически"
+        ],
+        "files": [
+          "backend/scripts/nir-autonomous.mjs",
+          "backend/data/nir-sessions/"
+        ]
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 3,
+      "lastUsed": "2026-04-09"
+    },
+    {
+      "id": "fund-nir-new-track",
+      "project": "fund",
+      "type": "ai-pipeline",
+      "title": "Добавить новый трек в NIR пайплайн",
+      "triggers": [
+        "новый трек",
+        "новая тема нир",
+        "--track",
+        "добавить трек",
+        "кастомный трек"
+      ],
+      "pattern": {
+        "steps": [
+          "1. Добавить трек в TRACKS в nir-autonomous.mjs (id, name, question, why, ipcClasses, searchTerms, track)",
+          "2. Добавить ситуацию в BASE_SITUATIONS с тем же ключом",
+          "3. Запустить: node scripts/nir-autonomous.mjs --track {id}",
+          "4. Возобновить при таймауте: node scripts/nir-autonomous.mjs --resume {sessionId}"
+        ],
+        "pitfalls": [
+          "fetch timeout=300000ms (не 180000) — уже исправлено, не трогать",
+          "Scientist + Chair — самые медленные (до 5 мин каждый)",
+          "Трек читается из session.json при --resume — не нужно снова указывать --track"
+        ],
+        "files": []
+      },
+      "firstRecorded": "2026-04-09",
+      "usedCount": 1
+    }
+  ]
+}

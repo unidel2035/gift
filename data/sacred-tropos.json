@@ -1,0 +1,54 @@
+{
+  "source": "sacred_history_training",
+  "episodes": 2000,
+  "agents": [
+    {
+      "id": "agent-0",
+      "tropos": {
+        "courage": 0.7024998068809509,
+        "generosity": 0.36000001430511475,
+        "patience": 0.3199999928474426,
+        "fidelity": 0.7049996256828308,
+        "discernment": 0.30000001192092896,
+        "humility": 0.6549996733665466
+      },
+      "logos": "martyros"
+    },
+    {
+      "id": "agent-1",
+      "tropos": {
+        "courage": 0.7024998068809509,
+        "generosity": 0.36000001430511475,
+        "patience": 0.3199999928474426,
+        "fidelity": 0.7049996256828308,
+        "discernment": 0.30000001192092896,
+        "humility": 0.6549996733665466
+      },
+      "logos": "martyros"
+    },
+    {
+      "id": "agent-2",
+      "tropos": {
+        "courage": 0.7024998068809509,
+        "generosity": 0.36000001430511475,
+        "patience": 0.3199999928474426,
+        "fidelity": 0.7049996256828308,
+        "discernment": 0.30000001192092896,
+        "humility": 0.6549996733665466
+      },
+      "logos": "martyros"
+    },
+    {
+      "id": "agent-3",
+      "tropos": {
+        "courage": 0.7024998068809509,
+        "generosity": 0.36000001430511475,
+        "patience": 0.3199999928474426,
+        "fidelity": 0.7049996256828308,
+        "discernment": 0.30000001192092896,
+        "humility": 0.6549996733665466
+      },
+      "logos": "martyros"
+    }
+  ]
+}

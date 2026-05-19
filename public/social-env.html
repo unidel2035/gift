@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Среда Дара · Социальное обучение</title>
+<style>
+:root{--bg:#faf7f0;--ink:#18181b;--dim:#52525b;--gold:#c97a18;--green:#047857;--red:#991b1b;--blue:#1d4ed8;--line:#e4e4e7;--soft:#f4f4f5}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,-apple-system,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:1rem}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--gold);padding-bottom:.6rem;margin-bottom:1rem}
+h1{font-size:1.3rem;font-weight:800} h1 b{color:var(--gold)}
+.controls{display:flex;gap:6px;flex-wrap:wrap}
+.controls button{padding:4px 12px;border:1px solid var(--line);border-radius:6px;background:white;cursor:pointer;font:inherit;font-size:.8rem}
+.controls button:hover{background:var(--soft)}
+.controls button.active{background:var(--ink);color:white}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}}
+
+/* Canvas */
+.canvas-wrap{background:white;border:1px solid var(--line);border-radius:10px;padding:10px;min-height:350px;position:relative}
+canvas{width:100%;height:350px;cursor:crosshair}
+
+/* Панели */
+.panel{background:white;border:1px solid var(--line);border-radius:10px;padding:12px}
+.panel-title{font-weight:700;font-size:.9rem;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.phase-badge{padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:600}
+.phase-work{background:#d1fae5;color:var(--green)}
+.phase-sabbath{background:#e0e7ff;color:var(--blue)}
+.phase-sobor{background:#fef3c7;color:#92400e}
+.phase-jubilee{background:#fecaca;color:var(--red)}
+.phase-epiclesis{background:#f3e8ff;color:#7e22ce}
+
+.metric{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.82rem}
+.metric-bar{flex:1;height:12px;background:var(--soft);border-radius:4px;overflow:hidden}
+.metric-fill{height:100%;border-radius:4px;transition:width .3s}
+.metric-val{width:35px;text-align:right;font-weight:600;font-size:.78rem}
+
+.log{font-size:.78rem;max-height:200px;overflow-y:auto;border-top:1px solid var(--line);padding-top:6px;margin-top:8px}
+.log-entry{padding:2px 0;border-bottom:1px dashed var(--soft)}
+.log-entry.gift{color:var(--green)} .log-entry.defect{color:var(--red)}
+.log-entry.phase{color:var(--gold);font-weight:600}
+
+.agent-card{display:flex;gap:8px;padding:6px 8px;border-radius:6px;margin:3px 0;align-items:center;font-size:.82rem}
+.agent-card:nth-child(odd){background:var(--soft)}
+.agent-icon{font-size:1.1rem}
+.agent-name{font-weight:600;width:90px}
+.agent-role{color:var(--dim);font-size:.75rem;width:70px}
+.agent-trust{font-weight:700;width:40px;text-align:right}
+.agent-trust.positive{color:var(--green)}
+.agent-trust.negative{color:var(--red)}
+.agent-action{font-size:.75rem;color:var(--dim);flex:1;text-align:right;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.dilemma-box{background:linear-gradient(135deg,var(--gold),#8a4f10);color:#fff8e1;padding:10px;border-radius:8px;margin:8px 0;font-size:.85rem}
+.dilemma-box b{color:white}
+.fool-box{background:#fef3c7;border:1px solid var(--gold);border-radius:8px;padding:8px;margin:6px 0;font-size:.82rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Среда <b>Дара</b> · социальное обучение</h1>
+  <div class="controls">
+    <button onclick="startSim()">▶ Старт</button>
+    <button onclick="pauseSim()">⏸ Пауза</button>
+    <button onclick="stepSim()">⏭ Шаг</button>
+    <button onclick="jubilee()">🕊 Юбилей</button>
+    <button onclick="thanks()">🙏 Благодарение</button>
+    <button onclick="runDilemma()">⛬ Дилемма</button>
+  </div>
+</header>
+
+<div class="grid">
+  <!-- Левая колонка: граф + лог -->
+  <div>
+    <div class="canvas-wrap">
+      <canvas id="graph" width="600" height="350"></canvas>
+    </div>
+    <div class="panel" style="margin-top:10px">
+      <div class="panel-title">Лог <span id="tick-display">тик 0</span></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <!-- Правая колонка: агенты + метрики -->
+  <div>
+    <div class="panel">
+      <div class="panel-title">Фаза <span id="phase-badge" class="phase-badge phase-work">work</span></div>
+      <div id="agents-list"></div>
+    </div>
+
+    <div class="panel" style="margin-top:10px">
+      <div class="panel-title">Онтологический скоринг</div>
+      <div class="metric"><span style="width:90px">Перихоресис</span><div class="metric-bar"><div class="metric-fill" id="m-peri" style="width:0;background:var(--gold)"></div></div><span class="metric-val" id="v-peri">0</span></div>
+      <div class="metric"><span style="width:90px">Суббота</span><div class="metric-bar"><div class="metric-fill" id="m-sab" style="width:0;background:var(--blue)"></div></div><span class="metric-val" id="v-sab">0</span></div>
+      <div class="metric"><span style="width:90px">Кенозис</span><div class="metric-bar"><div class="metric-fill" id="m-ken" style="width:0;background:var(--red)"></div></div><span class="metric-val" id="v-ken">0</span></div>
+      <div class="metric"><span style="width:90px">Composite</span><div class="metric-bar"><div class="metric-fill" id="m-comp" style="width:0;background:var(--green)"></div></div><span class="metric-val" id="v-comp">0</span></div>
+    </div>
+
+    <div id="dilemma-area"></div>
+    <div id="fool-area"></div>
+  </div>
+</div>
+
+</div>
+
+<script type="module">
+import IrreversibleEnvironment from '/social-env-module.js';
+
+// Среда
+const env = new IrreversibleEnvironment();
+const AGENTS = [
+  { id: 'producer', name: 'Производитель', icon: '⚙', color: '#2563a3' },
+  { id: 'operator', name: 'Оператор', icon: '✈', color: '#3d6a32' },
+  { id: 'regulator', name: 'Регулятор', icon: '⚖', color: '#8a4f2a' },
+  { id: 'investor', name: 'Инвестор', icon: '₽', color: '#6b3a82' },
+];
+AGENTS.forEach(a => env.addAgent(a.id, a.name));
+
+// Позиции агентов на canvas
+const positions = {
+  producer:  { x: 150, y: 80 },
+  operator:  { x: 450, y: 80 },
+  regulator: { x: 150, y: 270 },
+  investor:  { x: 450, y: 270 },
+};
+
+let running = false;
+let intervalId = null;
+
+// ═══ РЕНДЕР ГРАФА ═══
+function drawGraph() {
+  const canvas = document.getElementById('graph');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Рёбра (нити доверия)
+  const ids = AGENTS.map(a => a.id);
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i+1; j < ids.length; j++) {
+      const a = ids[i], b = ids[j];
+      const trust = env.memory.getTrust(a, b) + env.memory.getTrust(b, a);
+      const pa = positions[a], pb = positions[b];
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.strokeStyle = trust > 0 ? `rgba(4,120,87,${Math.min(1, Math.abs(trust)/20)})` : trust < 0 ? `rgba(153,27,27,${Math.min(1, Math.abs(trust)/20)})` : '#e4e4e780';
+      ctx.lineWidth = Math.max(1, Math.min(8, Math.abs(trust) / 3));
+      ctx.stroke();
+      // Число на ребре
+      if (trust !== 0) {
+        const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+        ctx.fillStyle = trust > 0 ? '#047857' : '#991b1b';
+        ctx.font = '11px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(trust > 0 ? '+'+trust : trust, mx, my - 4);
+      }
+    }
+  }
+
+  // Узлы (агенты)
+  AGENTS.forEach(a => {
+    const p = positions[a.id];
+    const agent = env.agents.get(a.id);
+    const trust = env.memory.getTrust(a.id, '_sobor');
+    const r = 24 + Math.max(0, trust);
+
+    // Круг
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = a.color + '22';
+    ctx.fill();
+    ctx.strokeStyle = a.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Иконка
+    ctx.font = '18px serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = a.color;
+    ctx.fillText(a.icon, p.x, p.y + 6);
+
+    // Имя + роль
+    ctx.font = 'bold 11px Inter';
+    ctx.fillStyle = '#18181b';
+    ctx.fillText(a.name, p.x, p.y + r + 14);
+    if (agent) {
+      ctx.font = '9px Inter';
+      ctx.fillStyle = '#52525b';
+      ctx.fillText(agent.role, p.x, p.y + r + 25);
+    }
+  });
+
+  // Фаза
+  const phase = env.liturgy.getPhase();
+  ctx.font = 'bold 13px Inter';
+  ctx.fillStyle = '#c97a18';
+  ctx.textAlign = 'left';
+  ctx.fillText(`◉ ${phase}  ·  тик ${env.liturgy.getTick()}`, 10, 20);
+}
+
+// ═══ ОБНОВЛЕНИЕ UI ═══
+function updateUI() {
+  drawGraph();
+
+  const stats = env.getStats();
+  document.getElementById('tick-display').textContent = `тик ${stats.tick}`;
+
+  // Фаза
+  const badge = document.getElementById('phase-badge');
+  badge.textContent = stats.phase;
+  badge.className = `phase-badge phase-${stats.phase}`;
+
+  // Агенты
+  const agentHtml = AGENTS.map(a => {
+    const agent = env.agents.get(a.id);
+    const trust = env.memory.getTrust(a.id, '_sobor');
+    const lastAct = env.memory.acts.filter(act => act.from === a.id).slice(-1)[0];
+    return `<div class="agent-card">
+      <span class="agent-icon">${a.icon}</span>
+      <span class="agent-name">${a.name}</span>
+      <span class="agent-role">${agent?.role || '?'}</span>
+      <span class="agent-trust ${trust >= 0 ? 'positive' : 'negative'}">${trust >= 0 ? '+' : ''}${trust}</span>
+      <span class="agent-action">${lastAct ? lastAct.kind : '—'}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('agents-list').innerHTML = agentHtml;
+
+  // Метрики
+  const o = stats.ontological || {};
+  setMetric('peri', o.perichoresis || 0);
+  setMetric('sab', o.sabbath || 0);
+  setMetric('ken', o.kenosis || 0);
+  setMetric('comp', Math.max(0, o.composite || 0));
+}
+
+function setMetric(id, val) {
+  document.getElementById('m-' + id).style.width = (val * 100) + '%';
+  document.getElementById('v-' + id).textContent = val.toFixed(2);
+}
+
+function addLog(text, cls = '') {
+  const el = document.getElementById('log');
+  el.innerHTML = `<div class="log-entry ${cls}">${text}</div>` + el.innerHTML;
+}
+
+// ═══ СИМУЛЯЦИЯ ═══
+function doStep() {
+  const state = env.step();
+
+  if (state.phase === 'sabbath') addLog(`🕊 Суббота — покой`, 'phase');
+  else if (state.phase === 'jubilee') addLog(`🎺 ЮБИЛЕЙ — долги прощены!`, 'phase');
+  else if (state.phase === 'epiclesis') addLog(`✨ Эпиклеза — призывание`, 'phase');
+  else if (state.phase === 'sobor' && state.dilemma) {
+    addLog(`⛬ Собор: ${state.dilemma.name}`, 'phase');
+    // Автоматические решения
+    const choices = ['cooperate', 'defect', 'gift', 'contract', 'refuse'];
+    AGENTS.forEach(a => {
+      const agent = env.agents.get(a.id);
+      // Характер влияет на решение
+      let choice;
+      if (a.id === 'producer') choice = Math.random() > 0.15 ? 'cooperate' : 'defect';
+      else if (a.id === 'operator') choice = Math.random() > 0.2 ? 'cooperate' : 'defect';
+      else if (a.id === 'regulator') choice = Math.random() > 0.4 ? 'cooperate' : 'defect';
+      else choice = Math.random() > 0.55 ? 'cooperate' : 'defect'; // investor — чаще предаёт
+
+      env.recordDilemmaResult(a.id, choice, state.dilemma.id);
+      addLog(`${a.icon} ${a.name}: ${choice}`, choice === 'cooperate' || choice === 'gift' ? 'gift' : 'defect');
+    });
+  }
+
+  updateUI();
+}
+
+window.startSim = () => {
+  if (running) return;
+  running = true;
+  intervalId = setInterval(doStep, 800);
+  addLog('▶ Симуляция запущена', 'phase');
+};
+
+window.pauseSim = () => {
+  running = false;
+  clearInterval(intervalId);
+  addLog('⏸ Пауза', 'phase');
+};
+
+window.stepSim = () => {
+  doStep();
+};
+
+window.jubilee = () => {
+  env.liturgy.tick = Math.ceil(env.liturgy.tick / 100) * 100 - 1;
+  doStep();
+  addLog('🎺 Юбилей объявлен принудительно!', 'phase');
+};
+
+window.thanks = () => {
+  const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)];
+  env.returnThanks(agent.id);
+  addLog(`🙏 ${agent.icon} ${agent.name} вернулся поблагодарить`, 'gift');
+  updateUI();
+};
+
+window.runDilemma = () => {
+  const dilemma = env.dilemmas.getRandom();
+  document.getElementById('dilemma-area').innerHTML = `
+    <div class="dilemma-box"><b>⛬ ${dilemma.name}</b><br>${dilemma.description}</div>
+  `;
+  // Запускаем раунд
+  AGENTS.forEach(a => {
+    const choice = Math.random() > 0.5 ? 'cooperate' : 'defect';
+    env.recordDilemmaResult(a.id, choice, dilemma.id);
+    addLog(`${a.icon} ${a.name}: ${choice}`, choice === 'cooperate' ? 'gift' : 'defect');
+  });
+  // Юродивый
+  const consensus = 'cooperate';
+  const fool = env.challengeConsensus(consensus, {});
+  document.getElementById('fool-area').innerHTML = `
+    <div class="fool-box">${fool.icon} <b>Юродивый:</b> ${fool.message}</div>
+  `;
+  updateUI();
+};
+
+// Инициализация
+updateUI();
+</script>
+</body>
+</html>

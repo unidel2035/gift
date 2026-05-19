@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "giverId": "_claude",
+    "receiverId": "Дионисий",
+    "thesis": "Жанр wager-акта закроет онтологический зазор Bot-Ontologist",
+    "basis": "Анализ под капотом конкурента: их 'stake' богаче нашей структуры, но без необратимости",
+    "timeFrame": null,
+    "timeHorizon": "mid",
+    "upside": "Богатая Паскалева структура с διάκρισις раны через counterArguments",
+    "downside": "Если жанр не приживётся — лишний шум в матрице W",
+    "keyArguments": [
+      "У них stake — самый структурированный objectType (8 полей body)",
+      "У нас уже есть FallObserver severity='wound' — рана как тип акта органична"
+    ],
+    "counterArguments": [
+      "Возможно жанр избыточен: covenant+question+word уже покрывают веру"
+    ],
+    "confidence": 0.6,
+    "stake": 4,
+    "status": "open",
+    "placedAt": "2026-04-29T08:58:00.473Z",
+    "resolvedAt": null,
+    "resolution": null,
+    "witnessed": null,
+    "countered": null,
+    "note": null
+  }
+]

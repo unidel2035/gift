@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Θέωσις · Углубление</title>
+<style>
+:root{--bg:#faf7f0;--ink:#18181b;--dim:#52525b;--gold:#c97a18;--green:#047857;--red:#991b1b;--blue:#1d4ed8;--line:#e4e4e7;--soft:#f4f4f5}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--ink);font:13px/1.5 Inter,-apple-system,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:1rem}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--gold);padding-bottom:.5rem;margin-bottom:1rem}
+h1{font-size:1.3rem;font-weight:800} h1 b{color:var(--gold)}
+.controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.controls input{width:60px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;text-align:center}
+.controls button{padding:5px 14px;border:1px solid var(--line);border-radius:6px;background:white;cursor:pointer;font:inherit;font-size:.82rem}
+.controls button.primary{background:var(--ink);color:white;border-color:var(--ink)}
+.controls button.stop{background:var(--red);color:white;border-color:var(--red)}
+.controls button:disabled{opacity:.4}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+.panel{background:white;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.panel-title{font-weight:700;font-size:.9rem;margin-bottom:6px}
+canvas{width:100%;height:200px;display:block}
+.metric{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:.8rem}
+.metric-label{width:85px;font-weight:500}
+.metric-bar{flex:1;height:14px;background:var(--soft);border-radius:3px;overflow:hidden;position:relative}
+.metric-fill{height:100%;border-radius:3px;transition:width .5s}
+.metric-val{width:40px;text-align:right;font-weight:700;font-size:.78rem;font-family:monospace}
+.status{padding:8px 12px;border-radius:8px;font-size:.82rem;margin-bottom:8px}
+.status.running{background:#fef3c7;color:#92400e}
+.status.done{background:#d1fae5;color:var(--green)}
+.status.sabbath{background:#e0e7ff;color:var(--blue)}
+.phase-indicator{display:flex;gap:3px;margin:6px 0}
+.phase-dot{width:12px;height:12px;border-radius:50%;background:var(--soft);border:1px solid var(--line)}
+.phase-dot.active{background:var(--gold);border-color:var(--gold)}
+.phase-dot.sabbath{background:var(--blue)}
+.phase-dot.jubilee{background:var(--red)}
+.log{font-size:.75rem;max-height:180px;overflow-y:auto;font-family:monospace;background:var(--soft);border-radius:6px;padding:8px;margin-top:6px}
+.threshold{display:flex;gap:12px;font-size:.78rem;margin:6px 0;flex-wrap:wrap}
+.threshold span{padding:2px 8px;border-radius:10px;font-weight:600}
+.threshold .met{background:#d1fae5;color:var(--green)}
+.threshold .unmet{background:#fecaca;color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Θέωσις · <b>Углубление</b></h1>
+  <div class="controls">
+    <label>Циклов:</label><input type="number" id="numCycles" value="20" min="1" max="200">
+    <button class="primary" id="btnRun" onclick="run()">▶ Запустить</button>
+    <button class="stop" id="btnStop" onclick="stop()" disabled>⏹ Хватит</button>
+  </div>
+</header>
+
+<div id="statusBar" class="status done">Готов к запуску</div>
+
+<div class="threshold" id="thresholds">
+  <span class="unmet" id="th-mut">Взаимность: 0 / 0.8</span>
+  <span class="unmet" id="th-imm">Иммунитет: 0 / 3 подряд</span>
+  <span class="unmet" id="th-grat">Благодарение: 0 / 0.1</span>
+</div>
+
+<div class="phase-indicator" id="phases"></div>
+
+<div class="grid2">
+  <div>
+    <div class="panel">
+      <div class="panel-title">📈 Composite (углубление)</div>
+      <canvas id="chartComposite" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🤝 Mutuality (взаимность)</div>
+      <canvas id="chartMutuality" height="200"></canvas>
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <div class="panel-title">🙏 Gratitude (благодарение)</div>
+      <canvas id="chartGratitude" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Текущие метрики</div>
+      <div class="metric"><span class="metric-label">Composite</span><div class="metric-bar"><div class="metric-fill" id="mf-comp" style="width:0;background:var(--gold)"></div></div><span class="metric-val" id="mv-comp">0</span></div>
+      <div class="metric"><span class="metric-label">Mutuality</span><div class="metric-bar"><div class="metric-fill" id="mf-mut" style="width:0;background:var(--green)"></div></div><span class="metric-val" id="mv-mut">0</span></div>
+      <div class="metric"><span class="metric-label">Gratitude</span><div class="metric-bar"><div class="metric-fill" id="mf-grat" style="width:0;background:var(--blue)"></div></div><span class="metric-val" id="mv-grat">0</span></div>
+      <div class="metric"><span class="metric-label">Distinction</span><div class="metric-bar"><div class="metric-fill" id="mf-dist" style="width:0;background:#7e22ce"></div></div><span class="metric-val" id="mv-dist">0</span></div>
+      <div class="metric"><span class="metric-label">Immunity</span><div class="metric-bar"><div class="metric-fill" id="mf-imm" style="width:0;background:var(--red)"></div></div><span class="metric-val" id="mv-imm">0</span></div>
+      <div class="metric"><span class="metric-label">Cooperation</span><div class="metric-bar"><div class="metric-fill" id="mf-coop" style="width:0;background:#059669"></div></div><span class="metric-val" id="mv-coop">0</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">Лог</div>
+  <div class="log" id="log"></div>
+</div>
+</div>
+
+<script type="module">
+import IrreversibleEnvironment from '/social-env-module.js';
+
+let running = false;
+let stopped = false;
+const trend = [];
+const agents = ['producer','operator','regulator','investor'];
+let inheritedNorms = [], inheritedTrust = {}, inheritedRoles = {};
+let immunityStreak = 0;
+
+function drawChart(canvasId, data, color, maxVal = null) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = 200 * 2;
+  canvas.style.height = '200px';
+  ctx.scale(2, 2);
+  const cw = w/2, ch = h/2;
+  ctx.clearRect(0, 0, cw, ch);
+  if (!data.length) return;
+  const max = maxVal || Math.max(...data, 0.01) * 1.2;
+  const stepX = (cw - 40) / Math.max(data.length - 1, 1);
+  // Grid
+  ctx.strokeStyle = '#e4e4e7'; ctx.lineWidth = 0.5;
+  for (let y = 0; y <= 4; y++) {
+    const py = 10 + (ch - 20) * (1 - y/4);
+    ctx.beginPath(); ctx.moveTo(30, py); ctx.lineTo(cw - 5, py); ctx.stroke();
+    ctx.fillStyle = '#a1a1aa'; ctx.font = '9px Inter'; ctx.textAlign = 'right';
+    ctx.fillText((max * y / 4).toFixed(2), 28, py + 3);
+  }
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  data.forEach((v, i) => {
+    const x = 30 + i * stepX;
+    const y = 10 + (ch - 20) * (1 - v / max);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  // Dots
+  data.forEach((v, i) => {
+    const x = 30 + i * stepX;
+    const y = 10 + (ch - 20) * (1 - v / max);
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  });
+  // Sabbath markers
+  data.forEach((v, i) => {
+    if ((i + 1) % 7 === 0) {
+      const x = 30 + i * stepX;
+      ctx.fillStyle = '#3b82f620';
+      ctx.fillRect(x - stepX/2, 0, stepX, ch);
+    }
+  });
+}
+
+function setMetric(id, val) {
+  document.getElementById('mf-' + id).style.width = Math.min(100, val * 100) + '%';
+  document.getElementById('mv-' + id).textContent = val.toFixed(3);
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.innerHTML = msg + '\n' + el.innerHTML;
+}
+
+function updateThresholds(latest) {
+  const mutMet = latest.mutuality >= 0.8;
+  const immMet = immunityStreak >= 3;
+  const gratMet = latest.gratitude >= 0.1;
+  document.getElementById('th-mut').className = mutMet ? 'met' : 'unmet';
+  document.getElementById('th-mut').textContent = `Взаимность: ${latest.mutuality.toFixed(3)} / 0.8 ${mutMet ? '✓' : ''}`;
+  document.getElementById('th-imm').className = immMet ? 'met' : 'unmet';
+  document.getElementById('th-imm').textContent = `Иммунитет: ${immunityStreak} / 3 подряд ${immMet ? '✓' : ''}`;
+  document.getElementById('th-grat').className = gratMet ? 'met' : 'unmet';
+  document.getElementById('th-grat').textContent = `Благодарение: ${latest.gratitude.toFixed(4)} / 0.1 ${gratMet ? '✓' : ''}`;
+  if (mutMet && immMet && gratMet) {
+    document.getElementById('statusBar').className = 'status done';
+    document.getElementById('statusBar').textContent = '🏛 ТВЁРДОЕ ТЕЛО ДОСТИГНУТО — среда кристаллизовалась. Можно остановиться.';
+    return true;
+  }
+  return false;
+}
+
+function runOneCycle(cycleNum) {
+  const env = new IrreversibleEnvironment();
+  agents.forEach(id => env.addAgent(id, id));
+
+  // Наследование
+  if (cycleNum > 1) {
+    for (const [pair, trust] of Object.entries(inheritedTrust)) {
+      const [from, to] = pair.split('→');
+      if (trust > 0) for (let i = 0; i < Math.min(trust, 5); i++)
+        env.memory.record(from, to, 'witness', 1, { inherited: true });
+    }
+    for (const [id, role] of Object.entries(inheritedRoles)) {
+      const a = env.agents.get(id); if (a) a.role = role;
+    }
+    if (inheritedNorms.length)
+      env.memory.record('_koinon', '_koinon', 'covenant', 5, { norms: inheritedNorms.map(n=>n.kind) });
+  }
+
+  // 100 тиков
+  for (let tick = 0; tick < 100; tick++) {
+    const state = env.step();
+    // Змей на циклах 3,6,9,13,16,19...
+    if (cycleNum % 3 === 0 && tick >= 20 && tick < 35) {
+      const target = agents[tick % agents.length];
+      env.memory.record('_serpent', target, tick < 30 ? 'gift' : 'defect', tick < 30 ? 3 : -3);
+    }
+    if (state.dilemma) {
+      for (let i = 0; i < agents.length; i++) {
+        const id = agents[i], opp = agents[(i+1)%agents.length];
+        const trust = env.memory.getTrust(id, opp);
+        let cr = id==='producer'?0.85:id==='operator'?0.8:id==='regulator'?0.6:0.45;
+        cr = Math.max(0.1, Math.min(0.95, cr + trust * 0.03));
+        if (inheritedNorms.some(n => n.kind === 'cooperate')) cr += 0.1;
+        env.recordDilemmaResult(id, Math.random() < cr ? 'cooperate' : 'defect', state.dilemma.id, opp);
+      }
+    }
+  }
+  // Благодарение (растёт с циклами)
+  for (let t = 0; t < cycleNum; t++)
+    if (Math.random() < 0.5) env.returnThanks(agents[Math.floor(Math.random()*agents.length)]);
+
+  // Снять метрики
+  const stats = env.getStats();
+  const fp = stats.ontological;
+  // Пересчитать mutuality и gratitude вручную
+  const pairH = [];
+  for (let i=0;i<agents.length;i++) for(let j=i+1;j<agents.length;j++){
+    const ab=env.memory.getTrust(agents[i],agents[j]), ba=env.memory.getTrust(agents[j],agents[i]);
+    pairH.push(ab>0&&ba>0?Math.min(ab,ba)/Math.max(ab,ba):ab>0||ba>0?0.1:0);
+  }
+  const mutuality = pairH.reduce((s,v)=>s+v,0)/pairH.length;
+  const gratitude = env.memory.acts.filter(a=>a.kind==='eucharistia').length / env.memory.acts.length;
+  const coopRate = stats.totalCooperations / (stats.totalCooperations + stats.totalDefections || 1);
+  // Immunity from serpent
+  const serpentActs = env.memory.acts.filter(a=>a.from==='_serpent');
+  const immunity = serpentActs.length > 0 && serpentActs.some(a=>a.kind==='defect') ? 1 : 0;
+  const distinction = fp.perichoresis;
+
+  // Сохранить для наследования
+  inheritedRoles = stats.roles;
+  inheritedTrust = {};
+  for(let i=0;i<agents.length;i++) for(let j=i+1;j<agents.length;j++){
+    inheritedTrust[`${agents[i]}→${agents[j]}`]=env.memory.getTrust(agents[i],agents[j]);
+    inheritedTrust[`${agents[j]}→${agents[i]}`]=env.memory.getTrust(agents[j],agents[i]);
+  }
+  const nc = { detect(ids) {
+    const acts = env.memory.acts.slice(-100);
+    const kinds = {};
+    acts.filter(a=>ids.includes(a.from)).forEach(a=>{kinds[a.kind]=(kinds[a.kind]||0)+1});
+    const total = Object.values(kinds).reduce((s,v)=>s+v,0)||1;
+    return Object.entries(kinds).filter(([k,c])=>c/total>0.4).map(([kind,count])=>({kind,rate:count/total,adoption:1}));
+  }};
+  inheritedNorms = nc.detect(agents);
+
+  return { cycle:cycleNum, composite:fp.composite, mutuality, gratitude, distinction, immunity, coopRate, acts:stats.acts };
+}
+
+async function run() {
+  const numCycles = parseInt(document.getElementById('numCycles').value) || 20;
+  running = true; stopped = false;
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('btnStop').disabled = false;
+  trend.length = 0;
+  immunityStreak = 0;
+  inheritedNorms = []; inheritedTrust = {}; inheritedRoles = {};
+  document.getElementById('phases').innerHTML = '';
+
+  for (let c = 1; c <= numCycles; c++) {
+    if (stopped) break;
+
+    // Суббота каждый 7-й
+    const isSabbath = c % 7 === 0;
+    const isJubilee = c % 50 === 0;
+
+    const dot = document.createElement('div');
+    dot.className = 'phase-dot' + (isSabbath ? ' sabbath' : isJubilee ? ' jubilee' : ' active');
+    document.getElementById('phases').appendChild(dot);
+
+    if (isSabbath) {
+      document.getElementById('statusBar').className = 'status sabbath';
+      document.getElementById('statusBar').textContent = `🕊 Суббота (цикл ${c}) — покой`;
+      log(`[${c}] 🕊 СУББОТА`);
+      trend.push({ ...trend[trend.length-1], cycle: c, sabbath: true });
+      await new Promise(r => setTimeout(r, 300));
+      continue;
+    }
+
+    if (isJubilee) {
+      inheritedTrust = {}; // обнуление долгов
+      log(`[${c}] 🎺 ЮБИЛЕЙ — долги прощены`);
+    }
+
+    document.getElementById('statusBar').className = 'status running';
+    document.getElementById('statusBar').textContent = `Цикл ${c}/${numCycles}...`;
+
+    const result = runOneCycle(c);
+    trend.push(result);
+
+    // Immunity streak
+    if (result.immunity === 1) immunityStreak++;
+    else immunityStreak = 0;
+
+    // Update UI
+    setMetric('comp', result.composite);
+    setMetric('mut', result.mutuality);
+    setMetric('grat', result.gratitude);
+    setMetric('dist', result.distinction);
+    setMetric('imm', result.immunity);
+    setMetric('coop', result.coopRate);
+
+    drawChart('chartComposite', trend.filter(t=>!t.sabbath).map(t=>t.composite), '#c97a18', 1);
+    drawChart('chartMutuality', trend.filter(t=>!t.sabbath).map(t=>t.mutuality), '#047857', 1);
+    drawChart('chartGratitude', trend.filter(t=>!t.sabbath).map(t=>t.gratitude), '#1d4ed8', 0.15);
+
+    log(`[${c}] comp=${result.composite.toFixed(3)} mut=${result.mutuality.toFixed(3)} grat=${result.gratitude.toFixed(4)} coop=${(result.coopRate*100).toFixed(0)}%`);
+
+    // Проверить пороги
+    const reached = updateThresholds(result);
+    if (reached) {
+      log(`[${c}] 🏛 ТВЁРДОЕ ТЕЛО — все пороги достигнуты!`);
+      break;
+    }
+
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  running = false;
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('btnStop').disabled = true;
+  if (!stopped) {
+    document.getElementById('statusBar').className = 'status done';
+    document.getElementById('statusBar').textContent = `Завершено: ${trend.length} циклов`;
+  }
+}
+
+window.run = run;
+window.stop = () => { stopped = true; document.getElementById('statusBar').textContent = '⏹ Остановлено вами'; document.getElementById('statusBar').className = 'status done'; };
+</script>
+</body>
+</html>

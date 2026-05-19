@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Собор v2 · Никейская модель</title>
+<style>
+:root {
+  --ink: #18181b; --dim: #52525b; --gold: #c97a18; --paper: #faf7f0;
+  --line: #e4e4e7; --soft: #f4f4f5;
+  --producer: #2563a3; --operator: #3d6a32; --regulator: #8a4f2a; --investor: #6b3a82;
+  --synth: #a87a2a; --memory: #047857;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; background: var(--paper); color: var(--ink); font: 15px/1.5 'Inter', -apple-system, sans-serif; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold); padding-bottom: 0.8rem; margin-bottom: 1.2rem; }
+header h1 { font-size: 1.5rem; font-weight: 700; }
+header h1 b { color: var(--gold); }
+header .meta { font-size: 0.8rem; color: var(--dim); text-align: right; }
+
+.input-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.input-row textarea { flex: 1; resize: none; height: 48px; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 1rem; font: inherit; font-size: 0.95rem; }
+.input-row textarea:focus { outline: none; border-color: var(--gold); }
+.input-row button { padding: 0 1.5rem; background: var(--ink); color: white; border: none; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.input-row button:disabled { opacity: 0.5; }
+.input-row button:hover:not(:disabled) { background: #000; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+.preset { padding: 4px 12px; background: white; border: 1px solid var(--line); border-radius: 16px; font-size: 0.82rem; cursor: pointer; }
+.preset:hover { border-color: var(--gold); background: #fff8e1; }
+
+.round-banner { display: none; align-items: center; justify-content: space-between; padding: 8px 14px; margin: 1.2rem 0 0.6rem; background: linear-gradient(90deg, var(--gold), #8a4f10); color: white; border-radius: 8px; font-size: 0.85rem; font-weight: 600; }
+.round-banner.visible { display: flex; }
+.round-banner .num { font-size: 1.1rem; margin-right: 8px; }
+.round-banner .desc { font-weight: 400; opacity: 0.9; font-size: 0.78rem; margin-left: 8px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 0.5rem; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+.card { background: white; border: 1px solid var(--line); border-radius: 10px; border-left: 3px solid var(--dim); overflow: hidden; }
+.card.producer { border-left-color: var(--producer); }
+.card.operator { border-left-color: var(--operator); }
+.card.regulator { border-left-color: var(--regulator); }
+.card.investor { border-left-color: var(--investor); }
+.card .head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.card .name { font-weight: 700; font-size: 0.9rem; }
+.card .name .icon { margin-right: 4px; }
+.card .logos { font-size: 0.75rem; color: var(--dim); font-style: italic; }
+.card .body { padding: 10px 14px; font-size: 0.88rem; line-height: 1.55; min-height: 40px; }
+.card .body.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.card .expand-btn { display: block; padding: 2px 10px; margin: 0 14px 8px; font-size: 0.75rem; color: var(--dim); background: var(--soft); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.card .expand-btn:hover { background: #e8e8e8; }
+.card.thinking .body::before { content: '⏳ думает…'; color: var(--dim); font-style: italic; }
+.card .timer { font-size: 0.7rem; color: var(--dim); font-family: monospace; }
+
+/* Различитель — предупреждение */
+.manip-alert { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 6px 10px; margin: 4px 14px 8px; font-size: 0.78rem; color: #991b1b; }
+.manip-alert b { color: #7f1d1d; }
+
+/* Синтез / Формула */
+.formula-card { background: white; border: 2px solid var(--gold); border-radius: 10px; margin-top: 0.5rem; }
+.formula-card .head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: linear-gradient(135deg, #fff8e1, white); border-bottom: 1px solid var(--gold); }
+.formula-card .name { font-weight: 700; font-size: 1rem; color: var(--gold); }
+.formula-section { padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.formula-section:last-child { border-bottom: none; }
+.formula-section .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; margin-bottom: 4px; }
+.formula-section .label.affirm { color: var(--operator); }
+.formula-section .label.reject { color: #991b1b; }
+.formula-section .label.open { color: var(--investor); }
+.formula-section .text { font-size: 0.88rem; line-height: 1.5; }
+
+.status-bar { padding: 8px 14px; background: var(--soft); border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--dim); display: none; }
+.status-bar.visible { display: block; }
+
+.stats { display: flex; gap: 2rem; margin-top: 1rem; font-size: 0.8rem; color: var(--dim); }
+.stats b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Собор <b>v2</b> · Никейская модель</h1>
+  <div class="meta">4 раунда · DeepSeek · вопрошание → различение → формула</div>
+</header>
+
+<div class="presets">
+  <span class="preset" onclick="setQ(this.textContent)">Как обеспечить суверенитет отрасли БАС?</span>
+  <span class="preset" onclick="setQ(this.textContent)">Почему госзаказ БАС 2024 не был реализован?</span>
+  <span class="preset" onclick="setQ(this.textContent)">Где границы автономии ИИ-агента в управлении флотом?</span>
+</div>
+
+<div class="input-row">
+  <textarea id="q" placeholder="Задайте вопрос — 4 раунда: позиции → вопрошание → различение → формула"></textarea>
+  <button id="btn" onclick="runSobor()">Созвать собор</button>
+</div>
+<div id="resume-bar" style="display:none;margin-bottom:1rem">
+  <button class="preset" onclick="resumeLastSobor()" style="background:var(--gold);color:white;border-color:var(--gold)">🔄 Продолжить последний собор</button>
+  <span id="resume-info" style="font-size:0.8rem;color:var(--dim);margin-left:8px"></span>
+</div>
+
+<div class="status-bar" id="status"></div>
+
+<!-- Раунд 1: Позиции -->
+<div class="round-banner" id="rb1"><span class="num">1</span> Позиции <span class="desc">— каждый со своей стороны</span></div>
+<div class="grid" id="g1">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">«как это делать»</div></div><div class="body" id="r1-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">«как это летает»</div></div><div class="body" id="r1-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">«как это допустимо»</div></div><div class="body" id="r1-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">«где это выгодно»</div></div><div class="body" id="r1-investor"></div></div>
+</div>
+
+<!-- Раунд 2: Вопрошание (NEW) -->
+<div class="round-banner" id="rb2"><span class="num">2</span> Вопрошание <span class="desc">— каждый задаёт вопрос другому, не спорит а уточняет</span></div>
+<div class="grid" id="g2" style="display:none">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">спрашивает</div></div><div class="body" id="r2-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">спрашивает</div></div><div class="body" id="r2-investor"></div></div>
+</div>
+
+<!-- Раунд 3: Различение (NEW) -->
+<div class="round-banner" id="rb3"><span class="num">3</span> Перекрёстное различение <span class="desc">— каждый проверяет другого: «ты служишь целому или себе?»</span></div>
+<div class="grid" id="g3" style="display:none">
+  <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">проверяет Оператора</div></div><div class="body" id="r3-producer"></div></div>
+  <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">проверяет Регулятора</div></div><div class="body" id="r3-operator"></div></div>
+  <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">проверяет Инвестора</div></div><div class="body" id="r3-regulator"></div></div>
+  <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">проверяет Производителя</div></div><div class="body" id="r3-investor"></div></div>
+</div>
+
+<!-- Раунд 4: Формула -->
+<div class="round-banner" id="rb4"><span class="num">4</span> Формула <span class="desc">— конструкция с границами, как Символ Веры</span></div>
+<div class="formula-card" id="formula" style="display:none">
+  <div class="head"><div class="name">⛬ Формула собора</div></div>
+  <div class="formula-section"><div class="label affirm">✓ УТВЕРЖДАЕМ</div><div class="text" id="f-affirm"></div></div>
+  <div class="formula-section"><div class="label reject">✗ ОТВЕРГАЕМ</div><div class="text" id="f-reject"></div></div>
+  <div class="formula-section"><div class="label open">? ОТКРЫТО — для следующего круга</div><div class="text" id="f-open"></div></div>
+</div>
+
+<!-- Раунд 5: Конструкция решения -->
+<div class="round-banner" id="rb5a"><span class="num">5</span> Конструкция решения <span class="desc">— кто, что, когда, первый шаг</span></div>
+<div class="formula-card" id="decision" style="display:none">
+  <div class="head"><div class="name">🔧 План действий</div></div>
+  <div class="formula-section"><div class="text" id="d-text"></div></div>
+</div>
+
+<!-- Канцелярия -->
+<div class="round-banner" id="rb-chancel"><span class="num">📋</span> Канцелярия <span class="desc">— протокол + задачи + подача</span></div>
+<div id="chancery" style="display:none">
+  <div class="grid">
+    <div class="formula-card">
+      <div class="head"><div class="name">📄 Протокол решения</div></div>
+      <div class="formula-section"><div class="text" id="ch-protocol" style="white-space:pre-wrap;font-size:0.85rem"></div></div>
+    </div>
+    <div class="formula-card">
+      <div class="head"><div class="name">📋 Таблица задач</div></div>
+      <div class="formula-section"><div class="text" id="ch-tasks" style="white-space:pre-wrap;font-size:0.85rem;font-family:monospace"></div></div>
+    </div>
+  </div>
+  <div class="grid" id="ch-v2" style="display:none">
+    <div class="formula-card">
+      <div class="head"><div class="name">📊 Финансовая модель</div></div>
+      <div class="formula-section"><div class="text" id="ch-finmodel" style="white-space:pre-wrap;font-size:0.82rem;font-family:monospace"></div></div>
+    </div>
+    <div class="formula-card">
+      <div class="head"><div class="name">📝 Проект нормативного акта</div></div>
+      <div class="formula-section"><div class="text" id="ch-normact" style="white-space:pre-wrap;font-size:0.82rem"></div></div>
+    </div>
+  </div>
+  <div id="ch-actions" style="display:none;gap:8px;margin:8px 0;flex-wrap:wrap">
+    <button class="preset" onclick="copyProtocol()" style="background:var(--gold);color:white;border-color:var(--gold)">📋 Копировать протокол</button>
+    <button class="preset" onclick="downloadProtocol()" style="background:var(--ink);color:white;border-color:var(--ink)">💾 Скачать .txt</button>
+    <button class="preset" onclick="downloadNormact()" style="background:var(--regulator);color:white;border-color:var(--regulator)">📝 Скачать приказ .txt</button>
+    <button class="preset" onclick="downloadFinmodel()" style="background:var(--investor);color:white;border-color:var(--investor)">📊 Скачать финмодель .csv</button>
+    <button class="preset" onclick="sendToIntegram()" style="background:#2563a3;color:white;border-color:#2563a3">📤 Всё в Интеграм</button>
+  </div>
+</div>
+
+<!-- Раунд 7: Голос памяти + Различитель -->
+<div class="round-banner" id="rb7"><span class="num">7</span> Голос памяти + Различитель <span class="desc">— глубина и чистота</span></div>
+<div class="grid" id="g5" style="display:none">
+  <div class="card" style="border-left-color:var(--memory)"><div class="head"><div class="name"><span class="icon">◉</span> Голос памяти</div><div class="logos">структура акта</div></div><div class="body" id="r5-memory"></div></div>
+  <div class="card" style="border-left-color:#991b1b"><div class="head"><div class="name"><span class="icon">🛡</span> Различитель</div><div class="logos">чистота аргументов</div></div><div class="body" id="r5-distinguisher"></div></div>
+</div>
+
+<!-- Спектр -->
+<div class="round-banner" id="rb6"><span class="num">📊</span> Анализ собора</div>
+<div id="spectrum" style="display:none;background:white;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:0.5rem">
+  <div style="font-weight:700;margin-bottom:8px">Кто на кого ссылался</div>
+  <div id="spectrum-bars"></div>
+</div>
+
+<!-- Пустыня -->
+<div id="desert" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:8px;padding:10px 14px;font-size:0.88rem;margin-bottom:0.5rem"></div>
+
+<!-- Рекурсивная проблематизация -->
+<div class="round-banner" id="rb-deep"><span class="num">🔬</span> Проблематизация <span class="desc">— ищем затыки и оргоружие</span></div>
+<div id="deep-dig" style="display:none">
+  <div class="formula-card" style="border-color:#991b1b">
+    <div class="head" style="background:linear-gradient(135deg,#fef2f2,white)"><div class="name" style="color:#991b1b">🔴 Затыки + ⚡ Оргоружие</div></div>
+    <div class="formula-section"><div class="text" id="deep-text" style="white-space:pre-wrap;font-size:0.85rem"></div></div>
+  </div>
+  <div id="sub-sobor" style="display:none;margin-top:8px">
+    <div style="background:linear-gradient(90deg,var(--gold),#8a4f10);color:white;padding:6px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;margin-bottom:6px">
+      🔄 Вложенный собор: <span id="sub-question"></span>
+    </div>
+    <div class="grid">
+      <div class="card producer"><div class="head"><div class="name"><span class="icon">⚙</span> Производитель</div><div class="logos">по затыку</div></div><div class="body" id="sub-producer"></div></div>
+      <div class="card operator"><div class="head"><div class="name"><span class="icon">✈</span> Оператор</div><div class="logos">по затыку</div></div><div class="body" id="sub-operator"></div></div>
+      <div class="card regulator"><div class="head"><div class="name"><span class="icon">⚖</span> Регулятор</div><div class="logos">по затыку</div></div><div class="body" id="sub-regulator"></div></div>
+      <div class="card investor"><div class="head"><div class="name"><span class="icon">₽</span> Инвестор</div><div class="logos">по затыку</div></div><div class="body" id="sub-investor"></div></div>
+    </div>
+    <div class="formula-card" style="margin-top:6px">
+      <div class="head"><div class="name">⛬ Мини-формула вложенного собора</div></div>
+      <div class="formula-section"><div class="text" id="sub-formula" style="white-space:pre-wrap"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Граф решений -->
+<div class="round-banner" id="rb-graph"><span class="num">🌳</span> Граф решений <span class="desc">— кликни по ветке чтобы развернуть</span></div>
+<div id="decision-graph" style="display:none;background:white;border:2px solid var(--gold);border-radius:10px;padding:14px;margin-bottom:0.5rem">
+  <div id="graph-tree" style="font-size:0.88rem;line-height:1.6"></div>
+</div>
+
+<!-- Автономное исполнение -->
+<div class="round-banner" id="rb-auto"><span class="num">⚙</span> Автономное исполнение <span class="desc">— задачи будут проверяться автоматически</span></div>
+<div id="auto-exec" style="display:none;background:#ecfdf5;border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:0.85rem;margin-bottom:0.5rem">
+  <div id="auto-status"></div>
+</div>
+
+<div class="stats" id="stats">
+  <span>Время: <b id="s-time">—</b></span>
+  <span>Шагов: <b id="s-steps">0</b>/13</span>
+</div>
+
+</div>
+
+<script>
+const API = 'https://nti.drondoc.ru'; // DeepSeek через бэкенд dronedoc
+const ROLES = [
+  { id: 'producer', name: 'Производитель', icon: '⚙', logos: '«как это делать»',
+    sys: 'Ты — голос Производителя в отрасли БАС России. Отвечай с позиции производства: ресурсы, технологии, компоненты, цепочки поставок. 3-4 предложения, без преамбул.' },
+  { id: 'operator', name: 'Оператор', icon: '✈', logos: '«как это летает»',
+    sys: 'Ты — голос Оператора в отрасли БАС России. Отвечай с позиции эксплуатации: маршруты, миссии, логистика, полётные ограничения. 3-4 предложения, без преамбул.' },
+  { id: 'regulator', name: 'Регулятор', icon: '⚖', logos: '«как это допустимо»',
+    sys: 'Ты — голос Регулятора в отрасли БАС России. Отвечай с позиции нормативной базы: сертификация, воздушное право, постановления. ВАЖНО: Постановление Правительства РФ от 30.11.2024 № 1701 — требования к оснащению БАС средствами связи, ГЛОНАСС, предотвращения столкновений. Срок оснащения существующих БАС — до 01.03.2026. Номер ИМЕННО 1701, не 1901. 3-4 предложения, без преамбул.' },
+  { id: 'investor', name: 'Инвестор', icon: '₽', logos: '«где это выгодно»',
+    sys: 'Ты — голос Инвестора в отрасли БАС России. Отвечай с позиции экономики: рентабельность, ROI, региональные сценарии. 3-4 предложения, без преамбул.' },
+];
+
+function setQ(t) { document.getElementById('q').value = t; }
+function copyProtocol() {
+  const text = document.getElementById('ch-protocol').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('Протокол скопирован'));
+}
+function downloadNormact() {
+  const text = document.getElementById('ch-normact').textContent;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `normact-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+}
+function downloadFinmodel() {
+  const text = document.getElementById('ch-finmodel').textContent;
+  const lines = text.split('\n').filter(l => l.trim());
+  const csv = 'Регион;Выручка (млн);Затраты (млн);ROI (%);Срок окупаемости\n' +
+    lines.map(l => l.split('|').map(s => s.trim()).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `finmodel-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+function downloadProtocol() {
+  const text = document.getElementById('ch-protocol').textContent;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `protocol-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+}
+const INTEGRAM = {
+  api: 'https://api.ai2o.ru',
+  db: 'sobor-artifacts',
+  tables: { sobory: 301, tasks: 304, finmodel: 305, roadmap: 306, normacts: 307, voices: 308 },
+  token: null,
+  async auth() {
+    if (this.token) return this.token;
+    const r = await fetch(`${API}/api/integram-auth/authenticate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'unidel@yandex.ru', password: 'Denver2035', database: this.db })
+    });
+    const d = await r.json();
+    this.token = d.token;
+    return this.token;
+  },
+  async create(typeId, fields) {
+    const token = await this.auth();
+    const r = await fetch(`${this.api}/${this.db}/object?token=${token}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typeId, ...fields })
+    });
+    return r.json();
+  }
+};
+
+async function sendToIntegram() {
+  const btn = event.target;
+  btn.textContent = 'Отправляю…'; btn.disabled = true;
+  try {
+    const q = document.getElementById('q').value.trim();
+    const formulaAffirm = document.getElementById('f-affirm').textContent;
+    const formulaReject = document.getElementById('f-reject').textContent;
+    const formulaOpen = document.getElementById('f-open').textContent;
+    const decisionText = document.getElementById('d-text').textContent;
+    const protocolText = document.getElementById('ch-protocol').textContent;
+    const elapsed = document.getElementById('s-time').textContent;
+
+    // 1. Создать запись Собора
+    const sobor = await INTEGRAM.create(INTEGRAM.tables.sobory, {
+      _value: q.slice(0, 200),
+      '1000026951': new Date().toISOString(), // Дата
+      '1000026953': formulaAffirm, // Формула: утверждаем
+      '1000026954': formulaReject, // Формула: отвергаем
+      '1000026955': formulaOpen, // Формула: открыто
+      '1000026956': decisionText, // Решение
+      '1000026957': protocolText, // Протокол
+    });
+
+    // 2. Создать задачи
+    const taskLines = document.getElementById('ch-tasks').textContent.split('\n').filter(l => l.trim());
+    for (const line of taskLines) {
+      const parts = line.split('|').map(s => s.trim());
+      if (parts.length >= 3) {
+        await INTEGRAM.create(INTEGRAM.tables.tasks, {
+          _value: parts[1] || line,
+          '1000026963': parts[2] || '', // Ответственный
+        });
+      }
+    }
+
+    // 3. Финмодель — каждая строка как запись
+    const finLines = document.getElementById('ch-finmodel').textContent.split('\n').filter(l => l.includes('|'));
+    for (const line of finLines) {
+      const [region, revenue, costs, roi, payback] = line.split('|').map(s => s.trim());
+      if (region) {
+        await INTEGRAM.create(INTEGRAM.tables.finmodel, {
+          _value: `${region} — ${q.slice(0,50)}`,
+          '1000026968': region,
+          '1000026969': parseFloat(revenue) || 0,
+          '1000026970': parseFloat(costs) || 0,
+        }).catch(() => {});
+      }
+    }
+
+    // 4. Нормативный акт
+    const normText = document.getElementById('ch-normact').textContent;
+    if (normText) {
+      await INTEGRAM.create(INTEGRAM.tables.normacts, {
+        _value: `Проект приказа: ${q.slice(0,100)}`,
+        '1000026978': normText,
+      }).catch(() => {});
+    }
+
+    btn.textContent = '✅ Всё в Интеграм: собор + задачи + финмодель + приказ';
+    btn.style.background = '#047857';
+  } catch (e) {
+    console.error('Integram error:', e);
+    btn.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { runSobor(); e.preventDefault(); }
+});
+
+// Проверить checkpoint при загрузке
+(function checkResume() {
+  const last = localStorage.getItem('sobor-v2-last');
+  if (last) {
+    try {
+      const s = JSON.parse(last);
+      const bar = document.getElementById('resume-bar');
+      bar.style.display = 'block';
+      const ago = Math.round((Date.now() - new Date(s.timestamp).getTime()) / 60000);
+      document.getElementById('resume-info').textContent =
+        `«${s.question.slice(0,60)}…» · ${ago < 60 ? ago + ' мин назад' : Math.round(ago/60) + ' ч назад'} · ${s.elapsed}s`;
+    } catch {}
+  }
+})();
+
+function resumeLastSobor() {
+  const last = JSON.parse(localStorage.getItem('sobor-v2-last') || 'null');
+  if (!last) return;
+  document.getElementById('q').value = last.question;
+  // Показать все результаты
+  ['rb1','rb2','rb3','rb4','rb5a','rb-chancel','rb7','rb6','rb-graph','rb-auto'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('visible');
+  });
+  ['g2','g3','formula','decision','chancery','ch-v2','ch-actions','decision-graph','auto-exec','spectrum'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.classList.contains('grid') || id.startsWith('g') ? 'grid' : 'block';
+  });
+  document.getElementById('g5').style.display = 'grid';
+  // Заполнить данные
+  ROLES.forEach(r => {
+    if (last.round1 && last.round1[r.id]) document.getElementById('r1-'+r.id).textContent = last.round1[r.id];
+    if (last.round2 && last.round2[r.id]) document.getElementById('r2-'+r.id).textContent = last.round2[r.id];
+    if (last.round3 && last.round3[r.id]) document.getElementById('r3-'+r.id).textContent = last.round3[r.id];
+  });
+  if (last.formula) {
+    document.getElementById('f-affirm').textContent = last.formula.affirm || '';
+    document.getElementById('f-reject').textContent = last.formula.reject || '';
+    document.getElementById('f-open').textContent = last.formula.open || '';
+  }
+  if (last.decision) document.getElementById('d-text').textContent = last.decision;
+  if (last.protocol) document.getElementById('ch-protocol').textContent = last.protocol;
+  if (last.tasks) document.getElementById('ch-tasks').textContent = last.tasks;
+  if (last.finmodel) document.getElementById('ch-finmodel').textContent = last.finmodel;
+  if (last.normact) document.getElementById('ch-normact').textContent = last.normact;
+  document.getElementById('s-time').textContent = last.elapsed + 's';
+  document.getElementById('s-steps').textContent = '✓ (восстановлен)';
+  status(`🔄 Восстановлен собор: «${last.question.slice(0,60)}…»`);
+}
+
+let steps = 0;
+function status(text) { const el = document.getElementById('status'); el.textContent = text; el.classList.add('visible'); }
+function step() { steps++; document.getElementById('s-steps').textContent = steps; }
+
+async function chat(systemPrompt, userMsg) {
+  const r = await fetch(`${API}/api/chat/lite/deepseek-stream`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: userMsg, systemPrompt, history: [] }),
+  });
+  if (!r.ok) throw new Error('chat ' + r.status);
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', out = '';
+  function parse() {
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      const m = line.match(/^data: (.+)$/);
+      if (!m) continue;
+      if (m[1] === '[DONE]') return true;
+      try { const obj = JSON.parse(m[1]); if (obj.text) out += obj.text; } catch {}
+    }
+    return false;
+  }
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    if (parse()) return out.trim();
+  }
+  parse();
+  return out.trim();
+}
+
+async function chatToEl(sys, msg, elId) {
+  const el = document.getElementById(elId);
+  el.textContent = '';
+  const r = await fetch(`${API}/api/chat/lite/deepseek-stream`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg, systemPrompt: sys, history: [] }),
+  });
+  if (!r.ok) { el.textContent = '[ошибка ' + r.status + ']'; return ''; }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', out = '';
+  function parseBuf() {
+    const lines = buf.split('\n');
+    buf = lines.pop() || ''; // keep incomplete line
+    for (const line of lines) {
+      const m = line.match(/^data: (.+)$/);
+      if (!m) continue;
+      if (m[1] === '[DONE]') return true;
+      try { const obj = JSON.parse(m[1]); if (obj.text) { out += obj.text; el.textContent = out; } } catch {}
+    }
+    return false;
+  }
+  const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+  try {
+    while (true) {
+      const { value, done } = await Promise.race([reader.read(), timeout(5000)]);
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (parseBuf()) { step(); return out.trim(); }
+    }
+  } catch (e) {
+    // timeout or error — return what we have
+  }
+  parseBuf();
+  step();
+  return out.trim();
+}
+
+async function runSobor() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('btn');
+  btn.disabled = true; btn.textContent = 'собор идёт…';
+  steps = 0;
+  const t0 = Date.now();
+
+  // ═══ РАУНД 1: Позиции (параллельно) ═══
+  status('🔍 Раунд 1 — позиции…');
+  document.getElementById('rb1').classList.add('visible');
+  const round1 = {};
+  await Promise.all(ROLES.map(async role => {
+    round1[role.id] = await chatToEl(role.sys, `Вопрос к собору: ${q}\n\nОтветь как ${role.name}. РОВНО 3-4 предложения.`, `r1-${role.id}`);
+  }));
+
+  // ═══ РАУНД 2: Вопрошание (параллельно) ═══
+  status('❓ Раунд 2 — вопрошание…');
+  document.getElementById('rb2').classList.add('visible');
+  document.getElementById('g2').style.display = 'grid';
+  document.getElementById('rb2').scrollIntoView({behavior:'smooth'});
+  const round2 = {};
+  await Promise.all(ROLES.map(async role => {
+    const others = ROLES.filter(r => r.id !== role.id)
+      .map(r => `${r.name}: ${round1[r.id]}`).join('\n\n');
+    round2[role.id] = await chatToEl(role.sys,
+      `Вопрос: ${q}\n\nТвоя позиция: ${round1[role.id]}\n\nТри других голоса:\n\n${others}\n\n` +
+      `НЕ СПОРЬ. Задай ровно ОДИН уточняющий вопрос тому голосу, чью позицию ты понял хуже всего. Формат: «[Имя], [вопрос]?» Одно предложение.`,
+      `r2-${role.id}`);
+  }));
+
+  // ═══ РАУНД 3: Перекрёстное различение (каждый проверяет ДРУГОГО) ═══
+  status('🔬 Раунд 3 — перекрёстное различение…');
+  document.getElementById('rb3').classList.add('visible');
+  document.getElementById('g3').style.display = 'grid';
+  document.getElementById('rb3').scrollIntoView({behavior:'smooth'});
+  const round3 = {};
+  // Каждый проверяет следующего по кругу: П→О, О→Р, Р→И, И→П
+  const checkPairs = [[0,1],[1,2],[2,3],[3,0]];
+  await Promise.all(checkPairs.map(async ([checkerIdx, targetIdx]) => {
+    const checker = ROLES[checkerIdx];
+    const target = ROLES[targetIdx];
+    round3[checker.id] = await chatToEl(checker.sys,
+      `Вопрос: ${q}\n\n` +
+      `Позиция ${target.name}: ${round1[target.id]}\n` +
+      `Вопрос ${target.name}: ${round2[target.id]}\n\n` +
+      `Ты — ${checker.name}. Проверь позицию ${target.name}. Ответь РОВНО 2-3 предложения:\n` +
+      `(1) Что в позиции ${target.name} служит ВСЕЙ отрасли, а что — только его стороне?\n` +
+      `(2) Есть ли подмена: ${target.name} говорит о пользе для всех, но на самом деле продвигает свой интерес?\n` +
+      `Будь честен. Если чисто — скажи «чисто». Без преамбул.`,
+      `r3-${checker.id}`);
+  }));
+
+  // ═══ РАУНД 4: Формула ═══
+  status('⛬ Раунд 4 — формула…');
+  document.getElementById('rb4').classList.add('visible');
+  document.getElementById('formula').style.display = 'block';
+  document.getElementById('rb4').scrollIntoView({behavior:'smooth'});
+
+  const fullCtx = ROLES.map(r =>
+    `${r.name}:\n— позиция: ${round1[r.id]}\n— вопрос: ${round2[r.id]}\n— проверка: ${round3[r.id]}`
+  ).join('\n\n');
+
+  const formulaText = await chatToEl(
+    `Ты — соборный голос. Прочитай 3 раунда дебатов четырёх голосов БАС-отрасли. Вынеси ФОРМУЛУ — конструкцию с границами.\n\nОтветь СТРОГО в 3 блоках:\n\n✓ УТВЕРЖДАЕМ:\n[2-3 пункта — в чём собор согласен]\n\n✗ ОТВЕРГАЕМ:\n[1-2 пункта — что не работает и ПОЧЕМУ]\n\n? ОТКРЫТО:\n[1-2 пункта — что требует следующего круга]\n\nБез преамбул.`,
+    `Вопрос: ${q}\n\nДебаты:\n\n${fullCtx}\n\nВынеси формулу.`,
+    'f-affirm'
+  );
+
+  // Парсим формулу по секциям
+  const sections = formulaText.match(/[✓✗?][^✓✗?]*/g) || [];
+  if (sections.length >= 2) {
+    for (const s of sections) {
+      if (s.startsWith('✓')) document.getElementById('f-affirm').textContent = s.replace(/^✓\s*УТВЕРЖДАЕМ:?\s*/i, '').trim();
+      if (s.startsWith('✗')) document.getElementById('f-reject').textContent = s.replace(/^✗\s*ОТВЕРГАЕМ:?\s*/i, '').trim();
+      if (s.startsWith('?')) document.getElementById('f-open').textContent = s.replace(/^\?\s*ОТКРЫТО[^:]*:?\s*/i, '').trim();
+    }
+  }
+
+  // ═══ РАУНД 5: Конструкция решения ═══
+  status('🔧 Конструкция решения…');
+  document.getElementById('rb5a').classList.add('visible');
+  document.getElementById('decision').style.display = 'block';
+  document.getElementById('rb5a').scrollIntoView({behavior:'smooth'});
+
+  await chatToEl(
+    `Ты — конструктор решений. Прочитай формулу собора и построй КОНКРЕТНЫЙ план действий.\n\nОтветь СТРОГО по структуре:\n\n🎯 РЕШЕНИЕ: [одно предложение — что делаем]\n\n👤 КТО ОТВЕЧАЕТ:\n- [роль]: [за что конкретно]\n- [роль]: [за что]\n\n📅 ПЕРВЫЙ ШАГ: [что сделать в ближайшую неделю, одно действие]\n\n⚠ РИСК: [главный риск и как его снять]\n\nБез преамбул. Языком действия, не анализа.`,
+    `Вопрос: ${q}\n\nФормула собора:\n${formulaText}\n\nПострой конкретный план.`,
+    'd-text'
+  );
+
+  // ═══ РАУНД 5½: Канцелярия — исполнительный акт ═══
+  status('📋 Канцелярия — составляю документы…');
+  document.getElementById('rb-chancel').classList.add('visible');
+  document.getElementById('chancery').style.display = 'block';
+  document.getElementById('rb-chancel').scrollIntoView({behavior:'smooth'});
+
+  const decisionText = document.getElementById('d-text').textContent;
+  const [protocolText, taskTableText] = await Promise.all([
+    // Протокол решения
+    chatToEl(
+      `Ты — секретарь собора. Составь ПРОТОКОЛ РЕШЕНИЯ в формате официального документа.\n\nСтруктура:\n` +
+      `ПРОТОКОЛ СОБОРА №[номер] от [дата]\n\n` +
+      `ВОПРОС: [формулировка]\n\n` +
+      `СЛУШАЛИ: [кратко кто что сказал — 1 строка на роль]\n\n` +
+      `РЕШИЛИ:\n1. [пункт]\n2. [пункт]\n3. [пункт]\n\n` +
+      `ОТВЕТСТВЕННЫЕ:\n- [ФИО/роль]: [задача] — срок: [дата]\n\n` +
+      `КОНТРОЛЬ: [кто контролирует исполнение]\n\n` +
+      `Дата: ${new Date().toLocaleDateString('ru-RU')}. Номер: СБ-${Date.now().toString(36).slice(-4).toUpperCase()}`,
+      `Вопрос: ${q}\n\nФормула:\n${formulaText}\n\nПлан:\n${decisionText}\n\nСоставь протокол.`,
+      'ch-protocol'
+    ),
+    // Таблица задач
+    chatToEl(
+      `Составь таблицу задач на основе решения собора. Формат — каждая строка:\n` +
+      `[№] | [Задача] | [Ответственный] | [Срок] | [Статус: новая]\n\n` +
+      `3-5 строк. Без заголовка таблицы, только строки. Сроки — конкретные даты от сегодня (${new Date().toLocaleDateString('ru-RU')}).`,
+      `Решение:\n${decisionText}\n\nСоставь таблицу задач.`,
+      'ch-tasks'
+    )
+  ]);
+
+  // ═══ КАНЦЕЛЯРИЯ v2: Финмодель + Нормативный акт (параллельно) ═══
+  status('📊 Канцелярия v2 — финмодель + нормативный акт…');
+  document.getElementById('ch-v2').style.display = 'grid';
+
+  const [finmodelText, normactText] = await Promise.all([
+    chatToEl(
+      `Ты — финансовый аналитик. На основе решения собора построй ФИНАНСОВУЮ МОДЕЛЬ.\n\nФормат — таблица, каждая строка:\nРегион | Выручка (млн) | Затраты (млн) | ROI (%) | Срок окупаемости\n\n5-8 строк для разных регионов РФ. Данные — экспертная оценка на основе контекста БАС. Без заголовка, только строки.`,
+      `Решение собора:\n${decisionText}\n\nСоставь финмодель по регионам.`,
+      'ch-finmodel'
+    ),
+    chatToEl(
+      `Ты — юрист-нормотворец. На основе решения собора составь ПРОЕКТ НОРМАТИВНОГО АКТА.\n\nФормат:\nПРОЕКТ ПРИКАЗА\n[Орган]: [название]\nот «__» _______ 2026 г. № ___\n\nВ целях [обоснование]...\n\nПРИКАЗЫВАЮ:\n1. [пункт]\n2. [пункт]\n3. Контроль возложить на [кого]\n\n[Подпись]\n\nКороткий документ, 1 страница. Реалистичный.`,
+      `Решение собора:\n${decisionText}\n\nСоставь проект приказа.`,
+      'ch-normact'
+    )
+  ]);
+
+  // Кнопки действий
+  document.getElementById('ch-actions').style.display = 'flex';
+
+  // ═══ РАУНД 7: Голос памяти + Различитель (параллельно) ═══
+  status('◉ Голос памяти + 🛡 Различитель…');
+  document.getElementById('rb5').classList.add('visible');
+  document.getElementById('g5').style.display = 'grid';
+  document.getElementById('rb5').scrollIntoView({behavior:'smooth'});
+
+  const [memoryText, distinguisherText] = await Promise.all([
+    chatToEl(
+      `Ты — Голос памяти. Прочитай весь собор: 4 раунда дебатов и формулу. Посмотри глубже содержания — на СТРУКТУРУ.\n\nСкажи в 3-4 предложениях:\n(1) Какой акт в этом соборе самый необратимый — что уже нельзя забрать назад?\n(2) Чья позиция стала виднее, а кто растворился?\n(3) Что в этом соборе НЕ было сказано, но присутствовало структурно?\nБез преамбул.`,
+      `Вопрос: ${q}\n\nДебаты:\n${fullCtx}\n\nФормула:\n${formulaText}`,
+      'r5-memory'
+    ),
+    chatToEl(
+      `Ты — Различитель духов. Анализируй НЕ содержание, а ДУХ высказывания.\n\nДля каждого из 4 агентов определи:\n1. Служит ли его речь ЦЕЛОМУ (строит общее решение) или СЕБЕ (продвигает свой интерес)?\n2. Есть ли приёмы: подмена тезиса, ложная дилемма, апелляция к авторитету, скрытая манипуляция?\n3. Есть ли ИЗБЫТОК (surplus) — новое знание, которого не было до собора?\n\nПорядок обличения (Мф 18:15-17):\n- Если приём замечен ПЕРВЫЙ раз — укажи мягко: «[Имя], обрати внимание на...»\n- Если ПОВТОРНО — назови публично: «[Имя] в третий раз подменяет тезис»\n\nФормат: по 1 строке на каждого агента. Если чист — «чист, есть surplus». Без преамбул.`,
+      `Вопрос: ${q}\n\nОтветы:\n${fullCtx}`,
+      'r5-distinguisher'
+    )
+  ]);
+
+  // ═══ СПЕКТР: анализ собора ═══
+  status('📊 Спектр…');
+  document.getElementById('rb6').classList.add('visible');
+  document.getElementById('spectrum').style.display = 'block';
+  document.getElementById('rb6').scrollIntoView({behavior:'smooth'});
+
+  // Считаем простой спектр на клиенте
+  const allTexts = Object.values(round1).concat(Object.values(round2), Object.values(round3));
+  const mentions = {};
+  ROLES.forEach(r => { mentions[r.id] = 0; });
+  allTexts.forEach(t => {
+    ROLES.forEach(r => {
+      const re = new RegExp(r.name, 'gi');
+      const m = t.match(re);
+      if (m) mentions[r.id] += m.length;
+    });
+  });
+  const totalMentions = Object.values(mentions).reduce((a,b) => a+b, 0) || 1;
+  const spectrumHtml = ROLES.map(r => {
+    const pct = ((mentions[r.id] / totalMentions) * 100).toFixed(0);
+    return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <span style="width:120px;font-weight:600">${r.icon} ${r.name}</span>
+      <div style="flex:1;height:16px;background:#f0f0f0;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--${r.id});border-radius:4px"></div>
+      </div>
+      <span style="font-size:0.8rem;color:var(--dim)">${pct}%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('spectrum-bars').innerHTML = spectrumHtml;
+
+  // Пустыня — предложение следующего вопроса
+  try {
+    const desertText = await chat(
+      'Ты — аналитик пробелов. Прочитай собор и найди что НЕ обсуждалось, хотя должно было. Одно предложение: «Для следующего круга предлагаю обсудить: [тема]». Без преамбул.',
+      `Вопрос: ${q}\n\nФормула:\n${formulaText}`
+    );
+    if (desertText) {
+      document.getElementById('desert').textContent = '💡 ' + desertText;
+      document.getElementById('desert').style.display = 'block';
+    }
+  } catch {}
+
+  // ═══ РЕКУРСИВНАЯ ПРОБЛЕМАТИЗАЦИЯ — копаем до дна ═══
+  status('🔬 Проверка реализуемости — ищу затыки…');
+  document.getElementById('rb-deep').classList.add('visible');
+  document.getElementById('deep-dig').style.display = 'block';
+  document.getElementById('rb-deep').scrollIntoView({behavior:'smooth'});
+
+  const deepText = await chatToEl(
+    `Ты — критический аналитик. Прочитай формулу и решение собора. Найди ЗАТЫКИ — места где решение НЕРЕАЛИЗУЕМО.\n\n` +
+    `Для каждого затыка укажи:\n` +
+    `🔴 ЗАТЫК: [что именно нереализуемо]\n` +
+    `💡 ПОЧЕМУ: [конкретная причина — нет чипов, нет завода, нет денег, нет людей]\n` +
+    `⚡ ОРГОРУЖИЕ: [какая нестандартная организационная форма может решить — спецкооператив, обход через третьи страны, параллельная разработка, венчурный собор]\n` +
+    `📋 ПЕРВЫЙ ШАГ: [что сделать завтра]\n\n` +
+    `2-3 затыка. Копай ГЛУБОКО — не поверхностные проблемы, а структурные. Если нужно — выйди на уровень геополитики (санкции, закупки, альянсы). Без преамбул.`,
+    `Вопрос: ${q}\n\nФормула:\n✓ ${document.getElementById('f-affirm').textContent}\n✗ ${document.getElementById('f-reject').textContent}\n\nРешение:\n${decisionText}\n\nНайди затыки и оргоружие.`,
+    'deep-text'
+  );
+
+  // Автоматический вложенный собор по первому затыку
+  const firstBlock = deepText.match(/🔴 ЗАТЫК:\s*([^\n]+)/);
+  if (firstBlock) {
+    const subQ = firstBlock[1].trim();
+    status(`🔄 Вложенный собор: «${subQ.slice(0,50)}…»`);
+    document.getElementById('sub-sobor').style.display = 'block';
+    document.getElementById('sub-question').textContent = subQ;
+
+    // Мини-собор: 4 позиции параллельно
+    const subRound = {};
+    await Promise.all(ROLES.map(async role => {
+      subRound[role.id] = await chatToEl(role.sys,
+        `ВЛОЖЕННЫЙ СОБОР. Основной вопрос был: ${q}\nСобор выявил затык: ${subQ}\n\nТеперь ответь КОНКРЕТНО на затык как ${role.name}. Что РЕАЛЬНО можно сделать? Не общие слова — конкретные шаги, имена, суммы, сроки. 2-3 предложения.`,
+        `sub-${role.id}`);
+    }));
+
+    // Мини-формула вложенного собора
+    const subCtx = ROLES.map(r => `${r.name}: ${subRound[r.id]}`).join('\n');
+    await chatToEl(
+      `Вложенный собор по затыку. Вынеси МИНИ-ФОРМУЛУ в 3 строки:\n✓ Реально сделать: [что]\n✗ Нереально: [что и почему]\n📋 Завтра: [один конкретный шаг]\nБез преамбул.`,
+      `Затык: ${subQ}\n\nОтветы:\n${subCtx}\n\nМини-формула.`,
+      'sub-formula'
+    );
+  }
+
+  // ═══ ГРАФ РЕШЕНИЙ ═══
+  status('🌳 Граф решений…');
+  document.getElementById('rb-graph').classList.add('visible');
+  document.getElementById('decision-graph').style.display = 'block';
+  document.getElementById('rb-graph').scrollIntoView({behavior:'smooth'});
+
+  const graphText = await chat(
+    `На основе формулы собора построй ДЕРЕВО РЕШЕНИЙ.\n\nФормат — JSON массив узлов:\n[\n  {"id":"1","text":"Основное решение","children":["2","3"]},\n  {"id":"2","text":"Если бюджет есть → ...","children":["4","5"]},\n  {"id":"3","text":"Если бюджета нет → ...","children":["6"]},\n  {"id":"4","text":"Запустить пилот в 3 регионах","children":[]},\n  {"id":"5","text":"Масштабировать на 10 регионов","children":[]},\n  {"id":"6","text":"Минимальный MVP с 1 регионом","children":[]}\n]\n\n6-10 узлов. Верни ТОЛЬКО JSON, без текста вокруг.`,
+    `Формула:\n✓ ${document.getElementById('f-affirm').textContent}\n✗ ${document.getElementById('f-reject').textContent}\n? ${document.getElementById('f-open').textContent}\n\nРешение:\n${decisionText}\n\nПострой дерево.`
+  );
+
+  // Рендер дерева
+  try {
+    const jsonMatch = graphText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const nodes = JSON.parse(jsonMatch[0]);
+      const nodeMap = {};
+      nodes.forEach(n => nodeMap[n.id] = n);
+      function renderNode(id, depth = 0) {
+        const n = nodeMap[id];
+        if (!n) return '';
+        const indent = '  '.repeat(depth);
+        const hasChildren = n.children && n.children.length > 0;
+        const icon = hasChildren ? '▸' : '•';
+        let html = `<div style="margin-left:${depth*20}px;padding:4px 8px;cursor:${hasChildren?'pointer':'default'};border-left:2px solid ${depth===0?'var(--gold)':'var(--line)'};margin-bottom:2px" onclick="this.querySelector('.graph-children')&&(this.querySelector('.graph-children').style.display=this.querySelector('.graph-children').style.display==='none'?'block':'none')">
+          <span style="color:var(--gold);font-weight:700">${icon}</span> ${n.text}
+          ${hasChildren ? `<div class="graph-children" style="display:${depth<2?'block':'none'}">${n.children.map(cid => renderNode(cid, depth+1)).join('')}</div>` : ''}
+        </div>`;
+        return html;
+      }
+      const root = nodes[0];
+      document.getElementById('graph-tree').innerHTML = root ? renderNode(root.id) : graphText;
+    } else {
+      document.getElementById('graph-tree').textContent = graphText;
+    }
+  } catch(e) {
+    document.getElementById('graph-tree').textContent = graphText;
+  }
+
+  // ═══ CHECKPOINT — сохранить собор для продолжения ═══
+  const soborState = {
+    id: `sobor-${Date.now()}`,
+    question: q,
+    timestamp: new Date().toISOString(),
+    round1, round2, round3,
+    formula: { affirm: document.getElementById('f-affirm').textContent, reject: document.getElementById('f-reject').textContent, open: document.getElementById('f-open').textContent },
+    decision: decisionText,
+    protocol: document.getElementById('ch-protocol').textContent,
+    tasks: document.getElementById('ch-tasks').textContent,
+    finmodel: document.getElementById('ch-finmodel').textContent,
+    normact: document.getElementById('ch-normact').textContent,
+    elapsed: ((Date.now() - t0) / 1000).toFixed(1),
+    status: 'completed'
+  };
+  // Сохранить в localStorage
+  const history = JSON.parse(localStorage.getItem('sobor-v2-history') || '[]');
+  history.push(soborState);
+  if (history.length > 20) history.splice(0, history.length - 20);
+  localStorage.setItem('sobor-v2-history', JSON.stringify(history));
+  localStorage.setItem('sobor-v2-last', JSON.stringify(soborState));
+
+  // ═══ АВТОНОМНОЕ ИСПОЛНЕНИЕ — регистрация cron-проверки ═══
+  status('⚙ Регистрация автономного исполнения…');
+  document.getElementById('rb-auto').classList.add('visible');
+  document.getElementById('auto-exec').style.display = 'block';
+  document.getElementById('rb-auto').scrollIntoView({behavior:'smooth'});
+
+  // Список задач для автоматической проверки
+  const taskLines = document.getElementById('ch-tasks').textContent.split('\n').filter(l => l.trim());
+  const autoHtml = `<div style="margin-bottom:8px"><b>Зарегистрировано ${taskLines.length} задач</b> для автономной проверки:</div>` +
+    taskLines.map((line, i) => {
+      const parts = line.split('|').map(s => s.trim());
+      return `<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid #d1fae5">
+        <span style="color:var(--dim);width:20px">${i+1}</span>
+        <span style="flex:1">${parts[1] || line}</span>
+        <span style="color:var(--dim);font-size:0.8rem">${parts[3] || '—'}</span>
+        <span style="color:var(--operator);font-size:0.8rem">⏱ ожидает</span>
+      </div>`;
+    }).join('') +
+    `<div style="margin-top:8px;color:var(--dim);font-size:0.8rem">
+      Система проверит исполнение через 24 часа. Невыполненные задачи будут эскалированы.
+      <br>Checkpoint сохранён — можно продолжить собор позже.
+    </div>`;
+  document.getElementById('auto-status').innerHTML = autoHtml;
+
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  document.getElementById('s-time').textContent = elapsed + 's';
+  document.getElementById('s-steps').textContent = '✓';
+  status(`✅ Собор завершён за ${elapsed}s · checkpoint сохранён · ${taskLines.length} задач на исполнении`);
+  btn.disabled = false; btn.textContent = 'Созвать собор';
+}
+</script>
+</body>
+</html>

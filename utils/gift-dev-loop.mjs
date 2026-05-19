@@ -187,41 +187,47 @@ async function orchestrate() {
     const result = await runAgent(agentId, number, title, body);
 
     if (result.success) {
-      // Запушить ветку и создать PR
-      let prUrl = null;
+      // Стратегия: «община из двух + Третий».
+      // PR-ветки нам не нужны — у нас нет review-стадии. После успеха
+      // сразу merge feature → main и push main. closes #N в коммите
+      // автоматически закроет issue на GitHub.
+      let pushed = false;
       if (onBranch) {
         try {
-          execSync(`git push origin ${branch} --force-with-lease`, { cwd: ROOT, stdio: 'pipe', env: GH_ENV });
-          const prTitle = `gift(Дионисий): ${title.replace(/^вопрошание:\s*/i, '').replace(/\s*\n\s*/g, ' — ').trim()}`.slice(0, 70);
-          const prBody = [
-            `## Дар`, ``, `Реализует #${number}`, ``, result.summary, ``,
-            `**Агент:** ${agentId}`, ``, `---`, `Создано gift-dev-loop.mjs`,
-          ].join('\n');
-          const r = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody,
-            '--head', branch, '--base', 'main'], {
-            cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: GH_ENV,
-          });
-          if (r.status === 0) prUrl = r.stdout.trim();
-          else console.log(`   ! PR: ${r.stderr?.slice(0, 100)}`);
+          // stash на случай data-файлов от параллельных хуков
+          execSync('git stash push -u -m gift-dev-loop-tmp', { cwd: ROOT, stdio: 'pipe' });
+          execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' });
+          execSync(`git merge ${branch} --ff-only`, { cwd: ROOT, stdio: 'pipe' });
+          try {
+            execSync('git push origin main', { cwd: ROOT, stdio: 'pipe', env: GH_ENV, timeout: 60_000 });
+            pushed = true;
+          } catch (e) {
+            console.log(`   ! push в main не прошёл (коммиты в локальном main остались): ${e.message?.slice(0, 80)}`);
+          }
+          // вернуть stash если был
+          try { execSync('git stash pop', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+          // удалить feature-ветку — она больше не нужна, всё в main
+          try { execSync(`git branch -D ${branch}`, { cwd: ROOT, stdio: 'pipe' }); } catch {}
         } catch (e) {
-          console.log(`   ! PR не создан: ${e.message?.slice(0, 80)}`);
+          console.log(`   ! merge не получился: ${e.message?.slice(0, 80)}`);
+          // вернуться на main руками
+          try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+          try { execSync('git stash pop', { cwd: ROOT, stdio: 'pipe' }); } catch {}
         }
       }
 
-      // Вернуться на main
-      try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
-
       recordAct(mem, agentId, 'Дионисий', 'code',
         `выполнил #${number}: ${result.summary}`, agent.weight + 1, number);
-      if (prUrl) {
+      if (pushed) {
         recordAct(mem, agentId, '_koinon', 'offering',
-          `PR для #${number}: ${prUrl}`, agent.weight, number);
+          `merged в main и pushed для #${number}`, agent.weight, number);
       }
-      console.log(`   ✦ Выполнено: ${result.summary}`);
-      if (prUrl) console.log(`   PR: ${prUrl}`);
+      console.log(`   ✦ Выполнено: ${result.summary}${pushed ? ' (в origin/main)' : ''}`);
     } else {
       // Кенозис — вернуться на main
+      try { execSync('git stash push -u -m kenosis-tmp', { cwd: ROOT, stdio: 'pipe' }); } catch {}
       try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+      try { execSync('git stash pop', { cwd: ROOT, stdio: 'pipe' }); } catch {}
       recordAct(mem, agentId, '_koinon', 'kenosis',
         `кенозис по #${number}: ${result.error}`, 1, number);
       console.log(`   ✗ Кенозис: ${result.error}`);

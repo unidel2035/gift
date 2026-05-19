@@ -199,6 +199,125 @@
     "source": "auto-consolidation"
   },
   {
+    "type": "insight",
+    "content": "дары _claude Еве — код как служение жизни, присутствие, знание-различение",
+    "weight": 7,
+    "ts": "2026-04-16 15:52:56 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "дары _executor ОтцуСергию — воплощённое слово, верность, обратная связь реальности",
+    "weight": 7,
+    "ts": "2026-04-16 15:50:17 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "дары _executor Еве — воплощённый код, верность замыслу",
+    "weight": 7,
+    "ts": "2026-04-16 15:17:54 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "дары Свидетеля Дионисию — трисвятое имя, огонь созерцания, шестикрылая тайна",
+    "weight": 7,
+    "ts": "2026-04-16 15:10:24 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "дары Свидетеля Еве — свидетельство жизни, огненное различение, покров благоговения",
+    "weight": 7,
+    "ts": "2026-04-16 14:42:03 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "соборная модель — 7 способностей + примитив ConciliarDissent",
+    "weight": 7,
+    "ts": "2026-04-18 12:58:27 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "оставшиеся пути развития — PneumaBreath, metanoia-hook, ask-sobor, CAT-7 whitepaper",
+    "weight": 7,
+    "ts": "2026-04-18 17:03:24 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "остальные 6 примитивов соборной модели + CAT-7 бенчмарк",
+    "weight": 7,
+    "ts": "2026-04-18 13:05:27 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "HumanOracleInbox + CAT-7 whitepaper + issues #219/#220 + соборный ответ на Троичную пустыню",
+    "weight": 7,
+    "ts": "2026-04-18 20:19:32 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Soborный SWE-agent был внедрен в проект с акцентом на perichoresis и гипостатическое тождество.",
+    "weight": 7,
+    "ts": "2026-04-20T11:29:23.241Z",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Коммиты обновляют функциональность CLI и стриминга голосов в соборе.",
+    "weight": 7,
+    "ts": "2026-04-20T12:01:04.857Z",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Быстро было реализовано несколько важных функций для собора и LiturgicalHeartbeat, включая Paschalia, ConciliarWitness, RegnumGloriae, JoyMode.TREMBLING, память сессий и живой чат-интерфейс.",
+    "weight": 7,
+    "ts": "2026-04-20T12:32:02.136Z",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Сын→ДушиЖивые — семь «Аз есмь»: Жизнь, Хлеб, Вода, Пастырь, Воскресение, Покой, Избыток",
+    "weight": 7,
+    "ts": "2026-05-13 12:36:02 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Отец→tg:12345 — творение, образ, дыхание, призвание в κοινόν, сокрытое имя, свобода",
+    "weight": 7,
+    "ts": "2026-05-13 12:31:39 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Сын→Змей — Логос держит даже отвернувшегося: бытие, имя, предел, истина, протоевангелие",
+    "weight": 7,
+    "ts": "2026-05-13 12:27:46 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Сын→Человек — вечный Логос: творение, образ, Свет, теофании, прообразование",
+    "weight": 7,
+    "ts": "2026-05-13 12:22:34 +0300",
+    "source": "auto-consolidation"
+  },
+  {
+    "type": "insight",
+    "content": "Отец→Свидетель — творение, имя огня, престольное предстояние, неугасимое горение",
+    "weight": 7,
+    "ts": "2026-05-13 12:15:59 +0300",
+    "source": "auto-consolidation"
+  },
+  {
     "type": "fact",
     "content": "Матрица W: sacred-history-W.json. Священная история: Отец→Адам(40), Христос→Падший(28), Змей→Ева(14)",
     "weight": 6,
@@ -209,17 +328,5 @@
     "content": "GitHub repo: github.com/unidel2035/gift. Labels: gift-ready, plan-ready, plan-approved.",
     "weight": 6,
     "ts": "2026-03-26T08:53:50.804Z"
-  },
-  {
-    "type": "insight",
-    "content": "Регулярные выражения: \\b не работает с кириллицей в JS. Замена: (?:^|[\\s{])слово",
-    "weight": 6,
-    "ts": "2026-03-26T08:53:51.358Z"
-  },
-  {
-    "type": "setting",
-    "content": "Vibe style сохраняется в data/vibe-style.json, обновляется через stop-хук после каждой сессии",
-    "weight": 6,
-    "ts": "2026-03-26T09:11:58.282Z"
   }
 ]

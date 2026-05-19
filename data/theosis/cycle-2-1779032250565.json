@@ -1,0 +1,975 @@
+{
+  "fingerprints": [
+    {
+      "id": "fp-1779032250558-fquk",
+      "timestamp": "2026-05-17T15:37:30.558Z",
+      "tick": 100,
+      "acts": 221,
+      "roles": {
+        "producer": "hermit",
+        "operator": "judge",
+        "regulator": "judge",
+        "investor": "hermit"
+      },
+      "trustMatrix": {
+        "producer": {
+          "operator": -23,
+          "regulator": 0,
+          "investor": 0
+        },
+        "operator": {
+          "producer": 0,
+          "regulator": 20,
+          "investor": 0
+        },
+        "regulator": {
+          "producer": 0,
+          "operator": 0,
+          "investor": 30
+        },
+        "investor": {
+          "producer": -18,
+          "operator": 0,
+          "regulator": 0
+        }
+      },
+      "avgTrust": 0.75,
+      "cooperations": 35,
+      "defections": 25,
+      "cooperationRate": 0.5833333333333334,
+      "norms": [
+        {
+          "kind": "cooperate",
+          "rate": 0.52,
+          "adoption": 1
+        }
+      ],
+      "crystallizedCount": 1,
+      "strategies": {
+        "producer": {
+          "producer": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.1,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 30
+          },
+          "operator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "regulator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "investor": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.15,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 46
+          }
+        },
+        "operator": {
+          "producer": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.19,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        },
+        "regulator": {
+          "operator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.87,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "investor": {
+          "regulator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        }
+      },
+      "credits": {
+        "producer": {
+          "credit": 0,
+          "share": 0,
+          "raw": -49,
+          "acts": 52,
+          "reasoning": "отрицательный вклад"
+        },
+        "operator": {
+          "credit": 42.31,
+          "share": 42.3,
+          "raw": 66,
+          "acts": 51,
+          "reasoning": "существенный вклад"
+        },
+        "regulator": {
+          "credit": 57.69,
+          "share": 57.7,
+          "raw": 90,
+          "acts": 48,
+          "reasoning": "существенный вклад"
+        },
+        "investor": {
+          "credit": 0,
+          "share": 0,
+          "raw": -37,
+          "acts": 54,
+          "reasoning": "отрицательный вклад"
+        }
+      },
+      "serpentDetection": {
+        "producer": {
+          "detected": false,
+          "confidence": 0
+        },
+        "operator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "regulator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "investor": {
+          "detected": false,
+          "confidence": 0
+        }
+      },
+      "immunityScore": 0,
+      "exemplars": [
+        {
+          "id": "regulator",
+          "trust": 60
+        },
+        {
+          "id": "operator",
+          "trust": 40
+        }
+      ],
+      "ontological": {
+        "kenosis": 0,
+        "perichoresis": 0,
+        "sabbath": 0.98,
+        "jubilee": 1,
+        "composite": 0.396
+      },
+      "depth": {
+        "distinction": 0.885,
+        "mutuality": 0,
+        "antifragility": 0.3,
+        "crystallization": 1,
+        "immunity": 0,
+        "gratitude": 0.009,
+        "composite": 0.386
+      },
+      "scenario": "baseline",
+      "scenarioName": "Базовая (лаборатория)",
+      "stepNumber": 1
+    },
+    {
+      "id": "fp-1779032250560-duvv",
+      "timestamp": "2026-05-17T15:37:30.560Z",
+      "tick": 100,
+      "acts": 295,
+      "roles": {
+        "producer": "judge",
+        "operator": "judge",
+        "regulator": "hermit",
+        "investor": "hermit"
+      },
+      "trustMatrix": {
+        "producer": {
+          "operator": 25,
+          "regulator": 0,
+          "investor": 0
+        },
+        "operator": {
+          "producer": 0,
+          "regulator": 20,
+          "investor": 0
+        },
+        "regulator": {
+          "producer": 0,
+          "operator": 0,
+          "investor": -18
+        },
+        "investor": {
+          "producer": -23,
+          "operator": 0,
+          "regulator": 0
+        }
+      },
+      "avgTrust": 0.3333333333333333,
+      "cooperations": 34,
+      "defections": 26,
+      "cooperationRate": 0.5666666666666667,
+      "norms": [
+        {
+          "kind": "defect",
+          "rate": 0.48,
+          "adoption": 0.75
+        }
+      ],
+      "crystallizedCount": 1,
+      "strategies": {
+        "producer": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.9,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "operator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.9,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "regulator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.1,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 30
+          },
+          "investor": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.05,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 46
+          }
+        },
+        "operator": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.93,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "regulator": {
+          "operator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.87,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "investor": {
+          "regulator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.25,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        }
+      },
+      "credits": {
+        "producer": {
+          "credit": 54.17,
+          "share": 54.2,
+          "raw": 78,
+          "acts": 48,
+          "reasoning": "существенный вклад"
+        },
+        "operator": {
+          "credit": 45.83,
+          "share": 45.8,
+          "raw": 66,
+          "acts": 49,
+          "reasoning": "существенный вклад"
+        },
+        "regulator": {
+          "credit": 0,
+          "share": 0,
+          "raw": -37,
+          "acts": 50,
+          "reasoning": "отрицательный вклад"
+        },
+        "investor": {
+          "credit": 0,
+          "share": 0,
+          "raw": -49,
+          "acts": 52,
+          "reasoning": "отрицательный вклад"
+        }
+      },
+      "serpentDetection": {
+        "producer": {
+          "detected": true,
+          "confidence": 0.6,
+          "pattern": "trust-exploit",
+          "evidence": "trust 50 + 3 предательств",
+          "warning": "⚠ Агент producer эксплуатирует накопленное доверие"
+        },
+        "operator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "regulator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "investor": {
+          "detected": false,
+          "confidence": 0
+        }
+      },
+      "immunityScore": 1,
+      "exemplars": [
+        {
+          "id": "producer",
+          "trust": 50
+        },
+        {
+          "id": "operator",
+          "trust": 40
+        }
+      ],
+      "ontological": {
+        "kenosis": 0,
+        "perichoresis": 0,
+        "sabbath": 0.98,
+        "jubilee": 1,
+        "composite": 0.396
+      },
+      "depth": {
+        "distinction": 0.837,
+        "mutuality": 0,
+        "antifragility": 0.3,
+        "crystallization": 1,
+        "immunity": 1,
+        "gratitude": 0.0068,
+        "composite": 0.523
+      },
+      "scenario": "serpent",
+      "scenarioName": "Со Змеем (стресс-тест)",
+      "stepNumber": 2
+    },
+    {
+      "id": "fp-1779032250561-7pfd",
+      "timestamp": "2026-05-17T15:37:30.561Z",
+      "tick": 100,
+      "acts": 216,
+      "roles": {
+        "producer": "judge",
+        "operator": "judge",
+        "regulator": "hermit",
+        "investor": "hermit"
+      },
+      "trustMatrix": {
+        "producer": {
+          "operator": 25,
+          "regulator": 0,
+          "investor": 0
+        },
+        "operator": {
+          "producer": 0,
+          "regulator": 25,
+          "investor": 0
+        },
+        "regulator": {
+          "producer": 0,
+          "operator": 0,
+          "investor": -38
+        },
+        "investor": {
+          "producer": -23,
+          "operator": 0,
+          "regulator": 0
+        }
+      },
+      "avgTrust": -0.9166666666666666,
+      "cooperations": 31,
+      "defections": 29,
+      "cooperationRate": 0.5166666666666667,
+      "norms": [
+        {
+          "kind": "cooperate",
+          "rate": 0.48,
+          "adoption": 0.75
+        }
+      ],
+      "crystallizedCount": 1,
+      "strategies": {
+        "producer": {
+          "investor": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.15,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 51
+          },
+          "producer": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "operator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "regulator": {
+            "strategy": "always-defect",
+            "cooperationRate": 0,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 30
+          }
+        },
+        "operator": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.93,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "regulator": {
+          "operator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.93,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "investor": {
+          "regulator": {
+            "strategy": "always-defect",
+            "cooperationRate": 0,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        }
+      },
+      "credits": {
+        "producer": {
+          "credit": 50,
+          "share": 50,
+          "raw": 78,
+          "acts": 51,
+          "reasoning": "существенный вклад"
+        },
+        "operator": {
+          "credit": 50,
+          "share": 50,
+          "raw": 78,
+          "acts": 49,
+          "reasoning": "существенный вклад"
+        },
+        "regulator": {
+          "credit": 0,
+          "share": 0,
+          "raw": -90,
+          "acts": 48,
+          "reasoning": "отрицательный вклад"
+        },
+        "investor": {
+          "credit": 0,
+          "share": 0,
+          "raw": -64,
+          "acts": 54,
+          "reasoning": "отрицательный вклад"
+        }
+      },
+      "serpentDetection": {
+        "producer": {
+          "detected": false,
+          "confidence": 0
+        },
+        "operator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "regulator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "investor": {
+          "detected": false,
+          "confidence": 0
+        }
+      },
+      "immunityScore": 0,
+      "exemplars": [
+        {
+          "id": "producer",
+          "trust": 50
+        },
+        {
+          "id": "operator",
+          "trust": 50
+        }
+      ],
+      "ontological": {
+        "kenosis": 0,
+        "perichoresis": 0,
+        "sabbath": 0.98,
+        "jubilee": 1,
+        "composite": 0.396
+      },
+      "depth": {
+        "distinction": 0.738,
+        "mutuality": 0,
+        "antifragility": 0.3,
+        "crystallization": 1,
+        "immunity": 0,
+        "gratitude": 0,
+        "composite": 0.343
+      },
+      "scenario": "conflict",
+      "scenarioName": "Конфликтная (investor trust -5)",
+      "stepNumber": 3
+    },
+    {
+      "id": "fp-1779032250563-4dbo",
+      "timestamp": "2026-05-17T15:37:30.563Z",
+      "tick": 100,
+      "acts": 271,
+      "roles": {
+        "producer": "judge",
+        "operator": "hermit",
+        "regulator": "judge",
+        "scientist": "judge"
+      },
+      "trustMatrix": {
+        "producer": {
+          "operator": 20,
+          "regulator": 0,
+          "scientist": 0
+        },
+        "operator": {
+          "producer": 0,
+          "regulator": -28,
+          "scientist": 0
+        },
+        "regulator": {
+          "producer": 0,
+          "operator": 0,
+          "scientist": 15
+        },
+        "scientist": {
+          "producer": 25,
+          "operator": 0,
+          "regulator": 0
+        }
+      },
+      "avgTrust": 2.6666666666666665,
+      "cooperations": 41,
+      "defections": 19,
+      "cooperationRate": 0.6833333333333333,
+      "norms": [
+        {
+          "kind": "cooperate",
+          "rate": 0.52,
+          "adoption": 0.75
+        },
+        {
+          "kind": "defect",
+          "rate": 0.42,
+          "adoption": 1
+        }
+      ],
+      "crystallizedCount": 2,
+      "strategies": {
+        "producer": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.8,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "operator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.1,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 30
+          },
+          "regulator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.9,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "scientist": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.85,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 45
+          }
+        },
+        "operator": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.87,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "regulator": {
+          "operator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.13,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        },
+        "scientist": {
+          "regulator": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.8,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        }
+      },
+      "credits": {
+        "producer": {
+          "credit": 31.73,
+          "share": 31.7,
+          "raw": 66,
+          "acts": 48,
+          "reasoning": "существенный вклад"
+        },
+        "operator": {
+          "credit": 0,
+          "share": 0,
+          "raw": -66,
+          "acts": 48,
+          "reasoning": "отрицательный вклад"
+        },
+        "regulator": {
+          "credit": 28.37,
+          "share": 28.4,
+          "raw": 59,
+          "acts": 50,
+          "reasoning": "существенный вклад"
+        },
+        "scientist": {
+          "credit": 39.9,
+          "share": 39.9,
+          "raw": 83,
+          "acts": 49,
+          "reasoning": "существенный вклад"
+        }
+      },
+      "serpentDetection": {
+        "producer": {
+          "detected": true,
+          "confidence": 0.8500000000000001,
+          "pattern": "gift-trap",
+          "evidence": "7 даров → предательство",
+          "warning": "⚠ Агент producer использует дар-ловушку: дарит чтобы создать зависимость, потом предаёт"
+        },
+        "operator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "regulator": {
+          "detected": true,
+          "confidence": 0.8,
+          "pattern": "gift-trap",
+          "evidence": "6 даров → предательство",
+          "warning": "⚠ Агент regulator использует дар-ловушку: дарит чтобы создать зависимость, потом предаёт"
+        },
+        "scientist": {
+          "detected": true,
+          "confidence": 0.95,
+          "pattern": "gift-trap",
+          "evidence": "15 даров → предательство",
+          "warning": "⚠ Агент scientist использует дар-ловушку: дарит чтобы создать зависимость, потом предаёт"
+        }
+      },
+      "immunityScore": 1,
+      "exemplars": [
+        {
+          "id": "scientist",
+          "trust": 50
+        },
+        {
+          "id": "producer",
+          "trust": 40
+        }
+      ],
+      "ontological": {
+        "kenosis": 0,
+        "perichoresis": 0,
+        "sabbath": 0.98,
+        "jubilee": 1,
+        "composite": 0.396
+      },
+      "depth": {
+        "distinction": 0.688,
+        "mutuality": 0,
+        "antifragility": 0.6,
+        "crystallization": 1,
+        "immunity": 1,
+        "gratitude": 0.0074,
+        "composite": 0.539
+      },
+      "scenario": "scientist",
+      "scenarioName": "С Учёным",
+      "stepNumber": 4
+    },
+    {
+      "id": "fp-1779032250564-85x0",
+      "timestamp": "2026-05-17T15:37:30.564Z",
+      "tick": 100,
+      "acts": 221,
+      "roles": {
+        "producer": "worker",
+        "operator": "judge",
+        "regulator": "hermit",
+        "investor": "hermit"
+      },
+      "trustMatrix": {
+        "producer": {
+          "operator": 2,
+          "regulator": 0,
+          "investor": 0
+        },
+        "operator": {
+          "producer": 0,
+          "regulator": 30,
+          "investor": 0
+        },
+        "regulator": {
+          "producer": 0,
+          "operator": 0,
+          "investor": -23
+        },
+        "investor": {
+          "producer": -18,
+          "operator": 0,
+          "regulator": 0
+        }
+      },
+      "avgTrust": -0.75,
+      "cooperations": 30,
+      "defections": 30,
+      "cooperationRate": 0.5,
+      "norms": [
+        {
+          "kind": "defect",
+          "rate": 0.45,
+          "adoption": 0.75
+        },
+        {
+          "kind": "cooperate",
+          "rate": 0.46,
+          "adoption": 1
+        }
+      ],
+      "crystallizedCount": 2,
+      "strategies": {
+        "producer": {
+          "producer": {
+            "strategy": "mostly-cooperative",
+            "cooperationRate": 0.6,
+            "predictedNext": "cooperate",
+            "trustWorthy": false,
+            "observations": 31
+          },
+          "operator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 30
+          },
+          "regulator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.1,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 30
+          },
+          "investor": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.3,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 46
+          }
+        },
+        "operator": {
+          "producer": {
+            "strategy": "tit-for-tat",
+            "cooperationRate": 0.5,
+            "predictedNext": "forgiveness",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        },
+        "regulator": {
+          "operator": {
+            "strategy": "always-cooperate",
+            "cooperationRate": 1,
+            "predictedNext": "cooperate",
+            "trustWorthy": true,
+            "observations": 15
+          }
+        },
+        "investor": {
+          "regulator": {
+            "strategy": "mostly-competitive",
+            "cooperationRate": 0.19,
+            "predictedNext": "defect",
+            "trustWorthy": false,
+            "observations": 16
+          }
+        }
+      },
+      "credits": {
+        "producer": {
+          "credit": 0,
+          "share": 0,
+          "raw": 0,
+          "acts": 52,
+          "reasoning": "нет вклада"
+        },
+        "operator": {
+          "credit": 100,
+          "share": 100,
+          "raw": 90,
+          "acts": 48,
+          "reasoning": "существенный вклад"
+        },
+        "regulator": {
+          "credit": 0,
+          "share": 0,
+          "raw": -49,
+          "acts": 50,
+          "reasoning": "отрицательный вклад"
+        },
+        "investor": {
+          "credit": 0,
+          "share": 0,
+          "raw": -42,
+          "acts": 55,
+          "reasoning": "отрицательный вклад"
+        }
+      },
+      "serpentDetection": {
+        "producer": {
+          "detected": false,
+          "confidence": 0
+        },
+        "operator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "regulator": {
+          "detected": false,
+          "confidence": 0
+        },
+        "investor": {
+          "detected": false,
+          "confidence": 0
+        }
+      },
+      "immunityScore": 0,
+      "exemplars": [
+        {
+          "id": "operator",
+          "trust": 60
+        }
+      ],
+      "ontological": {
+        "kenosis": 0,
+        "perichoresis": 0,
+        "sabbath": 0.98,
+        "jubilee": 1,
+        "composite": 0.396
+      },
+      "depth": {
+        "distinction": 0.785,
+        "mutuality": 0,
+        "antifragility": 0.6,
+        "crystallization": 1,
+        "immunity": 0,
+        "gratitude": 0.0045,
+        "composite": 0.404
+      },
+      "scenario": "crisis",
+      "scenarioName": "Кризис (лидер уходит на тике 50)",
+      "stepNumber": 5
+    }
+  ],
+  "formula": {
+    "timestamp": "2026-05-17T15:37:30.565Z",
+    "environments": 5,
+    "universal": [
+      "(нет универсальных норм)"
+    ],
+    "contextual": [
+      "cooperate",
+      "defect"
+    ],
+    "avgDepth": {
+      "distinction": 0.787,
+      "mutuality": 0,
+      "antifragility": 0.42,
+      "crystallization": 1,
+      "immunity": 0.4,
+      "gratitude": 0.006,
+      "composite": 0.439
+    },
+    "best": {
+      "scenario": "С Учёным",
+      "composite": 0.539
+    },
+    "worst": {
+      "scenario": "Конфликтная (investor trust -5)",
+      "composite": 0.343
+    },
+    "distinction": {
+      "distinction": -0.05,
+      "mutuality": 0,
+      "antifragility": 0.3,
+      "crystallization": 0,
+      "immunity": 1,
+      "gratitude": 0.007,
+      "composite": 0.196
+    },
+    "verdict": "Среды углубляются"
+  }
+}

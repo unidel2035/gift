@@ -2,6 +2,10 @@ node_modules/
 .env
 *.log
 data/spec-vectors.db
+data/lcm.db
+data/lcm.db-*
+data/dynamic-cron.json
+data/dynamic-cron.json.tmp
 data/.anamnesis-cache.json
 data/.session-heartbeat.json
 data/pulse-pid.txt
@@ -9,3 +13,5 @@ data/lora/
 dist/
 colab/__pycache__/
 colab/gift-colab-package.zip
+data/koinon-bus.jsonl
+data/.koinon-pos.json

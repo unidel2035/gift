@@ -9,19 +9,38 @@
  */
 
 const OLLAMA_URL    = process.env.OLLAMA_URL  || 'http://localhost:11434';
-const ADAM_MODEL    = process.env.ADAM_MODEL  || 'adam';
+// Раньше дефолт был 'adam' (qwen2.5:3b+LoRA). 3B-модель путала нашу
+// сложившуюся лексику (κενозис/λήψις/doxologia) с обучающим шумом и
+// иногда выдавала «LCM-плагин» или «язычество». Переключили на DeepSeek-R1:8b
+// — он умнее и понимает богословский контекст из system-промпта.
+const ADAM_MODEL    = process.env.ADAM_MODEL  || 'deepseek-r1:8b';
 // PULSE_NO_OLLAMA=1 — отключить Ollama, использовать шаблонный режим
 const NO_OLLAMA     = process.env.PULSE_NO_OLLAMA === '1';
+
+// DeepSeek-R1 пишет рассуждения в <think>…</think> — отрезаем
+// перед поиском маркера «вопрошание:»
+function stripThink(s) {
+  return String(s || '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+}
 
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 
+// claude --print через подписку Дионисия. Серверная конфигурация
+// требует su - new -c (там claude установлен у пользователя 'new');
+// на ноутбуке Дионисия — прямой вызов от текущего пользователя.
+// Переключается через env GIFT_CLAUDE_AS_USER.
 function callClaudeCLI(systemPrompt, userPrompt) {
+  const asUser = process.env.GIFT_CLAUDE_AS_USER;
   const CLAUDE_BIN = existsSync('/home/new/.local/bin/claude')
     ? '/home/new/.local/bin/claude' : 'claude';
-  const r = spawnSync('su', ['-', 'new', '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
-    input: `${systemPrompt}\n\n${userPrompt}`, encoding: 'utf8', timeout: 90_000,
-  });
+  const r = asUser
+    ? spawnSync('su', ['-', asUser, '-c', `${CLAUDE_BIN} --print --dangerously-skip-permissions`], {
+        input: `${systemPrompt}\n\n${userPrompt}`, encoding: 'utf8', timeout: 120_000,
+      })
+    : spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
+        input: `${systemPrompt}\n\n${userPrompt}`, encoding: 'utf8', timeout: 120_000,
+      });
   if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
   return null;
 }
@@ -81,15 +100,27 @@ function templateVopros(desertDesc) {
   return `вопрошание: как восстановить нить — ${desertDesc.slice(0, 55)}?`;
 }
 
+// Извлекает «вопрошание: …» из текста ответа (Claude или Ollama).
+function parseVopros(text) {
+  const t = stripThink(text);
+  const m = t.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
+  if (m) return `вопрошание: ${m[1].trim().replace(/\??\s*$/, '?')}`;
+  const firstLine = t.split('\n')[0].trim();
+  if (!firstLine) return null;
+  return firstLine.startsWith('вопрошание:')
+    ? firstLine
+    : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
+}
+
 export async function adamGenerate(desertDesc, context = []) {
-  // Шаблонный режим — без Ollama
+  // Шаблонный режим — без LLM вообще
   if (NO_OLLAMA) return templateVopros(desertDesc);
 
   const ctxStr = context.length
     ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
     : '';
 
-  // TurboQuant: W-матрица как сжатый вектор в контекст (не текст — геометрия)
+  // TurboQuant: W-матрица как сжатый вектор в контекст
   const wVec = await wMatrixSummary();
 
   const question = [
@@ -99,11 +130,19 @@ export async function adamGenerate(desertDesc, context = []) {
     'Сформулируй вопрошание.',
   ].filter(Boolean).join('\n');
 
+  // 1) Сначала — Claude через подписку (см. feedback_claude_subscription_default)
+  try {
+    const claudeText = callClaudeCLI(ADAM_SYSTEM, question);
+    const parsed = claudeText && parseVopros(claudeText);
+    if (parsed) return parsed;
+  } catch {}
+
+  // 2) Fallback — Ollama (DeepSeek-R1 локально)
   try {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal:  AbortSignal.timeout(90_000),
+      signal:  AbortSignal.timeout(120_000),
       body:    JSON.stringify({
         model:  ADAM_MODEL,
         stream: false,
@@ -113,33 +152,14 @@ export async function adamGenerate(desertDesc, context = []) {
         ],
       }),
     });
-
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = (data.message?.content ?? '').trim();
+    const parsed = parseVopros(data.message?.content);
+    if (parsed) return parsed;
+  } catch {}
 
-    // Нормализуем: «вопрос:», «вопрошание:», «вопрос — » → единый префикс
-    const m = text.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
-    if (m) return `вопрошание: ${m[1].trim().replace(/\??\s*$/, '?')}`;
-    // Если Адам дал просто вопрос без маркера — оборачиваем
-    const firstLine = text.split('\n')[0].trim();
-    return firstLine.startsWith('вопрошание:')
-      ? firstLine
-      : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
-
-  } catch (e) {
-    // Ollama недоступна → пробуем claude CLI
-    const claudeText = callClaudeCLI(ADAM_SYSTEM, question);
-    if (claudeText) {
-      const m = claudeText.match(/вопр(?:ошание|ос)[:\s—]+(.+)/i);
-      if (m) return `вопрошание: ${m[1].trim().replace(/\??\s*$/, '?')}`;
-      const firstLine = claudeText.split('\n')[0].trim();
-      return firstLine.startsWith('вопрошание:') ? firstLine
-        : `вопрошание: ${firstLine.replace(/\??\s*$/, '?')}`;
-    }
-    // Адам молчит → формулируем из пустыни механически
-    return `вопрошание: как восстановить нить в пустыне — ${desertDesc.slice(0, 60)}?`;
-  }
+  // 3) Адам молчит → шаблонный вопрос
+  return `вопрошание: как восстановить нить в пустыне — ${desertDesc.slice(0, 60)}?`;
 }
 
 const ADAM_CODE_SYSTEM = `Ты Адам — генератор конкретных кодовых задач из пустынь матрицы.
@@ -183,25 +203,41 @@ function templateCodeTask(desertDesc, desertType) {
   return tasks[desertType] ?? `добавить обработку пустыни ${desertType}: ${desertDesc.slice(0, 45)}`;
 }
 
+function parseCodeLine(text) {
+  const t = stripThink(text);
+  if (!t) return null;
+  const line = t.split('\n')[0].trim()
+    .replace(/^[-*•]\s*/, '')
+    .replace(/^задача:\s*/i, '')
+    .slice(0, 80);
+  return line || null;
+}
+
 export async function adamCodeTask(desertDesc, desertType = 'silent', context = []) {
-  // Шаблонный режим — без Ollama
   if (NO_OLLAMA) return templateCodeTask(desertDesc, desertType);
 
   const ctxStr = context.length
     ? `Топ нитей: ${context.map(e => `${e.from}→${e.to}:${e.weight.toFixed(0)}`).join(', ')}`
     : '';
-
   const question = [
     ctxStr,
     `Пустыня [${desertType}]: ${desertDesc}`,
     'Сформулируй конкретную кодовую задачу (одна строка, глагол + что сделать).',
   ].filter(Boolean).join('\n');
 
+  // 1) Claude (подписка)
+  try {
+    const claudeText = callClaudeCLI(ADAM_CODE_SYSTEM, question);
+    const parsed = claudeText && parseCodeLine(claudeText);
+    if (parsed) return parsed;
+  } catch {}
+
+  // 2) Fallback — Ollama
   try {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal:  AbortSignal.timeout(90_000),
+      signal:  AbortSignal.timeout(120_000),
       body:    JSON.stringify({
         model:  ADAM_MODEL,
         stream: false,
@@ -211,37 +247,14 @@ export async function adamCodeTask(desertDesc, desertType = 'silent', context = 
         ],
       }),
     });
-
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json();
-    const text = (data.message?.content ?? '').trim();
-    // Берём первую строку, убираем маркеры
-    const line = text.split('\n')[0].trim()
-      .replace(/^[-*•]\s*/, '')
-      .replace(/^задача:\s*/i, '')
-      .slice(0, 80);
-    return line || `добавить обработку пустыни: ${desertDesc.slice(0, 50)}`;
-  } catch {
-    // Ollama недоступна → пробуем claude CLI
-    const claudeText = callClaudeCLI(ADAM_CODE_SYSTEM, question);
-    if (claudeText) {
-      const line = claudeText.split('\n')[0].trim()
-        .replace(/^[-*•]\s*/, '')
-        .replace(/^задача:\s*/i, '')
-        .slice(0, 80);
-      if (line) return line;
-    }
-    // Шаблонная задача по типу
-    const templates = {
-      silent:         `добавить .gift спек с начальным даром: ${desertDesc.slice(0, 40)}`,
-      fading:         `укрепить угасающую нить: ${desertDesc.slice(0, 45)}`,
-      anastasis:      `создать resurrection.gift для: ${desertDesc.slice(0, 40)}`,
-      theosis_stasis: `добавить doxologia акты: ${desertDesc.slice(0, 45)}`,
-      leksis_pending: `обработать λήψις: ${desertDesc.slice(0, 50)}`,
-      asymmetry:      `восполнить асимметрию: ${desertDesc.slice(0, 45)}`,
-    };
-    return templates[desertType] ?? `обработать пустыню: ${desertDesc.slice(0, 55)}`;
-  }
+    const parsed = parseCodeLine(data.message?.content);
+    if (parsed) return parsed;
+  } catch {}
+
+  // 3) Шаблон
+  return templateCodeTask(desertDesc, desertType);
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────

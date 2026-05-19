@@ -4,8 +4,8 @@
       "personId": "_claude",
       "score": 1,
       "violations": 0,
-      "totalActs": 10,
-      "kenoticActs": 10,
+      "totalActs": 34,
+      "kenoticActs": 34,
       "lastViolation": null,
       "history": [
         {
@@ -67,6 +67,150 @@
           "score": 1,
           "violations": [],
           "timestamp": "2026-04-03T22:40:00.086Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T09:25:56.957Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T09:58:28.300Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T09:59:07.936Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T10:05:27.525Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T14:03:25.170Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T14:03:46.936Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T16:19:56.549Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T17:19:33.424Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-18T17:20:05.755Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:28:08.986Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:28:41.777Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:33:07.247Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:37:56.620Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:46:03.436Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:46:06.588Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T11:59:46.410Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:00:14.694Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:02:24.543Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:08:00.694Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:14:08.206Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:20:24.947Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:31:06.296Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-04-20T12:36:13.287Z"
+        },
+        {
+          "kenosis": true,
+          "score": 1,
+          "violations": [],
+          "timestamp": "2026-05-13T09:53:05.053Z"
         }
       ]
     }
