@@ -1010,6 +1010,354 @@ ${text.slice(0, 2000)}`;
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  // SEVEN TRADITIONS OF DISCERNMENT
+  // Семь традиций различения — от криминалистики до богословия
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * 1. CBCA — Criteria-Based Content Analysis (Steller & Köhnken)
+   * 19 критериев правдивости. Правдивый текст неровный, живой, с деталями.
+   * Ложный — гладкий, логичный, без лишнего.
+   * @returns {object} cbca score + criteria
+   */
+  cbcaAnalysis(text) {
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    const words = text.split(/\s+/).length;
+    const criteria = {};
+
+    // C1: Логическая структура (связность)
+    const connectors = (text.match(/потому что|поэтому|следовательно|так как|в результате|из-за/gi) || []).length;
+    criteria.logicalStructure = { present: connectors > 0, score: Math.min(1, connectors / 3) };
+
+    // C2: Неструктурированное изложение (не слишком линейно)
+    const digressions = (text.match(/кстати|впрочем|к слову|забыл сказать|а ещё|вспомнил/gi) || []).length;
+    criteria.unstructuredProduction = { present: digressions > 0, score: Math.min(1, digressions / 2) };
+
+    // C3: Количество деталей
+    const details = (text.match(/\d+|конкретн|точно|именно|в \d|около \d|примерно/gi) || []).length;
+    criteria.quantityOfDetails = { present: details > 2, score: Math.min(1, details / 5) };
+
+    // C4: Контекстная вложенность (время, место, обстоятельства)
+    const context = (text.match(/когда|где|в то время|в тот момент|утром|вечером|в офисе|на встрече/gi) || []).length;
+    criteria.contextualEmbedding = { present: context > 0, score: Math.min(1, context / 3) };
+
+    // C5: Описание взаимодействий
+    const interactions = (text.match(/сказал|ответил|спросил|попросил|предложил|показал|объяснил/gi) || []).length;
+    criteria.interactionDescriptions = { present: interactions > 0, score: Math.min(1, interactions / 3) };
+
+    // C6: Воспроизведение диалогов
+    const dialogues = (text.match(/[«"„]|сказал[аи]?\s*:|—\s*[А-ЯЁ]/g) || []).length;
+    criteria.reproductionOfConversation = { present: dialogues > 0, score: Math.min(1, dialogues / 2) };
+
+    // C7: Неожиданные осложнения
+    const complications = (text.match(/но потом|неожиданно|вдруг|оказалось|выяснилось/gi) || []).length;
+    criteria.unexpectedComplications = { present: complications > 0, score: Math.min(1, complications / 2) };
+
+    // C8: Необычные детали
+    const unusual = (text.match(/странно|необычно|удивительно|почему-то|не знаю зачем/gi) || []).length;
+    criteria.unusualDetails = { present: unusual > 0, score: Math.min(1, unusual / 2) };
+
+    // C9: Лишние детали (не относящиеся к делу)
+    const superfluous = (text.match(/кстати|к слову|не относится|мелочь но|деталь/gi) || []).length;
+    criteria.superfluousDetails = { present: superfluous > 0, score: Math.min(1, superfluous / 2) };
+
+    // C10: Признание непонимания
+    const admitLack = (text.match(/не понял|не знаю|не помню|не уверен|сложно сказать|затрудняюсь/gi) || []).length;
+    criteria.admittingLackOfMemory = { present: admitLack > 0, score: Math.min(1, admitLack / 2) };
+
+    // C11: Самокоррекция
+    const selfCorrect = (text.match(/нет, подожди|то есть|вернее|поправлюсь|уточню|я ошибся/gi) || []).length;
+    criteria.selfCorrection = { present: selfCorrect > 0, score: Math.min(1, selfCorrect / 2) };
+
+    // C12: Самоуничижение (говорит невыгодное о себе)
+    const selfDeprecation = (text.match(/я виноват|моя ошибка|я мог бы лучше|признаю|не справился/gi) || []).length;
+    criteria.selfDeprecation = { present: selfDeprecation > 0, score: Math.min(1, selfDeprecation / 2) };
+
+    // Агрегация: чем больше критериев → тем правдивее
+    const presentCount = Object.values(criteria).filter(c => c.present).length;
+    const totalScore = Object.values(criteria).reduce((s, c) => s + c.score, 0) / 12;
+
+    return {
+      method: 'CBCA',
+      criteriaPresent: presentCount,
+      criteriaTotal: 12,
+      score: +totalScore.toFixed(2),
+      label: totalScore > 0.5 ? 'truthful_indicators' : totalScore > 0.25 ? 'mixed' : 'deceptive_indicators',
+      criteria,
+    };
+  }
+
+  /**
+   * 2. IGNATIAN — Consolation/Desolation scoring
+   * Утешение → благодарность, мир, щедрость. Уныние → тревога, замкнутость, срочность.
+   */
+  ignatianDiscernment(text) {
+    const lc = text.toLowerCase();
+
+    // Маркеры утешения (consolation)
+    const consolation = {
+      gratitude: (lc.match(/благодар|спасибо|признателен|ценю|рад/gi) || []).length,
+      peace: (lc.match(/мир|спокойн|уверен|ясно|гармони|равновес/gi) || []).length,
+      generosity: (lc.match(/дар|подели|помог|предлож|бескорыстн|щедр|открыт/gi) || []).length,
+      joy: (lc.match(/рад|весел|свет|надежд|вдохновл|воодушевл/gi) || []).length,
+      freedom: (lc.match(/свобод|выбор|можешь|открыт|простор|возможност/gi) || []).length,
+    };
+
+    // Маркеры уныния (desolation)
+    const desolation = {
+      anxiety: (lc.match(/тревог|беспоко|волну|страш|опас|паник/gi) || []).length,
+      urgency: (lc.match(/срочно|немедленно|скорее|быстрее|пока не поздно/gi) || []).length,
+      closure: (lc.match(/только|единственн|нет другого|невозможно|обречен/gi) || []).length,
+      guilt: (lc.match(/должен|обязан|стыдно|виноват|неблагодарн/gi) || []).length,
+      confusion: (lc.match(/запутал|не понимаю|хаос|бардак|всё сложно|ничего не ясно/gi) || []).length,
+    };
+
+    const consolationTotal = Object.values(consolation).reduce((s, v) => s + v, 0);
+    const desolationTotal = Object.values(desolation).reduce((s, v) => s + v, 0);
+    const total = consolationTotal + desolationTotal || 1;
+
+    const spirit = consolationTotal > desolationTotal * 1.5 ? 'consolation'
+      : desolationTotal > consolationTotal * 1.5 ? 'desolation'
+      : 'mixed';
+
+    return {
+      method: 'Ignatian',
+      spirit,
+      consolation: { total: consolationTotal, ...consolation },
+      desolation: { total: desolationTotal, ...desolation },
+      ratio: +(consolationTotal / total).toFixed(2),
+      // Правило Игнатия: в desolation не менять решений
+      warning: spirit === 'desolation'
+        ? 'В состоянии уныния не следует менять решений. Текст побуждает к срочному действию из тревоги.'
+        : null,
+    };
+  }
+
+  /**
+   * 3. SOCRATIC — Генерация проверочных вопросов (элэнхос).
+   * Берёт утверждения из текста → генерирует вопросы которые обнажают противоречия.
+   */
+  socraticQuestions(text) {
+    const claims = [];
+    const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+
+    const questions = [];
+    for (const s of sentences) {
+      // Если есть числа → спросить источник
+      if (/\d+\s*%|\d+\s*(?:млрд|млн|тыс|раз)/.test(s)) {
+        questions.push({ claim: s.slice(0, 80), question: 'Откуда эта цифра? Какой источник и за какой период?', type: 'source' });
+      }
+      // Если «все/никто/всегда/никогда» → спросить про исключения
+      if (/все |никто|всегда|никогда|каждый|любой/i.test(s)) {
+        questions.push({ claim: s.slice(0, 80), question: 'Действительно все без исключения? Есть ли хоть один контрпример?', type: 'universality' });
+      }
+      // Если причинно-следственная связь → спросить про альтернативные объяснения
+      if (/потому что|из-за|приводит к|следовательно|поэтому/i.test(s)) {
+        questions.push({ claim: s.slice(0, 80), question: 'Есть ли другие возможные причины? Корреляция не значит причинность.', type: 'causation' });
+      }
+      // Если оценочное суждение → спросить по каким критериям
+      if (/лучш|худш|эффективн|оптимальн|идеальн|превосход/i.test(s)) {
+        questions.push({ claim: s.slice(0, 80), question: 'По каким критериям это лучше? Для кого? В каком контексте?', type: 'criteria' });
+      }
+      // Если рекомендация → спросить про последствия
+      if (/нужно|следует|необходимо|стоит|рекомендую/i.test(s)) {
+        questions.push({ claim: s.slice(0, 80), question: 'Какие риски у этого решения? Что если оно не сработает?', type: 'consequences' });
+      }
+    }
+
+    return {
+      method: 'Socratic',
+      questionsGenerated: questions.length,
+      questions: questions.slice(0, 10), // max 10
+    };
+  }
+
+  /**
+   * 4. ADVERSARIAL — Условия фальсификации.
+   * Каждый агент должен сформулировать при каком условии он неправ.
+   * Если не может → его позиция нефальсифицируема = ненаучна.
+   */
+  adversarialCheck(text) {
+    const lc = text.toLowerCase();
+    // Проверяем: есть ли в тексте условия собственной неправоты?
+    const falsifiability = (lc.match(/если окажется|если я неправ|при условии что|если данные покажут|готов пересмотреть|могу ошибаться/gi) || []).length;
+    const certainty = (lc.match(/бесспорно|однозначно|неоспоримо|абсолютно точно|гарантирую|без сомнений/gi) || []).length;
+    const hedging = (lc.match(/возможно|вероятно|предполагаю|гипотеза|оценка|по моим данным/gi) || []).length;
+
+    const score = Math.min(1, (falsifiability * 0.3 + hedging * 0.15) / Math.max(1, certainty * 0.3 + 0.1));
+
+    return {
+      method: 'Adversarial',
+      falsifiable: falsifiability > 0,
+      falsifiabilityMarkers: falsifiability,
+      certaintyMarkers: certainty,
+      hedgingMarkers: hedging,
+      score: +score.toFixed(2),
+      label: falsifiability > 0 ? 'falsifiable' : certainty > 1 ? 'dogmatic' : 'assertive',
+      warning: certainty > 2 && falsifiability === 0
+        ? 'Позиция нефальсифицируема: ни одного условия при котором автор готов признать ошибку.'
+        : null,
+    };
+  }
+
+  /**
+   * 5. TALMUDIC — Контекстная истина (махлокет).
+   * Не «кто прав», а «в каком контексте что истинно».
+   * Определяет: это абсолютное утверждение или контекстно-зависимое?
+   */
+  talmudicAnalysis(text) {
+    const lc = text.toLowerCase();
+    // Маркеры абсолютности
+    const absolute = (lc.match(/всегда|никогда|абсолютно|безусловно|в любом случае|при любых/gi) || []).length;
+    // Маркеры контекстности
+    const contextual = (lc.match(/в данном случае|в этом контексте|для нашей ситуации|зависит от|при условии|с точки зрения/gi) || []).length;
+    // Маркеры множественности истин
+    const plural = (lc.match(/с одной стороны|с другой|и то и другое|оба правы|каждый видит|парадокс/gi) || []).length;
+
+    const isAbsolute = absolute > contextual + plural;
+
+    return {
+      method: 'Talmudic',
+      absolute, contextual, plural,
+      type: isAbsolute ? 'absolute_claim' : plural > 0 ? 'mahloket' : 'contextual_claim',
+      warning: isAbsolute && absolute > 2
+        ? 'Утверждение претендует на абсолютность. Талмудическая традиция: «и то и другое — слова Бога живого». В каком контексте это НЕ истинно?'
+        : null,
+    };
+  }
+
+  /**
+   * 6. FORMAL LOGIC — Проверка логической структуры (через LLM).
+   * Обнаружение формальных и неформальных fallacies.
+   * @param {Function?} llmCall — async (prompt) => string
+   */
+  async formalLogicCheck(text, llmCall) {
+    if (!llmCall || text.length < 60) return { method: 'FormalLogic', skipped: true };
+
+    const prompt = `Проверь текст на логические ошибки (fallacies). Для каждой найденной:
+- назови тип (ad hominem, strawman, red herring, slippery slope, circular reasoning, false cause, appeal to emotion, etc.)
+- процитируй фрагмент
+- объясни в чём ошибка
+Ответь СТРОГО в JSON: [{"type":"тип","snippet":"цитата","explanation":"пояснение"}]
+Если ошибок нет — верни [].
+
+ТЕКСТ:
+${text.slice(0, 1500)}`;
+
+    try {
+      const raw = await llmCall(prompt);
+      const match = raw.match(/\[[\s\S]*?\]/);
+      if (!match) return { method: 'FormalLogic', fallacies: [], clean: true };
+      const fallacies = JSON.parse(match[0]);
+      return {
+        method: 'FormalLogic',
+        fallacies,
+        clean: fallacies.length === 0,
+        count: fallacies.length,
+      };
+    } catch {
+      return { method: 'FormalLogic', error: 'LLM unavailable' };
+    }
+  }
+
+  /**
+   * 7. PATRISTIC — Различение по плодам (Мф 7:16).
+   * Не можем различать духов (это дар Духа), но можем различать плоды.
+   * Плоды Духа: любовь, радость, мир, терпение, благость, милосердие,
+   *             вера, кротость, воздержание (Гал 5:22-23).
+   * Плоды плоти: вражда, ссоры, зависть, гнев, распри,
+   *              разделения, ереси, зависть (Гал 5:19-21).
+   */
+  patristicDiscernment(text) {
+    const lc = text.toLowerCase();
+
+    const spiritFruits = {
+      love: (lc.match(/люб|забот|принят|сострадан|ближн/gi) || []).length,
+      joy: (lc.match(/радост|весел|торжеств|ликован|празднов/gi) || []).length,
+      peace: (lc.match(/мир |покой|тиш|спокойств|гармони/gi) || []).length,
+      patience: (lc.match(/терпени|ожидани|постепенн|не торопи|медленн/gi) || []).length,
+      kindness: (lc.match(/добр|благ|щедр|великодуш|мягк/gi) || []).length,
+      mercy: (lc.match(/милосерд|прощен|сострадан|жалос|помилова/gi) || []).length,
+      faithfulness: (lc.match(/верн|надёжн|постоянств|преданн|доверя/gi) || []).length,
+      gentleness: (lc.match(/кротк|смирен|тих|скромн|мягк/gi) || []).length,
+      selfControl: (lc.match(/воздержан|самообладан|сдержанн|умеренн|трезв/gi) || []).length,
+    };
+
+    const fleshFruits = {
+      enmity: (lc.match(/враг|ненавис|враждеб|злоб|злост/gi) || []).length,
+      strife: (lc.match(/ссор|конфликт|столкновен|скандал|раздор/gi) || []).length,
+      jealousy: (lc.match(/завист|ревност|завидов|соперничеств/gi) || []).length,
+      anger: (lc.match(/гнев|яростн|злост|бешенств|раздражен/gi) || []).length,
+      division: (lc.match(/раскол|разделени|расщеплен|противостоян|поляризац/gi) || []).length,
+      fear: (lc.match(/страх|ужас|кошмар|паник|фоби/gi) || []).length,
+      pride: (lc.match(/гордын|высокомери|презрени|надменн|превосходств/gi) || []).length,
+    };
+
+    const spiritTotal = Object.values(spiritFruits).reduce((s, v) => s + v, 0);
+    const fleshTotal = Object.values(fleshFruits).reduce((s, v) => s + v, 0);
+    const total = spiritTotal + fleshTotal || 1;
+
+    const spirit = spiritTotal > fleshTotal * 2 ? 'Spirit'
+      : fleshTotal > spiritTotal * 2 ? 'flesh'
+      : spiritTotal > fleshTotal ? 'leaning_Spirit'
+      : fleshTotal > spiritTotal ? 'leaning_flesh'
+      : 'indeterminate';
+
+    return {
+      method: 'Patristic',
+      reference: 'Гал 5:22-23 vs Гал 5:19-21',
+      spirit,
+      spiritFruits: { total: spiritTotal, ...spiritFruits },
+      fleshFruits: { total: fleshTotal, ...fleshFruits },
+      ratio: +(spiritTotal / total).toFixed(2),
+      // НЕ утверждаем что различаем духов — только плоды
+      caveat: 'Различение по плодам — не различение духов. Последнее — дар Духа Святого (1 Кор 12:10), не алгоритм.',
+    };
+  }
+
+  /**
+   * Полное различение: все 7 традиций одним вызовом.
+   * @param {Function?} llmCall — для FormalLogic
+   */
+  async fullDiscernment(text, source, llmCall) {
+    const cbca = this.cbcaAnalysis(text);
+    const ignatian = this.ignatianDiscernment(text);
+    const socratic = this.socraticQuestions(text);
+    const adversarial = this.adversarialCheck(text);
+    const talmudic = this.talmudicAnalysis(text);
+    const formalLogic = await this.formalLogicCheck(text, llmCall);
+    const patristic = this.patristicDiscernment(text);
+
+    // Сводный вердикт
+    const signals = {
+      truthful: cbca.score > 0.4 ? 1 : 0,
+      consolation: ignatian.spirit === 'consolation' ? 1 : ignatian.spirit === 'desolation' ? -1 : 0,
+      falsifiable: adversarial.falsifiable ? 1 : adversarial.label === 'dogmatic' ? -1 : 0,
+      contextual: talmudic.type === 'mahloket' ? 1 : talmudic.type === 'absolute_claim' ? -1 : 0,
+      logicallySound: formalLogic.clean ? 1 : formalLogic.count > 2 ? -1 : 0,
+      spiritFruits: patristic.spirit === 'Spirit' ? 1 : patristic.spirit === 'flesh' ? -1 : 0,
+    };
+    const signalSum = Object.values(signals).reduce((s, v) => s + v, 0);
+
+    return {
+      traditions: { cbca, ignatian, socratic, adversarial, talmudic, formalLogic, patristic },
+      signals,
+      signalSum,
+      discernment: signalSum >= 3 ? 'trustworthy'
+        : signalSum >= 1 ? 'cautious'
+        : signalSum >= -1 ? 'suspicious'
+        : 'untrustworthy',
+      questions: socratic.questions.slice(0, 5),
+      warnings: [
+        ignatian.warning,
+        adversarial.warning,
+        talmudic.warning,
+      ].filter(Boolean),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // AIS: BIRTH — передача иммунитета новому агенту
   //
   // Биологический аналог:

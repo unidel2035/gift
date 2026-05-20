@@ -231,6 +231,51 @@ const server = http.createServer(async (req, res) => {
       return json(res, immune.receiveVaccine(vaccine));
     }
 
+    // ── POST /discern — полное различение (7 традиций) ──
+    if (req.method === 'POST' && path === '/discern') {
+      const { text, source = 'unknown' } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      const apiKey = process.env.DEEPSEEK_API_KEY;
+      const llmCall = apiKey ? async (prompt) => {
+        const r = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.3, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+        });
+        const d = await r.json();
+        return d.choices?.[0]?.message?.content || '';
+      } : null;
+      const result = await immune.fullDiscernment(text, source, llmCall);
+      return json(res, result);
+    }
+
+    // ── GET /cbca — только CBCA анализ ──
+    if (req.method === 'POST' && path === '/cbca') {
+      const { text } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      return json(res, immune.cbcaAnalysis(text));
+    }
+
+    // ── POST /ignatian — только игнатианское различение ──
+    if (req.method === 'POST' && path === '/ignatian') {
+      const { text } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      return json(res, immune.ignatianDiscernment(text));
+    }
+
+    // ── POST /socratic — сократические вопросы ──
+    if (req.method === 'POST' && path === '/socratic') {
+      const { text } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      return json(res, immune.socraticQuestions(text));
+    }
+
+    // ── POST /patristic — различение по плодам ──
+    if (req.method === 'POST' && path === '/patristic') {
+      const { text } = await parseBody(req);
+      if (!text) return json(res, { error: 'text required' }, 400);
+      return json(res, immune.patristicDiscernment(text));
+    }
+
     // ── POST /check-contradiction — проверка на противоречия ──
     if (req.method === 'POST' && path === '/check-contradiction') {
       const { source, text, wMatrix } = await parseBody(req);
