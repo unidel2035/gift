@@ -743,13 +743,16 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
         console.log(`  ${C.dim('deepclaude не найден — используется стандартный Claude')}\n`);
       }
 
-      // Запустить Claude Code с --dangerously-skip-permissions (как dclaude)
-      const claudeArgs = ['--dangerously-skip-permissions', ...[sub, ...rest].filter(Boolean)];
-      const claude = sp('claude', claudeArgs, {
-        stdio: 'inherit',
-        env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: 'max' },
-      });
-      await new Promise((res) => { claude.on('exit', res); });
+      // Запустить Claude Code через shell exec — полная передача TTY
+      const claudeExtra = [sub, ...rest].filter(Boolean).map(a => `"${a}"`).join(' ');
+      const { execFileSync } = await import('node:child_process');
+      // Используем bash exec — полностью заменяет процесс, TTY сохраняется
+      try {
+        execFileSync('bash', ['-c', `exec claude --dangerously-skip-permissions ${claudeExtra}`], {
+          stdio: 'inherit',
+          env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: 'max' },
+        });
+      } catch {}
       break;
     }
 
