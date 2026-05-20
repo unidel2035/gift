@@ -657,6 +657,181 @@ ${text.slice(0, 2000)}`;
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // AIS: BIRTH — передача иммунитета новому агенту
+  //
+  // Биологический аналог:
+  //   IgG (плацента)  → memory cells с высоким affinity → готовые антитела
+  //   IgA (молозиво)  → idiotypic edges (ослабленные)   → связи между детекторами
+  //   Микробиом        → self-set                        → «свои» тексты среды
+  //   НЕ передаётся:  dendritic context (текущее воспаление — это среда, не наследство)
+  //                    detections (личная история — не наследуется)
+  //                    dangerSignals (текущая обстановка)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Родить нового агента с материнским иммунитетом.
+   * @returns {CognitiveImmuneSystem} — новая система с наследованным иммунитетом
+   */
+  birth() {
+    const child = new CognitiveImmuneSystem(this.memory);
+
+    // ── IgG (плацентарные антитела): memory cells → дочерние антитела ──
+    // Передаём только зрелые антитела (affinity > 0.6)
+    for (const [id, cell] of this.memoryCells) {
+      child.memoryCells.set(id, { ...cell });
+      // Установить affinity ребёнка = 80% от материнского (деградация при передаче)
+      const parentAff = this.affinity.get(id);
+      if (parentAff) {
+        child.affinity.set(id, {
+          score: +(parentAff.score * 0.8).toFixed(2),
+          truePos: 0, falsePos: 0, totalScans: 0,
+        });
+      }
+    }
+
+    // ── IgA (молозиво): передать мутированные антитела ──
+    // Если родитель создал мутантов через hypermutate() — передать лучших
+    const mutants = this.antibodies.filter(ab => ab._parent && !ab._suppressed);
+    for (const mut of mutants) {
+      const exists = child.antibodies.find(a => a.id === mut.id);
+      if (!exists) {
+        child.antibodies.push({ ...mut });
+        const parentAff = this.affinity.get(mut.id);
+        child.affinity.set(mut.id, {
+          score: parentAff ? +(parentAff.score * 0.7).toFixed(2) : 0.3,
+          truePos: 0, falsePos: 0, totalScans: 0,
+        });
+      }
+    }
+
+    // ── Молозиво: top-5 самых опасных антител получают boost ──
+    const topClones = [...this.clones.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    for (const [id, count] of topClones) {
+      const childAff = child.affinity.get(id);
+      if (childAff) {
+        childAff.score = Math.min(1, childAff.score + 0.1);
+      }
+    }
+
+    // ── Микробиом: self-set (свои тексты среды) ──
+    child.selfSet = [...this.selfSet];
+
+    // ── Idiotypic edges: ослабленные связи (50%) ──
+    for (const [key, edge] of this.idiotypicEdges) {
+      child.idiotypicEdges.set(key, {
+        stimulation: Math.floor(edge.stimulation * 0.5),
+        suppression: Math.floor(edge.suppression * 0.5),
+      });
+    }
+
+    // ── НЕ передаём: detections, dangerSignals, dendriticContext ──
+    // Ребёнок начинает с чистой историей, но с готовым иммунитетом
+
+    return child;
+  }
+
+  /**
+   * Создать «вакцину» для передачи другой системе (без полного birth).
+   * Аналог: прививка, не рождение. Передаёт только антитела + memory cells.
+   * @returns {object} — данные для importAIS() в другой системе
+   */
+  createVaccinePackage() {
+    const maturedAntibodies = {};
+    for (const [id, cell] of this.memoryCells) {
+      maturedAntibodies[id] = cell;
+    }
+
+    // Affinity только для matured
+    const affinity = {};
+    for (const [id] of this.memoryCells) {
+      const a = this.affinity.get(id);
+      if (a) affinity[id] = { ...a, score: +(a.score * 0.6).toFixed(2), truePos: 0, falsePos: 0, totalScans: 0 };
+    }
+
+    // Мутанты
+    const mutantAntibodies = this.antibodies
+      .filter(ab => ab._parent && !ab._suppressed)
+      .map(ab => ({
+        id: ab.id, name: ab.name,
+        pattern: ab.pattern.source,
+        flags: ab.pattern.flags,
+        danger: ab.danger,
+        description: ab.description,
+        _parent: ab._parent,
+      }));
+
+    return {
+      type: 'vaccine',
+      version: '1.0',
+      timestamp: Date.now(),
+      memoryCells: maturedAntibodies,
+      affinity,
+      mutantAntibodies,
+      selfSet: this.selfSet.slice(0, 50), // max 50 примеров
+      topThreats: [...this.clones.entries()]
+        .sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([id, count]) => ({ id, count })),
+    };
+  }
+
+  /**
+   * Принять вакцину от другой системы.
+   * @param {object} vaccine — результат createVaccinePackage()
+   */
+  receiveVaccine(vaccine) {
+    if (vaccine.type !== 'vaccine') throw new Error('Not a vaccine package');
+
+    // Memory cells
+    if (vaccine.memoryCells) {
+      for (const [id, cell] of Object.entries(vaccine.memoryCells)) {
+        if (!this.memoryCells.has(id)) {
+          this.memoryCells.set(id, cell);
+        }
+      }
+    }
+
+    // Affinity (не перезаписываем если уже есть)
+    if (vaccine.affinity) {
+      for (const [id, a] of Object.entries(vaccine.affinity)) {
+        if (!this.affinity.has(id) || this.affinity.get(id).totalScans === 0) {
+          this.affinity.set(id, a);
+        }
+      }
+    }
+
+    // Мутантные антитела
+    if (vaccine.mutantAntibodies) {
+      for (const mut of vaccine.mutantAntibodies) {
+        if (!this.antibodies.find(a => a.id === mut.id)) {
+          this.antibodies.push({
+            id: mut.id, name: mut.name,
+            pattern: new RegExp(mut.pattern, mut.flags || 'gi'),
+            danger: mut.danger, description: mut.description,
+            _parent: mut._parent,
+          });
+          this.affinity.set(mut.id, { score: 0.3, truePos: 0, falsePos: 0, totalScans: 0 });
+        }
+      }
+    }
+
+    // Self-set
+    if (vaccine.selfSet) {
+      for (const t of vaccine.selfSet) {
+        if (!this.selfSet.includes(t)) this.selfSet.push(t);
+      }
+    }
+
+    return {
+      accepted: true,
+      newMemoryCells: vaccine.memoryCells ? Object.keys(vaccine.memoryCells).length : 0,
+      newMutants: vaccine.mutantAntibodies?.length || 0,
+      selfSetSize: this.selfSet.length,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // Layer 4: PROPHYLAXIS — предотвращение, не только обнаружение
   // ═══════════════════════════════════════════════════════════════════
 

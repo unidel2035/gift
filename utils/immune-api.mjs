@@ -206,6 +206,31 @@ const server = http.createServer(async (req, res) => {
       return json(res, immune.exportAIS());
     }
 
+    // ── POST /birth — родить нового агента с материнским иммунитетом ──
+    if (req.method === 'POST' && path === '/birth') {
+      const child = immune.birth();
+      return json(res, {
+        ok: true,
+        childAntibodies: child.antibodies.length,
+        childMemoryCells: child.memoryCells.size,
+        childSelfSet: child.selfSet.length,
+        childIdiotypicEdges: child.idiotypicEdges.size,
+        // Вернуть vaccine package чтобы клиент мог importAIS
+        vaccine: child.exportAIS(),
+      });
+    }
+
+    // ── GET /vaccine — создать вакцину для передачи другой системе ──
+    if (req.method === 'GET' && path === '/vaccine') {
+      return json(res, immune.createVaccinePackage());
+    }
+
+    // ── POST /receive-vaccine — принять вакцину от другой системы ──
+    if (req.method === 'POST' && path === '/receive-vaccine') {
+      const vaccine = await parseBody(req);
+      return json(res, immune.receiveVaccine(vaccine));
+    }
+
     // ── POST /antibody — добавить пользовательское антитело ──
     if (req.method === 'POST' && path === '/antibody') {
       const { id, name, pattern, flags = 'gi', danger, description } = await parseBody(req);
