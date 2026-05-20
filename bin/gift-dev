@@ -280,17 +280,20 @@ function buildRecordPrompt(task) {
 // ═══════════════════════════════════════════════════════════════
 
 function runClaude(prompt, options = {}) {
-  const args = ['--print', '-p', prompt];
+  // --print для анализа (чтение), полный claude для кодирования (запись)
+  const mode = options.write ? [] : ['--print'];
+  const args = [...mode, '-p', prompt, '--yes'];
   if (options.allowedTools) {
     args.push('--allowedTools', options.allowedTools.join(','));
   }
-  console.log(`\n🔵 Claude: ${prompt.slice(0, 80)}...`);
+  const modeLabel = options.write ? '✍ Claude (write)' : '📖 Claude (read)';
+  console.log(`\n${modeLabel}: ${prompt.slice(0, 80)}...`);
   try {
     const result = execSync(`claude ${args.map(a => JSON.stringify(a)).join(' ')}`, {
       cwd: ROOT,
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
-      timeout: 5 * 60 * 1000, // 5 min
+      timeout: options.timeout || 10 * 60 * 1000, // 10 min default
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return result;
@@ -353,20 +356,20 @@ gift-dev — Автономный Различающий Разработчик
     console.log('  ⚠ РАНЫ найдены — буду осторожен');
   }
 
-  // 4. КОДЕР
+  // 4. КОДЕР — пишет код (write mode, полный доступ к файлам)
   console.log('\n💻 4/7 Кодер — пишу код...');
   const coderPrompt = buildCoderPrompt(task, discernment, anamnesis);
-  const coderResult = runClaude(coderPrompt);
+  const coderResult = runClaude(coderPrompt, { write: true, timeout: 10 * 60 * 1000 });
 
-  // 5. ИММУНИТЕТ
+  // 5. ИММУНИТЕТ — проверяет и исправляет (write mode)
   console.log('\n🛡 5/7 Иммунитет — проверяю...');
   const postCheck = buildPostCheckPrompt(task);
-  const checkResult = runClaude(postCheck);
+  const checkResult = runClaude(postCheck, { write: true, timeout: 5 * 60 * 1000 });
 
-  // 6. СОБОР РЕВЬЮ
+  // 6. СОБОР РЕВЬЮ — исправляет если нашёл проблему (write mode)
   console.log('\n⛬ 6/7 Собор ревью...');
   const soborPrompt = buildSoborReviewPrompt(task);
-  const soborResult = runClaude(soborPrompt);
+  const soborResult = runClaude(soborPrompt, { write: true, timeout: 5 * 60 * 1000 });
 
   // 7. ЗАПИСЬ
   console.log('\n📝 7/7 Записываю в анамнезис...');
