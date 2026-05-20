@@ -701,58 +701,12 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
     }
 
     case 'code': {
-      // Claude Code через DeepSeek + КИС + хуки gift
-      // Объединяет: dclaude (дешёвый DeepSeek) + gift (память, хуки, W-матрица)
-      const { execSync: execS, spawn: sp } = await import('node:child_process');
-      const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || 'sk-6c45e2f605be470aa127a0ae6d74cc05';
-      const PROXY_SCRIPT = resolve(ROOT, '..', 'deepclaude', 'proxy', 'start-proxy.js');
-
-      // Убить старый прокси
-      for (const p of [3200, 3201, 3202]) {
-        try { execS(`kill $(lsof -ti:${p})`, { stdio: 'ignore' }); } catch {}
-      }
-      await new Promise(r => setTimeout(r, 1000));
-
-      // Запустить прокси с КИС
-      if (existsSync(PROXY_SCRIPT)) {
-        const proxy = sp('node', [PROXY_SCRIPT, 'https://api.deepseek.com/anthropic', DEEPSEEK_KEY], {
-          stdio: ['ignore', 'pipe', 'ignore'],
-          env: { ...process.env, DEEPSEEK_API_KEY: DEEPSEEK_KEY },
-        });
-        // Прочитать порт
-        let proxyPort = '3200';
-        await new Promise(res => {
-          proxy.stdout.once('data', d => { proxyPort = d.toString().trim().match(/\d+/)?.[0] || '3200'; res(); });
-          setTimeout(res, 4000);
-        });
-        // Переключить на DeepSeek
-        await new Promise(r => setTimeout(r, 1000));
-        try { execS(`curl -sX POST http://127.0.0.1:${proxyPort}/_proxy/mode -d backend=deepseek`, { stdio: 'ignore' }); } catch {}
-
-        process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
-        process.env.ANTHROPIC_AUTH_TOKEN = DEEPSEEK_KEY;
-        delete process.env.ANTHROPIC_API_KEY;
-
-        console.log(`\n  ${C.gold('⛬ gift code')} — DeepSeek + КИС + W-матрица`);
-        console.log(`  ${C.dim(`Прокси: :${proxyPort} | Модель: DeepSeek V4 | Иммунитет: активен`)}\n`);
-
-        // Cleanup on exit
-        process.on('exit', () => { try { proxy.kill(); } catch {} });
-      } else {
-        console.log(`\n  ${C.gold('⛬ gift code')} — Claude (без DeepSeek прокси)`);
-        console.log(`  ${C.dim('deepclaude не найден — используется стандартный Claude')}\n`);
-      }
-
-      // Запустить Claude Code через shell exec — полная передача TTY
-      const claudeExtra = [sub, ...rest].filter(Boolean).map(a => `"${a}"`).join(' ');
-      const { execFileSync } = await import('node:child_process');
-      // Используем bash exec — полностью заменяет процесс, TTY сохраняется
-      try {
-        execFileSync('bash', ['-c', `exec claude --dangerously-skip-permissions ${claudeExtra}`], {
-          stdio: 'inherit',
-          env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: 'max' },
-        });
-      } catch {}
+      // Shell script — единственный способ правильно передать TTY
+      const { execSync: execS } = await import('node:child_process');
+      const scriptPath = resolve(ROOT, 'bin', 'gift-code');
+      const extraArgs = [sub, ...rest].filter(Boolean).map(a => `"${a}"`).join(' ');
+      // exec заменяет Node-процесс на bash — TTY передаётся полностью
+      execS(`exec bash "${scriptPath}" ${extraArgs}`, { stdio: 'inherit' });
       break;
     }
 

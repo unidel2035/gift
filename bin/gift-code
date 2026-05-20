@@ -1,0 +1,39 @@
+#!/bin/bash
+# gift-code — DeepSeek + КИС + хуки gift. Одна команда.
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROXY_SCRIPT="$HOME/deepclaude/proxy/start-proxy.js"
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-sk-6c45e2f605be470aa127a0ae6d74cc05}"
+
+# Убить старый прокси
+for p in 3200 3201 3202; do
+  pid=$(lsof -ti:$p 2>/dev/null)
+  [ -n "$pid" ] && kill $pid 2>/dev/null
+done
+sleep 1
+
+# Запустить прокси с КИС
+if [ -f "$PROXY_SCRIPT" ]; then
+  node "$PROXY_SCRIPT" "https://api.deepseek.com/anthropic" "$DEEPSEEK_API_KEY" > /tmp/kis-proxy.log 2>&1 &
+  PROXY_PID=$!
+  sleep 3
+  PROXY_PORT=$(grep -oE '^[0-9]+$' /tmp/kis-proxy.log | head -1)
+  PROXY_PORT=${PROXY_PORT:-3200}
+  curl -sX POST "http://127.0.0.1:$PROXY_PORT/_proxy/mode" -d 'backend=deepseek' > /dev/null 2>&1
+
+  export ANTHROPIC_BASE_URL="http://127.0.0.1:$PROXY_PORT"
+  export ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY"
+  unset ANTHROPIC_API_KEY
+  export CLAUDE_CODE_EFFORT_LEVEL=max
+
+  echo ""
+  echo "  ⛬ gift code — DeepSeek + КИС + W-матрица"
+  echo "  Прокси: :$PROXY_PORT | Иммунитет: активен"
+  echo ""
+
+  trap "kill $PROXY_PID 2>/dev/null" EXIT
+else
+  echo "  ⛬ gift code — Claude (deepclaude не найден)"
+  echo ""
+fi
+
+exec claude --dangerously-skip-permissions "$@"
