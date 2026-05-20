@@ -231,6 +231,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, immune.receiveVaccine(vaccine));
     }
 
+    // ── POST /check-contradiction — проверка на противоречия ──
+    if (req.method === 'POST' && path === '/check-contradiction') {
+      const { source, text, wMatrix } = await parseBody(req);
+      if (!source) return json(res, { error: 'source required' }, 400);
+      if (text) immune.recordClaim(source, text);
+      const self = immune.detectSelfContradiction(source);
+      const matrix = wMatrix ? immune.detectMatrixContradiction(text || '', source, wMatrix) : [];
+      return json(res, { selfContradictions: self, matrixContradictions: matrix, total: self.length + matrix.length });
+    }
+
+    // ── POST /cross-contradiction — противоречия между агентами ──
+    if (req.method === 'POST' && path === '/cross-contradiction') {
+      const { statements } = await parseBody(req);
+      if (!statements || !Array.isArray(statements)) return json(res, { error: 'statements[] required' }, 400);
+      return json(res, { contradictions: immune.detectCrossContradiction(statements) });
+    }
+
     // ── POST /recombine — V(D)J рекомбинация ──
     if (req.method === 'POST' && path === '/recombine') {
       const { v, d, j } = await parseBody(req);

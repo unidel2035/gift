@@ -813,6 +813,203 @@ ${text.slice(0, 2000)}`;
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // INCONSISTENCY DETECTION — обнаружение противоречий
+  //
+  // Три типа:
+  //   1. Self-contradiction: источник противоречит сам себе во времени
+  //   2. Matrix-contradiction: утверждение расходится с W-матрицей
+  //   3. Cross-contradiction: агенты собора противоречат друг другу
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Журнал утверждений: каждое сканированное высказывание запоминается
+   * с ключевыми claims для проверки на противоречие.
+   */
+  recordClaim(source, text) {
+    this.claims = this.claims || [];
+    // Извлечь ключевые утверждения: предложения с числами, «не», сравнениями
+    const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 15);
+    const claims = sentences.map(s => {
+      // Определить полярность: позитив или негатив
+      const negative = /не |нет |без |ни |невозможно|отсутств|упал|падает|падени|снижа|стагнир|кризис|дефицит|ухудш|сократ|уменьш|разруш|рухн|деградир/i.test(s);
+      const positive = /рост|растёт|растет|увеличени|увеличива|улучш|успех|выросл|повыси|прибыл|расшири|укрепля|активн|развива/i.test(s);
+      // Извлечь числа
+      const numbers = s.match(/\d+[.,]?\d*\s*%|\d+\s*(?:млрд|млн|тыс|руб|год)/gi) || [];
+      // Ключевые темы
+      const topics = [];
+      if (/рынок|спрос|объём|оборот/i.test(s)) topics.push('market');
+      if (/кадр|пилот|персонал|специалист/i.test(s)) topics.push('personnel');
+      if (/технолог|компонент|импорт|произвол/i.test(s)) topics.push('technology');
+      if (/регулир|закон|серти|нормат/i.test(s)) topics.push('regulation');
+      if (/инвести|финанс|бюджет|стоимость/i.test(s)) topics.push('finance');
+      if (/безопас|риск|угроз/i.test(s)) topics.push('security');
+
+      return {
+        text: s,
+        polarity: negative ? -1 : positive ? 1 : 0,
+        numbers,
+        topics,
+        source,
+        timestamp: Date.now(),
+      };
+    }).filter(c => c.topics.length > 0 || c.numbers.length > 0 || c.polarity !== 0);
+
+    this.claims.push(...claims);
+    // Ограничить размер журнала
+    if (this.claims.length > 500) this.claims.splice(0, this.claims.length - 500);
+    return claims.length;
+  }
+
+  /**
+   * Self-contradiction: проверить противоречит ли источник сам себе.
+   * Ищет пары утверждений от одного источника с противоположной полярностью на одну тему.
+   */
+  detectSelfContradiction(source) {
+    if (!this.claims) return [];
+    const sourceClaims = this.claims.filter(c => c.source === source);
+    if (sourceClaims.length < 2) return [];
+
+    const contradictions = [];
+    for (let i = 0; i < sourceClaims.length; i++) {
+      for (let j = i + 1; j < sourceClaims.length; j++) {
+        const a = sourceClaims[i], b = sourceClaims[j];
+        // Пересечение тем
+        const sharedTopics = a.topics.filter(t => b.topics.includes(t));
+        if (sharedTopics.length === 0) continue;
+        // Противоположная полярность
+        if (a.polarity !== 0 && b.polarity !== 0 && a.polarity !== b.polarity) {
+          contradictions.push({
+            type: 'self_contradiction',
+            source,
+            topics: sharedTopics,
+            claimA: a.text.slice(0, 100),
+            claimB: b.text.slice(0, 100),
+            polarityA: a.polarity, polarityB: b.polarity,
+            timeDelta: Math.abs(b.timestamp - a.timestamp),
+            danger: 0.6,
+          });
+        }
+        // Противоречие в числах на одну тему
+        if (a.numbers.length && b.numbers.length && sharedTopics.length) {
+          const numA = parseFloat(a.numbers[0]);
+          const numB = parseFloat(b.numbers[0]);
+          if (!isNaN(numA) && !isNaN(numB) && Math.abs(numA - numB) / Math.max(numA, numB) > 0.5) {
+            contradictions.push({
+              type: 'numeric_contradiction',
+              source,
+              topics: sharedTopics,
+              claimA: `${a.text.slice(0, 80)} [${a.numbers[0]}]`,
+              claimB: `${b.text.slice(0, 80)} [${b.numbers[0]}]`,
+              divergence: +((Math.abs(numA - numB) / Math.max(numA, numB)) * 100).toFixed(0) + '%',
+              danger: 0.7,
+            });
+          }
+        }
+      }
+    }
+    return contradictions;
+  }
+
+  /**
+   * Matrix-contradiction: проверить утверждение против W-матрицы.
+   * Если агент говорит «я всегда помогал» а нить отрицательная — противоречие.
+   * @param {string} text — утверждение
+   * @param {string} source — кто говорит
+   * @param {object} wMatrix — { threads: [{from, to, weight}], acts: [...] }
+   */
+  detectMatrixContradiction(text, source, wMatrix) {
+    if (!wMatrix) return [];
+    const contradictions = [];
+    const lc = text.toLowerCase();
+
+    // Утверждение о сотрудничестве / помощи
+    if (/помогал|сотрудничал|вкладывал|поддерживал|всегда был рядом/i.test(lc)) {
+      const threads = (wMatrix.threads || []).filter(t => t.from === source || t.to === source);
+      const negativeThreads = threads.filter(t => t.weight < 0);
+      if (negativeThreads.length > 0) {
+        contradictions.push({
+          type: 'matrix_contradiction',
+          name: 'Утверждение vs матрица',
+          description: `${source} утверждает о сотрудничестве, но в матрице ${negativeThreads.length} отрицательных нитей`,
+          evidence: negativeThreads.map(t => `${t.from}→${t.to}: ${t.weight}`),
+          danger: 0.7,
+        });
+      }
+    }
+
+    // Утверждение о доверии
+    if (/доверяют|уважают|ценят|признают/i.test(lc)) {
+      const incomingWeight = (wMatrix.threads || [])
+        .filter(t => t.to === source)
+        .reduce((s, t) => s + t.weight, 0);
+      if (incomingWeight < 0) {
+        contradictions.push({
+          type: 'matrix_contradiction',
+          name: 'Заявление о доверии vs матрица',
+          description: `${source} говорит о доверии, но суммарный входящий вес = ${incomingWeight}`,
+          danger: 0.8,
+        });
+      }
+    }
+
+    // Утверждение «никогда не манипулировал»
+    if (/никогда не|не манипул|честно|прозрачно|открыто/i.test(lc)) {
+      const manipActs = this.detections.filter(d => d.source === source);
+      if (manipActs.length > 2) {
+        contradictions.push({
+          type: 'matrix_contradiction',
+          name: 'Отрицание манипуляций vs история',
+          description: `${source} отрицает манипуляции, но иммунная система обнаружила ${manipActs.length} случаев`,
+          evidence: manipActs.slice(0, 3).map(d => d.name),
+          danger: 0.9,
+        });
+      }
+    }
+
+    return contradictions;
+  }
+
+  /**
+   * Cross-contradiction: найти противоречия между агентами собора.
+   * @param {Array<{source, text}>} statements — высказывания разных агентов
+   */
+  detectCrossContradiction(statements) {
+    const contradictions = [];
+
+    // Записать claims от всех
+    for (const s of statements) {
+      this.recordClaim(s.source, s.text);
+    }
+
+    // Сравнить попарно
+    for (let i = 0; i < statements.length; i++) {
+      for (let j = i + 1; j < statements.length; j++) {
+        const a = statements[i], b = statements[j];
+        const claimsA = (this.claims || []).filter(c => c.source === a.source).slice(-10);
+        const claimsB = (this.claims || []).filter(c => c.source === b.source).slice(-10);
+
+        for (const ca of claimsA) {
+          for (const cb of claimsB) {
+            const shared = ca.topics.filter(t => cb.topics.includes(t));
+            if (shared.length > 0 && ca.polarity !== 0 && cb.polarity !== 0 && ca.polarity !== cb.polarity) {
+              contradictions.push({
+                type: 'cross_contradiction',
+                sources: [a.source, b.source],
+                topics: shared,
+                claimA: { source: a.source, text: ca.text.slice(0, 100), polarity: ca.polarity },
+                claimB: { source: b.source, text: cb.text.slice(0, 100), polarity: cb.polarity },
+                danger: 0.5, // cross-противоречие менее опасно — это может быть здоровый спор
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return contradictions;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // AIS: BIRTH — передача иммунитета новому агенту
   //
   // Биологический аналог:
@@ -1277,25 +1474,31 @@ ${examples.join('\n')}
   /**
    * Полная диагностика: все слои одним вызовом.
    */
-  fullDiagnostics(text, source) {
+  fullDiagnostics(text, source, wMatrix = null) {
     const response = this.respond(text, source);
     const silence = this.detectSilence(text);
     const trajectory = this.predictTrajectory(source);
     const autoImmune = this.detectAutoImmune(text);
     const health = this.measureHealth(text);
 
+    // Inconsistency detection
+    this.recordClaim(source, text);
+    const selfContradictions = this.detectSelfContradiction(source);
+    const matrixContradictions = this.detectMatrixContradiction(text, source, wMatrix);
+
+    // Все противоречия
+    const contradictions = [...selfContradictions, ...matrixContradictions];
+
     return {
       ...response,
-      // Добавляем silence-угрозу если есть
       silence,
-      // Траектория
       trajectory,
-      // Авто-иммунные атаки
       autoImmune,
-      // Здоровье
       health,
+      contradictions,
       // Общий вердикт
       verdict: autoImmune.length > 0 ? 'attack'
+        : contradictions.length > 0 ? 'contradictory'
         : response.dangerLevel > 0.7 ? 'dangerous'
         : response.dangerLevel > 0.3 ? 'suspicious'
         : silence ? 'smooth'
