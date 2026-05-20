@@ -1,0 +1,398 @@
+#!/usr/bin/env node
+/**
+ * gift-dev — Автономный Различающий Разработчик
+ *
+ * Не просто «напиши код». А:
+ *   1. Вспомни (анамнезис): что было, какие решения, какие раны
+ *   2. Прочитай (трезвение): прежде чем писать — прочитай что есть
+ *   3. Различи (КИС): эта задача не сломает? я прочитал всё?
+ *   4. Напиши (кодер): с контекстом и ограничениями
+ *   5. Проверь (иммунитет): тесты, типы, зависимости
+ *   6. Отрецензируй (собор): 3 агента смотрят с разных сторон
+ *   7. Запомни (запись): решения, паттерны, раны → анамнезис
+ *
+ * Использование:
+ *   gift-dev "добавь кеширование в API"
+ *   gift-dev --issue 42
+ *   gift-dev --auto          # берёт задачу из plan-approved issues
+ */
+
+import { execSync, spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+
+const ROOT = process.cwd();
+const ANAMNESIS_FILE = path.join(ROOT, 'data', 'code-anamnesis.json');
+const WOUNDS_FILE = path.join(ROOT, 'data', 'code-wounds.json');
+
+// ═══════════════════════════════════════════════════════════════
+// 1. КОД-АНАМНЕЗИС — память разработчика между сессиями
+// ═══════════════════════════════════════════════════════════════
+
+function loadAnamnesis() {
+  try { return JSON.parse(fs.readFileSync(ANAMNESIS_FILE, 'utf-8')); }
+  catch { return { decisions: [], patterns: {}, wounds: [], fileGraph: {}, lastTask: null }; }
+}
+
+function saveAnamnesis(anamnesis) {
+  fs.mkdirSync(path.dirname(ANAMNESIS_FILE), { recursive: true });
+  fs.writeFileSync(ANAMNESIS_FILE, JSON.stringify(anamnesis, null, 2));
+}
+
+function loadWounds() {
+  try { return JSON.parse(fs.readFileSync(WOUNDS_FILE, 'utf-8')); }
+  catch { return []; }
+}
+
+function saveWounds(wounds) {
+  fs.mkdirSync(path.dirname(WOUNDS_FILE), { recursive: true });
+  fs.writeFileSync(WOUNDS_FILE, JSON.stringify(wounds, null, 2));
+}
+
+// Записать решение
+function recordDecision(anamnesis, task, decision, files) {
+  anamnesis.decisions.push({
+    task: task.slice(0, 200),
+    decision: decision.slice(0, 500),
+    files,
+    timestamp: new Date().toISOString(),
+  });
+  // Ограничить размер
+  if (anamnesis.decisions.length > 100) anamnesis.decisions.splice(0, anamnesis.decisions.length - 100);
+}
+
+// Записать рану (ошибку которую допустили)
+function recordWound(description, files, fix) {
+  const wounds = loadWounds();
+  wounds.push({
+    description,
+    files,
+    fix,
+    timestamp: new Date().toISOString(),
+  });
+  if (wounds.length > 50) wounds.splice(0, wounds.length - 50);
+  saveWounds(wounds);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 2. ТРЕЗВЕНИЕ — прочитать прежде чем писать
+// ═══════════════════════════════════════════════════════════════
+
+function buildFileGraph() {
+  // Сканируем import/require в JS/TS файлах → граф зависимостей
+  const graph = {};
+  const srcDirs = ['src', 'utils', 'bin', 'tests'];
+  for (const dir of srcDirs) {
+    const fullDir = path.join(ROOT, dir);
+    if (!fs.existsSync(fullDir)) continue;
+    walkDir(fullDir, (filePath) => {
+      if (!/\.(js|mjs|ts|vue)$/.test(filePath)) return;
+      const rel = path.relative(ROOT, filePath);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const imports = [];
+      // import ... from '...'
+      const importRe = /(?:import|require)\s*\(?['"]([^'"]+)['"]/g;
+      let m;
+      while ((m = importRe.exec(content))) {
+        imports.push(m[1]);
+      }
+      graph[rel] = { imports, lines: content.split('\n').length, modified: fs.statSync(filePath).mtimeMs };
+    });
+  }
+  return graph;
+}
+
+function walkDir(dir, cb) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+      walkDir(full, cb);
+    } else if (entry.isFile()) {
+      cb(full);
+    }
+  }
+}
+
+// Найти файлы которые затрагивает задача
+function findRelevantFiles(task, graph) {
+  const keywords = task.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const relevant = [];
+  for (const [file, info] of Object.entries(graph)) {
+    const fileLower = file.toLowerCase();
+    for (const kw of keywords) {
+      if (fileLower.includes(kw)) {
+        relevant.push(file);
+        break;
+      }
+    }
+  }
+  return relevant;
+}
+
+// Найти зависимые файлы (что сломается если изменить file)
+function findDependents(file, graph) {
+  const dependents = [];
+  for (const [f, info] of Object.entries(graph)) {
+    for (const imp of info.imports) {
+      if (imp.includes(path.basename(file, path.extname(file)))) {
+        dependents.push(f);
+      }
+    }
+  }
+  return dependents;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 3. РАЗЛИЧИТЕЛЬ ЗАДАЧИ — adversarial check перед кодированием
+// ═══════════════════════════════════════════════════════════════
+
+function buildDiscernmentPrompt(task, anamnesis, graph, wounds) {
+  const relevant = findRelevantFiles(task, graph);
+  const allDependents = new Set();
+  for (const f of relevant) {
+    for (const dep of findDependents(f, graph)) {
+      allDependents.add(dep);
+    }
+  }
+
+  // Последние решения по этим файлам
+  const relatedDecisions = anamnesis.decisions
+    .filter(d => d.files?.some(f => relevant.includes(f)))
+    .slice(-5);
+
+  // Раны по этим файлам
+  const relatedWounds = wounds
+    .filter(w => w.files?.some(f => relevant.includes(f)));
+
+  let prompt = `# РАЗЛИЧЕНИЕ ЗАДАЧИ
+
+## Задача
+${task}
+
+## Файлы которые вероятно затрагивает
+${relevant.length ? relevant.map(f => `- ${f} (${graph[f]?.lines || '?'} строк)`).join('\n') : '(не определены — нужен ручной анализ)'}
+
+## Зависимые файлы (могут сломаться)
+${allDependents.size ? [...allDependents].map(f => `- ⚠ ${f}`).join('\n') : '(нет зависимостей)'}
+`;
+
+  if (relatedDecisions.length) {
+    prompt += `\n## Прошлые решения по этим файлам\n`;
+    for (const d of relatedDecisions) {
+      prompt += `- [${d.timestamp?.slice(0, 10)}] ${d.decision}\n`;
+    }
+  }
+
+  if (relatedWounds.length) {
+    prompt += `\n## ⚠ РАНЫ (ошибки которые уже допускали)\n`;
+    for (const w of relatedWounds) {
+      prompt += `- ${w.description} → Исправление: ${w.fix}\n`;
+    }
+  }
+
+  return prompt;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 4. КОДЕР — claude --print с полным контекстом
+// ═══════════════════════════════════════════════════════════════
+
+function buildCoderPrompt(task, discernment, anamnesis) {
+  const patternsBlock = Object.entries(anamnesis.patterns || {})
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join('\n');
+
+  return `${discernment}
+
+## Паттерны проекта
+${patternsBlock || '(пока не зафиксированы)'}
+
+## Инструкции
+
+1. ПРОЧИТАЙ все затрагиваемые файлы и зависимые ПРЕЖДЕ чем писать код
+2. Не создавай новые файлы без необходимости — предпочитай редактирование существующих
+3. Не меняй то что не связано с задачей
+4. Если задача может сломать зависимые файлы — обнови их тоже
+5. Если видишь рану из прошлого — не повторяй ошибку
+6. Если задача плохая — скажи почему и предложи лучше, НЕ выполняй молча
+7. Запусти тесты перед завершением
+
+## Задача
+${task}
+
+НАЧНИ С ЧТЕНИЯ файлов, потом план, потом код.`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 5. КОД-ИММУНИТЕТ — проверка после написания
+// ═══════════════════════════════════════════════════════════════
+
+function buildPostCheckPrompt(task) {
+  return `Ты — ревизор кода. Проверь что было сделано по задаче: "${task.slice(0, 100)}"
+
+Проверь:
+1. git diff — что реально изменилось?
+2. Нет ли сломанных импортов?
+3. Все ли тесты проходят? (npm test)
+4. Не создано ли лишних файлов?
+5. Не дублирует ли новый код существующий?
+6. Сохранены ли паттерны проекта (формат коммита, стиль)?
+
+Если что-то не так — ИСПРАВЬ. Не объясняй, исправь.
+Если всё ок — коммитни в формате: gift(Дионисий): описание`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. СОБОР РЕВЬЮ — три взгляда на код
+// ═══════════════════════════════════════════════════════════════
+
+function buildSoborReviewPrompt(task) {
+  return `Ты проводишь ревью кода. Задача была: "${task.slice(0, 100)}"
+
+Посмотри git diff HEAD~1 и оцени с ТРЁХ позиций:
+
+**Архитектор:** Решение правильное структурно? Нет ли нарушения SOLID/DRY? Граф зависимостей не запутан?
+**Тестировщик:** Покрыто тестами? Edge cases учтены? Что может сломаться?
+**Пользователь:** Это то что было нужно? Не overcomplicated ли? Легко использовать?
+
+Для каждой позиции: 1 предложение вердикт + 1 предложение если что-то не так.
+Если нашёл проблему — ИСПРАВЬ (не только укажи).`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 7. ЗАПИСЬ — обновить анамнезис после задачи
+// ═══════════════════════════════════════════════════════════════
+
+function buildRecordPrompt(task) {
+  return `Задача выполнена: "${task.slice(0, 100)}"
+
+Запиши в JSON (и только JSON, без markdown):
+{
+  "decision": "краткое описание принятого решения (1-2 предложения)",
+  "files": ["список", "изменённых", "файлов"],
+  "pattern": "если обнаружил новый паттерн проекта — опиши, иначе null",
+  "wound": "если допустил ошибку и исправил — опиши, иначе null"
+}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════════════════════════
+
+function runClaude(prompt, options = {}) {
+  const args = ['--print', '-p', prompt];
+  if (options.allowedTools) {
+    args.push('--allowedTools', options.allowedTools.join(','));
+  }
+  console.log(`\n🔵 Claude: ${prompt.slice(0, 80)}...`);
+  try {
+    const result = execSync(`claude ${args.map(a => JSON.stringify(a)).join(' ')}`, {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 5 * 60 * 1000, // 5 min
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return result;
+  } catch (e) {
+    console.error('❌ Claude error:', e.message?.slice(0, 200));
+    return '';
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const task = args.filter(a => !a.startsWith('--')).join(' ');
+
+  if (!task) {
+    console.log(`
+gift-dev — Автономный Различающий Разработчик
+
+Использование:
+  gift-dev "добавь кеширование в API"
+  gift-dev "исправь баг с таймаутом в immune-api"
+
+7 слоёв: анамнезис → трезвение → различение → код → иммунитет → собор → запись
+`);
+    process.exit(0);
+  }
+
+  console.log('═══════════════════════════════════════════');
+  console.log(`  gift-dev: ${task.slice(0, 60)}`);
+  console.log('═══════════════════════════════════════════');
+
+  // 1. АНАМНЕЗИС
+  console.log('\n📜 1/7 Анамнезис — вспоминаю...');
+  const anamnesis = loadAnamnesis();
+  const wounds = loadWounds();
+  console.log(`  Решений в памяти: ${anamnesis.decisions.length}`);
+  console.log(`  Ран: ${wounds.length}`);
+  console.log(`  Паттернов: ${Object.keys(anamnesis.patterns).length}`);
+
+  // 2. ТРЕЗВЕНИЕ — строим граф зависимостей
+  console.log('\n👁 2/7 Трезвение — читаю кодовую базу...');
+  const graph = buildFileGraph();
+  const fileCount = Object.keys(graph).length;
+  console.log(`  Файлов в графе: ${fileCount}`);
+  const relevant = findRelevantFiles(task, graph);
+  console.log(`  Релевантных файлов: ${relevant.length}`);
+  const dependents = new Set();
+  for (const f of relevant) {
+    for (const dep of findDependents(f, graph)) dependents.add(dep);
+  }
+  console.log(`  Зависимых (могут сломаться): ${dependents.size}`);
+
+  // Обновить граф в анамнезисе
+  anamnesis.fileGraph = graph;
+  anamnesis.lastTask = { task, timestamp: new Date().toISOString() };
+
+  // 3. РАЗЛИЧЕНИЕ
+  console.log('\n⚖ 3/7 Различение — проверяю задачу...');
+  const discernment = buildDiscernmentPrompt(task, anamnesis, graph, wounds);
+  if (wounds.filter(w => w.files?.some(f => relevant.includes(f))).length) {
+    console.log('  ⚠ РАНЫ найдены — буду осторожен');
+  }
+
+  // 4. КОДЕР
+  console.log('\n💻 4/7 Кодер — пишу код...');
+  const coderPrompt = buildCoderPrompt(task, discernment, anamnesis);
+  const coderResult = runClaude(coderPrompt);
+
+  // 5. ИММУНИТЕТ
+  console.log('\n🛡 5/7 Иммунитет — проверяю...');
+  const postCheck = buildPostCheckPrompt(task);
+  const checkResult = runClaude(postCheck);
+
+  // 6. СОБОР РЕВЬЮ
+  console.log('\n⛬ 6/7 Собор ревью...');
+  const soborPrompt = buildSoborReviewPrompt(task);
+  const soborResult = runClaude(soborPrompt);
+
+  // 7. ЗАПИСЬ
+  console.log('\n📝 7/7 Записываю в анамнезис...');
+  const recordPrompt = buildRecordPrompt(task);
+  const recordResult = runClaude(recordPrompt);
+
+  // Парсим запись
+  try {
+    const jsonMatch = recordResult.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const record = JSON.parse(jsonMatch[0]);
+      recordDecision(anamnesis, task, record.decision || '', record.files || []);
+      if (record.pattern) {
+        const key = `pattern_${Date.now().toString(36)}`;
+        anamnesis.patterns[key] = record.pattern;
+      }
+      if (record.wound) {
+        recordWound(record.wound, record.files || [], 'auto-detected');
+      }
+    }
+  } catch {}
+
+  saveAnamnesis(anamnesis);
+  console.log('\n═══════════════════════════════════════════');
+  console.log('  ✓ Задача завершена. Анамнезис обновлён.');
+  console.log('═══════════════════════════════════════════');
+}
+
+main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });
