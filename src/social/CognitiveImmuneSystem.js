@@ -51,6 +51,33 @@ export class CognitiveImmuneSystem {
     this.detections = [];       // история обнаружений
     this.clones = new Map();    // размноженные детекторы (успешные)
     this.dangerSignals = [];    // сигналы опасности (danger theory)
+
+    // ═══ Иммунная сеть (AIS) ═══
+
+    // Affinity: насколько хорошо антитело ловит угрозу (0..1)
+    // Начальный affinity = 0.5, растёт при true positive, падает при false positive
+    this.affinity = new Map(); // antibodyId → { score, truePos, falsePos, totalScans }
+    for (const ab of this.antibodies) {
+      this.affinity.set(ab.id, { score: 0.5, truePos: 0, falsePos: 0, totalScans: 0 });
+    }
+
+    // Memory cells: лучшие версии антител (после affinity maturation)
+    this.memoryCells = new Map(); // antibodyId → { pattern, affinity, generation }
+
+    // Idiotypic network: граф связей между детекторами
+    // Если A и B часто срабатывают вместе → стимуляция (усиление)
+    // Если A сработал а B — нет → супрессия (подавление)
+    this.idiotypicEdges = new Map(); // "A→B" → { stimulation, suppression }
+
+    // Self-набор: тексты классифицированные как «свои» (не манипуляция)
+    this.selfSet = [];
+
+    // Dendritic signals: контекстные сигналы среды
+    this.dendriticContext = {
+      pamp: 0,    // pathogen-associated molecular patterns (структурные маркеры атаки)
+      danger: 0,  // damage signals (сигналы повреждения среды)
+      safe: 0,    // safe signals (маркеры безопасности)
+    };
   }
 
   /**
@@ -83,12 +110,20 @@ export class CognitiveImmuneSystem {
     const threats = [];
 
     for (const ab of this.antibodies) {
+      if (ab._suppressed) continue; // подавленные антитела не сканируют
+
       const matches = text.match(ab.pattern);
       if (matches && matches.length > 0) {
+        // Учитываем affinity: если антитело плохо себя показало — снижаем danger
+        const aff = this.affinity.get(ab.id);
+        const affinityMultiplier = aff ? aff.score : 0.5;
+
         const threat = {
           antibodyId: ab.id,
           name: ab.name,
-          danger: ab.danger,
+          danger: +(ab.danger * affinityMultiplier).toFixed(2),
+          baseDanger: ab.danger,
+          affinity: aff?.score || 0.5,
           description: ab.description,
           matches: matches.slice(0, 3),
           count: matches.length,
@@ -102,6 +137,22 @@ export class CognitiveImmuneSystem {
         const cloneCount = this.clones.get(ab.id) || 0;
         this.clones.set(ab.id, cloneCount + 1);
       }
+    }
+
+    // Idiotypic network: обновить связи между сработавшими антителами
+    if (threats.length > 0) {
+      this.updateIdiotypicNetwork(threats);
+    }
+
+    // Dendritic signals: обновить контекст
+    if (threats.length > 0) {
+      const avgDanger = threats.reduce((s, t) => s + t.danger, 0) / threats.length;
+      this.updateDendriticContext({
+        pamp: threats.length,
+        danger: avgDanger > 0.5 ? 1 : 0,
+      });
+    } else {
+      this.updateDendriticContext({ safe: 1 });
     }
 
     // Danger theory: общий уровень опасности
@@ -345,7 +396,264 @@ ${text.slice(0, 2000)}`;
   addAntibody({ id, name, pattern, danger = 0.5, description = '' }) {
     if (!id || !pattern) throw new Error('id and pattern required');
     this.antibodies.push({ id, name: name || id, pattern, danger, description });
+    this.affinity.set(id, { score: 0.5, truePos: 0, falsePos: 0, totalScans: 0 });
     return this.antibodies.length;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AIS: Artificial Immune System — обучающаяся иммунная сеть
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Negative Selection: обучить систему на «своих» текстах.
+   * Тексты которые не содержат манипуляций — «self». Детекторы не должны на них срабатывать.
+   * @param {string[]} selfTexts — массив безопасных текстов (обучающая выборка)
+   */
+  trainSelf(selfTexts) {
+    for (const text of selfTexts) {
+      this.selfSet.push(text);
+      // Проверяем каждое антитело — если сработало на «своём» → false positive
+      for (const ab of this.antibodies) {
+        if (ab.pattern.test(text)) {
+          // Штраф: уменьшить affinity этого антитела
+          const aff = this.affinity.get(ab.id);
+          if (aff) {
+            aff.falsePos++;
+            aff.score = Math.max(0.05, aff.score - 0.05);
+            aff.totalScans++;
+          }
+        }
+      }
+    }
+    return { selfSetSize: this.selfSet.length };
+  }
+
+  /**
+   * Affinity Maturation: улучшить антитела на основе обратной связи.
+   * @param {string} antibodyId — какое антитело
+   * @param {boolean} truePositive — true = правильно нашло, false = ложное срабатывание
+   */
+  feedback(antibodyId, truePositive) {
+    const aff = this.affinity.get(antibodyId);
+    if (!aff) return;
+    aff.totalScans++;
+    if (truePositive) {
+      aff.truePos++;
+      aff.score = Math.min(1, aff.score + 0.03);
+    } else {
+      aff.falsePos++;
+      aff.score = Math.max(0.05, aff.score - 0.05);
+    }
+    // Если affinity упал ниже 0.1 — антитело подавлено (autoimmune suppression)
+    if (aff.score < 0.1) {
+      const ab = this.antibodies.find(a => a.id === antibodyId);
+      if (ab) ab._suppressed = true;
+    }
+  }
+
+  /**
+   * Somatic Hypermutation: мутировать антитело для улучшения coverage.
+   * Берёт существующий паттерн, добавляет вариации.
+   * @param {string} antibodyId — какое антитело мутировать
+   * @param {string[]} missedExamples — примеры которые не были пойманы
+   * @returns {object} новое антитело (мутант)
+   */
+  hypermutate(antibodyId, missedExamples) {
+    const parent = this.antibodies.find(a => a.id === antibodyId);
+    if (!parent || !missedExamples.length) return null;
+
+    // Извлечь ключевые слова из пропущенных примеров (грубая мутация)
+    const words = missedExamples
+      .join(' ')
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 4)
+      .reduce((acc, w) => { acc[w] = (acc[w] || 0) + 1; return acc; }, {});
+
+    const topWords = Object.entries(words)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([w]) => w);
+
+    if (!topWords.length) return null;
+
+    // Создать мутант: родительский паттерн + новые слова
+    const parentSrc = parent.pattern.source;
+    const mutantSrc = parentSrc + '|' + topWords.join('|');
+    const mutantId = antibodyId + '_mut' + Date.now().toString(36).slice(-4);
+
+    const mutant = {
+      id: mutantId,
+      name: parent.name + ' (мутант)',
+      pattern: new RegExp(mutantSrc, parent.pattern.flags),
+      danger: parent.danger,
+      description: parent.description + ` [мутация: +${topWords.join(', ')}]`,
+      _parent: antibodyId,
+      _generation: (parent._generation || 0) + 1,
+    };
+
+    this.antibodies.push(mutant);
+    this.affinity.set(mutantId, { score: 0.4, truePos: 0, falsePos: 0, totalScans: 0 });
+
+    // Сохранить в memory cells если родитель был хорош
+    const parentAff = this.affinity.get(antibodyId);
+    if (parentAff && parentAff.score > 0.7) {
+      this.memoryCells.set(antibodyId, {
+        pattern: parent.pattern.source,
+        affinity: parentAff.score,
+        generation: parent._generation || 0,
+      });
+    }
+
+    return mutant;
+  }
+
+  /**
+   * Idiotypic Network: обновить граф связей между детекторами.
+   * Вызывается после каждого scan(). Если два антитела сработали вместе → стимуляция.
+   * @param {Array} threats — результат scan()
+   */
+  updateIdiotypicNetwork(threats) {
+    const ids = threats.map(t => t.antibodyId);
+    // Все пары сработавших антител → стимуляция
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = ids[i] < ids[j] ? `${ids[i]}→${ids[j]}` : `${ids[j]}→${ids[i]}`;
+        const edge = this.idiotypicEdges.get(key) || { stimulation: 0, suppression: 0 };
+        edge.stimulation++;
+        this.idiotypicEdges.set(key, edge);
+      }
+    }
+    // Антитела которые НЕ сработали в контексте где другие сработали → супрессия
+    for (const ab of this.antibodies) {
+      if (ids.includes(ab.id) || ab._suppressed) continue;
+      for (const triggeredId of ids) {
+        const key = ab.id < triggeredId ? `${ab.id}→${triggeredId}` : `${triggeredId}→${ab.id}`;
+        const edge = this.idiotypicEdges.get(key) || { stimulation: 0, suppression: 0 };
+        edge.suppression++;
+        this.idiotypicEdges.set(key, edge);
+      }
+    }
+  }
+
+  /**
+   * Dendritic Cell Algorithm: контекстные сигналы.
+   * Обновляет PAMP/danger/safe на основе среды.
+   * @param {object} signals — { pamp?, danger?, safe? }
+   */
+  updateDendriticContext(signals) {
+    if (signals.pamp !== undefined) this.dendriticContext.pamp += signals.pamp;
+    if (signals.danger !== undefined) this.dendriticContext.danger += signals.danger;
+    if (signals.safe !== undefined) this.dendriticContext.safe += signals.safe;
+  }
+
+  /**
+   * Dendritic maturation: дендритная клетка «созревает» и выносит вердикт.
+   * csm = costimulatory molecule signal = pamp + danger - 2*safe
+   * Если csm > 0 → mature (воспаление, реакция)
+   * Если csm ≤ 0 → semi-mature (толерантность)
+   */
+  dendriticVerdict() {
+    const { pamp, danger, safe } = this.dendriticContext;
+    const csm = pamp + danger - 2 * safe;
+    return {
+      csm: +csm.toFixed(2),
+      mature: csm > 0,
+      state: csm > 5 ? 'inflamed' : csm > 0 ? 'alert' : csm > -3 ? 'tolerant' : 'suppressed',
+      pamp, danger, safe,
+    };
+  }
+
+  /**
+   * Получить граф идиотипической сети как данные для визуализации.
+   */
+  getIdiotypicGraph() {
+    const nodes = this.antibodies.map(ab => {
+      const aff = this.affinity.get(ab.id);
+      return {
+        id: ab.id, name: ab.name, danger: ab.danger,
+        affinity: aff?.score || 0,
+        suppressed: !!ab._suppressed,
+        clones: this.clones.get(ab.id) || 0,
+      };
+    });
+    const edges = [...this.idiotypicEdges.entries()].map(([key, val]) => {
+      const [from, to] = key.split('→');
+      return { from, to, ...val, weight: val.stimulation - val.suppression };
+    });
+    return { nodes, edges };
+  }
+
+  /**
+   * CLONALG: полный цикл клональной селекции + affinity maturation.
+   * Вызывается периодически (sabbath) для эволюции детекторов.
+   */
+  evolve() {
+    const report = { matured: [], suppressed: [], mutants: [] };
+
+    for (const ab of this.antibodies) {
+      const aff = this.affinity.get(ab.id);
+      if (!aff || aff.totalScans < 3) continue;
+
+      // Suppression: если precision < 30% → подавить
+      const precision = aff.truePos / (aff.truePos + aff.falsePos || 1);
+      if (precision < 0.3 && aff.totalScans > 5) {
+        ab._suppressed = true;
+        report.suppressed.push({ id: ab.id, name: ab.name, precision: +precision.toFixed(2) });
+      }
+
+      // Maturation: если precision > 70% → сохранить как memory cell
+      if (precision > 0.7 && aff.truePos > 2) {
+        this.memoryCells.set(ab.id, {
+          pattern: ab.pattern.source,
+          affinity: aff.score,
+          generation: ab._generation || 0,
+          truePositives: aff.truePos,
+        });
+        report.matured.push({ id: ab.id, name: ab.name, affinity: +aff.score.toFixed(2) });
+      }
+    }
+
+    return report;
+  }
+
+  /**
+   * Экспорт состояния AIS для persistence.
+   */
+  exportAIS() {
+    return {
+      affinity: Object.fromEntries(this.affinity),
+      memoryCells: Object.fromEntries(this.memoryCells),
+      idiotypicEdges: Object.fromEntries(this.idiotypicEdges),
+      selfSetSize: this.selfSet.length,
+      dendriticContext: this.dendriticContext,
+      antibodiesCount: this.antibodies.length,
+      suppressedCount: this.antibodies.filter(a => a._suppressed).length,
+    };
+  }
+
+  /**
+   * Импорт сохранённого состояния AIS.
+   */
+  importAIS(state) {
+    if (state.affinity) {
+      for (const [k, v] of Object.entries(state.affinity)) {
+        this.affinity.set(k, v);
+      }
+    }
+    if (state.memoryCells) {
+      for (const [k, v] of Object.entries(state.memoryCells)) {
+        this.memoryCells.set(k, v);
+      }
+    }
+    if (state.idiotypicEdges) {
+      for (const [k, v] of Object.entries(state.idiotypicEdges)) {
+        this.idiotypicEdges.set(k, v);
+      }
+    }
+    if (state.dendriticContext) {
+      Object.assign(this.dendriticContext, state.dendriticContext);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════

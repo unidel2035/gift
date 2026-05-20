@@ -163,6 +163,49 @@ const server = http.createServer(async (req, res) => {
       return json(res, immune.sabbathReview());
     }
 
+    // ── POST /train-self — обучить на «своих» текстах (negative selection) ──
+    if (req.method === 'POST' && path === '/train-self') {
+      const { texts } = await parseBody(req);
+      if (!texts || !Array.isArray(texts)) return json(res, { error: 'texts[] required' }, 400);
+      return json(res, immune.trainSelf(texts));
+    }
+
+    // ── POST /feedback — обратная связь (affinity maturation) ──
+    if (req.method === 'POST' && path === '/feedback') {
+      const { antibodyId, truePositive } = await parseBody(req);
+      if (!antibodyId) return json(res, { error: 'antibodyId required' }, 400);
+      immune.feedback(antibodyId, !!truePositive);
+      return json(res, { ok: true, affinity: Object.fromEntries(immune.affinity) });
+    }
+
+    // ── POST /hypermutate — соматическая гипермутация ──
+    if (req.method === 'POST' && path === '/hypermutate') {
+      const { antibodyId, missedExamples } = await parseBody(req);
+      if (!antibodyId || !missedExamples) return json(res, { error: 'antibodyId and missedExamples required' }, 400);
+      const mutant = immune.hypermutate(antibodyId, missedExamples);
+      return json(res, mutant ? { ok: true, mutant: { id: mutant.id, name: mutant.name, pattern: mutant.pattern.source } } : { ok: false, reason: 'no mutation possible' });
+    }
+
+    // ── GET /evolve — эволюция (CLONALG цикл) ──
+    if (req.method === 'GET' && path === '/evolve') {
+      return json(res, immune.evolve());
+    }
+
+    // ── GET /idiotypic-graph — граф иммунной сети ──
+    if (req.method === 'GET' && path === '/idiotypic-graph') {
+      return json(res, immune.getIdiotypicGraph());
+    }
+
+    // ── GET /dendritic — дендритный вердикт ──
+    if (req.method === 'GET' && path === '/dendritic') {
+      return json(res, immune.dendriticVerdict());
+    }
+
+    // ── GET /ais-state — полное состояние AIS ──
+    if (req.method === 'GET' && path === '/ais-state') {
+      return json(res, immune.exportAIS());
+    }
+
     // ── POST /antibody — добавить пользовательское антитело ──
     if (req.method === 'POST' && path === '/antibody') {
       const { id, name, pattern, flags = 'gi', danger, description } = await parseBody(req);
