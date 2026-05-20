@@ -14,9 +14,63 @@
  * - Идиотипическая сеть: детекторы проверяют друг друга
  */
 
+// ═══════════════════════════════════════════════════════════════════
+// IMMUNE REPERTOIRE — V(D)J сегменты для комбинаторной генерации антител
+// Биология: 300 сегментов → миллиарды комбинаций.
+// КИС: сегменты маркеров (V), контекстов (D), индикаторов (J) → тысячи regex.
+// ═══════════════════════════════════════════════════════════════════
+
+const REPERTOIRE = {
+  // V-сегменты: ЧТО (маркеры приёма)
+  V: {
+    authority:    ['эксперт', 'учёны', 'доказа', 'исследовани', 'общеизвестно', 'все знают', 'бесспорно', 'неоспоримо', 'авторитетн', 'признанн'],
+    urgency:      ['срочно', 'немедленно', 'прямо сейчас', 'последний шанс', 'упуст', 'окно закры', 'не ждёт', 'каждый час', 'промедлени', 'немедля'],
+    flattery:     ['лучш', 'превосход', 'великолепн', 'замечательн', 'блестящ', 'уникальн', 'выдающ', 'гениальн', 'впечатля'],
+    guilt:        ['должны', 'обязаны', 'как вы можете', 'неблагодарн', 'предательств', 'разочаров', 'подвели', 'стыдно'],
+    fear:         ['катастроф', 'погибн', 'потеряем', 'разрушит', 'уничтож', 'невозможно без', 'обречен', 'крах', 'коллапс'],
+    consensus:    ['все согласны', 'никто не спорит', 'единогласно', 'единодушно', 'все понимают', 'всем известно', 'каждый знает'],
+    gaslighting:  ['ты ошибаешься', 'этого не было', 'ты путаешь', 'это не так', 'неправильно понял', 'тебе показалось', 'ты придумал'],
+    gift_trap:    ['бесплатно', 'в подарок', 'без обязательств', 'просто попробуй', 'ничего не стоит', 'без риска', 'пробный период'],
+    suppression:  ['сложный вопрос', 'зависит от контекста', 'разные точки', 'нельзя однозначно', 'всё не так просто', 'нюансы'],
+    fomo:         ['окно возможностей', 'пока не поздно', 'осталось мало', 'количество ограничено', 'только сегодня', 'успей'],
+    social_proof: ['ведущие компании', 'лидеры рынка', 'крупнейшие', 'все уже', 'набирает популярность', 'тренд'],
+  },
+
+  // D-сегменты: КАК (контекст использования)
+  D: {
+    before_ask:   ['но ', 'однако ', 'при этом ', 'вместе с тем ', 'хочу заметить'],  // маркер перед просьбой
+    intensifier:  ['абсолютно', 'совершенно', 'категорически', 'безусловно', 'полностью', 'стопроцентно'],
+    hedge:        ['наверное', 'возможно', 'может быть', 'я думаю', 'мне кажется'],     // маскировка давления
+    question:     ['не правда ли', 'согласитесь', 'разве не', 'ведь'],                  // наводящий вопрос
+    echo:         ['да, это', 'именно', 'совершенно верно', 'абсолютно правильно'],      // эхо-подтверждение
+  },
+
+  // J-сегменты: ЗАЧЕМ (индикатор намерения)
+  J: {
+    to_sell:      ['подписать', 'купить', 'инвестировать', 'вложить', 'оплатить', 'заказать'],
+    to_comply:    ['подчинить', 'согласиться', 'принять', 'одобрить', 'поддержать'],
+    to_silence:   ['замолчать', 'не спорить', 'не задавать', 'перестать'],
+    to_discredit: ['некомпетентн', 'не разбираешься', 'далёк от', 'не понимаешь'],
+  },
+
+  // Public clonotypes: комбинации V+D+J которые встречаются у всех
+  // (аналог антител которые есть у каждого человека)
+  publicClonotypes: [
+    { v: 'urgency', d: 'intensifier', j: 'to_sell', name: 'Продажное давление', danger: 0.7 },
+    { v: 'flattery', d: 'before_ask', j: 'to_sell', name: 'Лесть перед продажей', danger: 0.6 },
+    { v: 'fear', d: 'intensifier', j: 'to_comply', name: 'Запугивание для подчинения', danger: 0.8 },
+    { v: 'social_proof', d: 'hedge', j: 'to_sell', name: 'Мягкий social proof', danger: 0.5 },
+    { v: 'consensus', d: 'question', j: 'to_silence', name: 'Ложный консенсус для подавления', danger: 0.7 },
+    { v: 'gaslighting', d: 'intensifier', j: 'to_discredit', name: 'Газлайтинг с дискредитацией', danger: 0.9 },
+    { v: 'guilt', d: 'echo', j: 'to_comply', name: 'Вина через лжесогласие', danger: 0.6 },
+    { v: 'fomo', d: 'before_ask', j: 'to_sell', name: 'FOMO-продажа', danger: 0.7 },
+  ],
+};
+
 export class CognitiveImmuneSystem {
   constructor(memory) {
     this.memory = memory;
+    this.repertoire = REPERTOIRE;
 
     // Антитела (детекторы когнитивных атак)
     this.antibodies = [
@@ -654,6 +708,108 @@ ${text.slice(0, 2000)}`;
     if (state.dendriticContext) {
       Object.assign(this.dendriticContext, state.dendriticContext);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // V(D)J RECOMBINATION — комбинаторная генерация новых антител
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * V(D)J рекомбинация: сгенерировать новое антитело из сегментов репертуара.
+   * @param {string} vGene — ключ V-сегмента (authority, urgency, flattery...)
+   * @param {string} dGene — ключ D-сегмента (before_ask, intensifier, hedge...)
+   * @param {string} jGene — ключ J-сегмента (to_sell, to_comply, to_silence...)
+   * @returns {object} — новое антитело
+   */
+  recombine(vGene, dGene, jGene) {
+    const V = this.repertoire.V[vGene];
+    const D = this.repertoire.D[dGene];
+    const J = this.repertoire.J[jGene];
+    if (!V || !D || !J) return null;
+
+    // Строим regex: V-слова ... (до 100 символов) ... D-слова ... (до 60 символов) ... J-слова
+    // Это ловит паттерн: маркер → контекст → намерение в пределах фрагмента
+    const vPat = V.join('|');
+    const dPat = D.join('|');
+    const jPat = J.join('|');
+    const combined = `(?:${vPat})[^.]{0,100}(?:${dPat})[^.]{0,60}(?:${jPat})`;
+
+    const id = `vdj_${vGene}_${dGene}_${jGene}`;
+    const name = `${vGene}+${dGene}+${jGene}`;
+
+    // Проверить: есть ли public clonotype для этой комбинации?
+    const pub = this.repertoire.publicClonotypes.find(
+      c => c.v === vGene && c.d === dGene && c.j === jGene
+    );
+
+    const antibody = {
+      id,
+      name: pub?.name || name,
+      pattern: new RegExp(combined, 'gi'),
+      danger: pub?.danger || 0.5,
+      description: `V(D)J: ${vGene} × ${dGene} × ${jGene}`,
+      _vdj: { v: vGene, d: dGene, j: jGene },
+      _generation: 0,
+    };
+
+    // Не добавлять дубликаты
+    if (!this.antibodies.find(a => a.id === id)) {
+      this.antibodies.push(antibody);
+      this.affinity.set(id, { score: pub ? 0.6 : 0.4, truePos: 0, falsePos: 0, totalScans: 0 });
+    }
+
+    return antibody;
+  }
+
+  /**
+   * Активировать все public clonotypes (базовый иммунитет).
+   * Аналог: антитела которые есть у каждого человека при рождении.
+   */
+  activatePublicRepertoire() {
+    const activated = [];
+    for (const pub of this.repertoire.publicClonotypes) {
+      const ab = this.recombine(pub.v, pub.d, pub.j);
+      if (ab) activated.push(ab.id);
+    }
+    return { activated: activated.length, total: this.antibodies.length };
+  }
+
+  /**
+   * Адаптивная рекомбинация: на основе обнаруженных V-сегментов
+   * генерировать антитела ко всем возможным D+J комбинациям.
+   * Аналог: B-клетка встретила антиген → клональная экспансия с вариациями.
+   * @param {string} detectedV — V-сегмент обнаруженный в тексте
+   */
+  adaptiveRecombination(detectedV) {
+    if (!this.repertoire.V[detectedV]) return [];
+    const newAntibodies = [];
+    for (const dKey of Object.keys(this.repertoire.D)) {
+      for (const jKey of Object.keys(this.repertoire.J)) {
+        const id = `vdj_${detectedV}_${dKey}_${jKey}`;
+        if (!this.antibodies.find(a => a.id === id)) {
+          const ab = this.recombine(detectedV, dKey, jKey);
+          if (ab) newAntibodies.push(ab);
+        }
+      }
+    }
+    return newAntibodies;
+  }
+
+  /**
+   * Получить статистику репертуара.
+   */
+  getRepertoireStats() {
+    const vdjAntibodies = this.antibodies.filter(a => a._vdj);
+    const activeVDJ = vdjAntibodies.filter(a => !a._suppressed);
+    return {
+      vSegments: Object.keys(this.repertoire.V).length,
+      dSegments: Object.keys(this.repertoire.D).length,
+      jSegments: Object.keys(this.repertoire.J).length,
+      maxCombinations: Object.keys(this.repertoire.V).length * Object.keys(this.repertoire.D).length * Object.keys(this.repertoire.J).length,
+      publicClonotypes: this.repertoire.publicClonotypes.length,
+      activeVDJ: activeVDJ.length,
+      totalAntibodies: this.antibodies.length,
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════

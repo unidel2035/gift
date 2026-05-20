@@ -231,6 +231,32 @@ const server = http.createServer(async (req, res) => {
       return json(res, immune.receiveVaccine(vaccine));
     }
 
+    // ── POST /recombine — V(D)J рекомбинация ──
+    if (req.method === 'POST' && path === '/recombine') {
+      const { v, d, j } = await parseBody(req);
+      if (!v || !d || !j) return json(res, { error: 'v, d, j required' }, 400);
+      const ab = immune.recombine(v, d, j);
+      return json(res, ab ? { ok: true, id: ab.id, name: ab.name, danger: ab.danger } : { ok: false });
+    }
+
+    // ── POST /activate-repertoire — активировать public clonotypes ──
+    if (req.method === 'POST' && path === '/activate-repertoire') {
+      return json(res, immune.activatePublicRepertoire());
+    }
+
+    // ── POST /adaptive-recombination — адаптивная рекомбинация по V ──
+    if (req.method === 'POST' && path === '/adaptive-recombination') {
+      const { v } = await parseBody(req);
+      if (!v) return json(res, { error: 'v required' }, 400);
+      const newAbs = immune.adaptiveRecombination(v);
+      return json(res, { generated: newAbs.length, ids: newAbs.map(a => a.id) });
+    }
+
+    // ── GET /repertoire — статистика репертуара ──
+    if (req.method === 'GET' && path === '/repertoire') {
+      return json(res, immune.getRepertoireStats());
+    }
+
     // ── POST /antibody — добавить пользовательское антитело ──
     if (req.method === 'POST' && path === '/antibody') {
       const { id, name, pattern, flags = 'gi', danger, description } = await parseBody(req);
