@@ -113,15 +113,22 @@ export class DecisionGraph {
       failures: [],
     };
 
-    // Поиск по domain
+    // Поиск: разбиваем запрос на слова, ищем ЛЮБОЕ совпадение
+    const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 1);
     const relevant = this.decisions
       .filter(d => {
         if (domain && d.domain !== domain) return false;
         if (project && d.project !== project) return false;
-        const q = query.toLowerCase();
-        return (d.title || '').toLowerCase().includes(q) ||
-               (d.description || '').toLowerCase().includes(q) ||
-               (d.domain || '').toLowerCase().includes(q);
+        const haystack = [
+          (d.title || '').toLowerCase(),
+          (d.description || '').toLowerCase(),
+          (d.domain || '').toLowerCase(),
+          (d.project || '').toLowerCase(),
+          (d.team || []).join(' ').toLowerCase(),
+        ].join(' ');
+        // Короткий запрос — точное совпадение. Длинный — любое слово
+        if (words.length <= 2) return haystack.includes(query.toLowerCase());
+        return words.some(w => haystack.includes(w));
       })
       .slice(-limit);
 
