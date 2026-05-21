@@ -196,6 +196,8 @@ export function stats() {
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
 const CMD = process.argv[2];
 
 if (CMD === 'stream') {
@@ -293,3 +295,4 @@ if (CMD === 'stream') {
   console.error('gift-zulip: stream | topic | post | read | search | stats | demo');
   process.exit(1);
 }
+} // end CLI

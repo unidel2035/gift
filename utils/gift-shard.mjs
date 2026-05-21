@@ -241,6 +241,8 @@ export function assessLeakRisk(shards) {
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
 const CMD = process.argv[2];
 
 if (CMD === 'shard') {
@@ -293,3 +295,4 @@ if (CMD === 'shard') {
   console.error('  risk --query "..." — оценка минимального числа частей');
   process.exit(1);
 }
+} // end CLI
