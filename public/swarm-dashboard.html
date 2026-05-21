@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gift Swarm — Human-Agent Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #141420;
+    --border: #2a2a40;
+    --text: #c8c8d8;
+    --accent: #7c6ff0;
+    --warn: #f0a030;
+    --danger: #e04040;
+    --ok: #40c060;
+    --dim: #606080;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Consolas', monospace;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    line-height: 1.5;
+    font-size: 13px;
+  }
+  h1 { font-size: 18px; margin-bottom: 16px; color: var(--accent); letter-spacing: 1px; }
+  h2 { font-size: 14px; margin: 20px 0 10px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  .card h3 {
+    font-size: 12px;
+    color: var(--dim);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .agent-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .agent-name {
+    font-weight: bold;
+    color: var(--accent);
+  }
+  .agent-files {
+    font-size: 11px;
+    color: var(--dim);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+  }
+  .badge-active { background: rgba(64,192,96,0.15); color: var(--ok); }
+  .badge-stale { background: rgba(224,64,64,0.15); color: var(--danger); }
+  .badge-lock { background: rgba(240,160,48,0.15); color: var(--warn); }
+  .badge-overlap { background: rgba(124,111,240,0.15); color: var(--accent); }
+  .conflict-row {
+    padding: 8px;
+    margin: 4px 0;
+    border-radius: 4px;
+    border-left: 3px solid var(--warn);
+    background: rgba(240,160,48,0.05);
+  }
+  .conflict-row.hard { border-left-color: var(--danger); }
+  .conflict-row.soft { border-left-color: var(--accent); }
+  .timestamp { font-size: 10px; color: var(--dim); }
+  .metric {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--accent);
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  .metrics-row {
+    display: flex;
+    gap: 20px;
+  }
+  .pulse {
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .intent-row {
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .intent-agent { color: var(--accent); font-weight: bold; }
+  .intent-files { color: var(--dim); }
+  .intent-time { color: var(--ok); font-size: 10px; }
+  .empty-state {
+    text-align: center;
+    padding: 30px;
+    color: var(--dim);
+    font-style: italic;
+  }
+  .swarm-graph {
+    width: 100%;
+    height: 200px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dim);
+  }
+  .update-time {
+    font-size: 10px;
+    color: var(--dim);
+    text-align: right;
+    margin-top: 20px;
+  }
+  .auto-refresh {
+    font-size: 10px;
+    color: var(--ok);
+  }
+</style>
+</head>
+<body>
+
+<h1>⛬ Gift Swarm Dashboard</h1>
+
+<div class="metrics-row" style="margin-bottom:20px">
+  <div>
+    <div class="metric" id="agentCount">--</div>
+    <div class="metric-label">Активных агентов</div>
+  </div>
+  <div>
+    <div class="metric" id="conflictCount">--</div>
+    <div class="metric-label">Конфликтов</div>
+  </div>
+  <div>
+    <div class="metric" id="touchRate">--</div>
+    <div class="metric-label">Касаний/мин</div>
+  </div>
+  <div>
+    <div class="metric" id="wEnergy">--</div>
+    <div class="metric-label">Энергия W-сети</div>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Active agents -->
+  <div class="card">
+    <h3>👤 Активные сессии</h3>
+    <div id="agents"></div>
+  </div>
+
+  <!-- Intentions board -->
+  <div class="card">
+    <h3>📢 Доска намерений</h3>
+    <div id="intentions"></div>
+  </div>
+
+  <!-- Conflicts -->
+  <div class="card">
+    <h3>⚡ Конфликты и пересечения</h3>
+    <div id="conflicts"></div>
+  </div>
+
+  <!-- Recent touches -->
+  <div class="card">
+    <h3>🖐 Последние касания</h3>
+    <div id="touches"></div>
+  </div>
+
+  <!-- W-matrix top threads -->
+  <div class="card">
+    <h3>🔗 Топ-нитей W-матрицы</h3>
+    <div id="wThreads"></div>
+  </div>
+
+  <!-- Module sovereignty -->
+  <div class="card">
+    <h3>👑 Суверенитет модулей</h3>
+    <div id="sovereignty"></div>
+  </div>
+</div>
+
+<div class="update-time">
+  Обновлено: <span id="updateTs">--</span> &nbsp;
+  <span class="auto-refresh pulse">● авто-обновление 30с</span>
+</div>
+
+<script>
+async function refresh() {
+  try {
+    const resp = await fetch('/api/swarm/status');
+    const data = await resp.json();
+
+    // Agents
+    const agentsDiv = document.getElementById('agents');
+    if (data.sessions?.length) {
+      agentsDiv.innerHTML = data.sessions.map(s => `
+        <div class="agent-row">
+          <span class="agent-name">${s.agent}</span>
+          <span class="agent-files">${(s.files || []).join(', ') || '—'}</span>
+          <span class="badge ${s.stale ? 'badge-stale' : 'badge-active'}">${s.stale ? 'stale' : 'live'}</span>
+        </div>
+      `).join('');
+    } else {
+      agentsDiv.innerHTML = '<div class="empty-state">Нет активных агентов</div>';
+    }
+
+    // Intentions
+    const intentDiv = document.getElementById('intentions');
+    if (data.intentions?.length) {
+      intentDiv.innerHTML = data.intentions.map(i => `
+        <div class="intent-row">
+          <span class="intent-agent">${i.agent}</span>
+          <span class="intent-files">→ ${i.files.join(', ')}</span>
+          <span class="intent-time">(${Math.max(0, Math.round((i.expires - Date.now())/1000))}с)</span>
+        </div>
+      `).join('');
+    } else {
+      intentDiv.innerHTML = '<div class="empty-state">Доска пуста</div>';
+    }
+
+    // Conflicts
+    const conflictDiv = document.getElementById('conflicts');
+    if (data.conflicts?.length) {
+      conflictDiv.innerHTML = data.conflicts.map(c => `
+        <div class="conflict-row ${c.type === 'lock' ? 'hard' : 'soft'}">
+          <span class="badge ${c.type === 'lock' ? 'badge-lock' : 'badge-overlap'}">${c.type}</span>
+          <strong>${c.file}</strong><br>
+          Агенты: ${c.agents.join(', ')}
+          ${c.touches ? '<br><span class="timestamp">' + c.touches.map(t => t.agent + '@' + new Date(t.lastTouch).toISOString().slice(11,19)).join(', ') + '</span>' : ''}
+        </div>
+      `).join('');
+    } else {
+      conflictDiv.innerHTML = '<div class="empty-state">Конфликтов нет</div>';
+    }
+
+    // Touches
+    const touchesDiv = document.getElementById('touches');
+    if (data.recentTouches?.length) {
+      touchesDiv.innerHTML = data.recentTouches.slice(-8).reverse().map(t => `
+        <div style="font-size:11px;padding:2px 0">
+          <span class="intent-agent">${t.agent}</span>
+          → <span style="color:var(--dim)">${t.file}</span>
+          <span class="timestamp">${new Date(t.ts).toISOString().slice(11,19)}</span>
+        </div>
+      `).join('');
+    } else {
+      touchesDiv.innerHTML = '<div class="empty-state">Касаний нет</div>';
+    }
+
+    // W-matrix threads
+    const threadsDiv = document.getElementById('wThreads');
+    if (data.topThreads?.length) {
+      threadsDiv.innerHTML = data.topThreads.map(t => `
+        <div style="font-size:11px;padding:2px 0;display:flex;justify-content:space-between">
+          <span>${t.from} → ${t.to}</span>
+          <span style="color:var(--accent);font-weight:bold">${t.weight.toFixed(1)}</span>
+        </div>
+      `).join('');
+    }
+
+    // Sovereignty
+    const sovDiv = document.getElementById('sovereignty');
+    if (data.sovereignty) {
+      const mods = Object.entries(data.sovereignty);
+      if (mods.length) {
+        sovDiv.innerHTML = mods.map(([mod, d]) => `
+          <div style="font-size:11px;padding:3px 0">
+            <span style="color:var(--warn)">👑</span>
+            <strong>${mod}</strong>: ${d.sovereign}
+            <span class="timestamp">(${d.totalWeight?.toFixed(1) || 0})</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Metrics
+    document.getElementById('agentCount').textContent = data.sessions?.filter(s => !s.stale).length || 0;
+    document.getElementById('conflictCount').textContent = data.conflicts?.length || 0;
+    document.getElementById('touchRate').textContent = data.touchRate || '0';
+    document.getElementById('wEnergy').textContent = data.wEnergy || '0';
+
+    document.getElementById('updateTs').textContent = new Date().toISOString().slice(11,19);
+  } catch(e) {
+    console.error('Dashboard refresh failed:', e);
+  }
+}
+
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

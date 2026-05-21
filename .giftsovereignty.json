@@ -1,0 +1,19 @@
+{
+  "root": {
+    "contributors": {
+      "_claude": {
+        "weight": 216,
+        "acts": 54
+      }
+    },
+    "sovereign": "_claude",
+    "totalWeight": 216,
+    "contributorsList": [
+      {
+        "agent": "_claude",
+        "weight": 216,
+        "acts": 54
+      }
+    ]
+  }
+}

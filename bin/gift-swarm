@@ -1,0 +1,105 @@
+#!/bin/bash
+# gift-swarm — стигмергийная координация агентов
+# Использование: gift-swarm <command> [options]
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+case "${1:-help}" in
+  register)
+    shift
+    AGENT="${GIFT_AGENT_ID:-$(whoami)}"
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" register --agent "$AGENT" "$@"
+    echo "  ✓ swarm: $AGENT зарегистрирован"
+    ;;
+  heartbeat)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" heartbeat
+    ;;
+  deregister)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" deregister
+    echo "  ✓ swarm: дерегистрирован"
+    ;;
+  sessions)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" sessions | jq . 2>/dev/null || node "$SCRIPT_DIR/utils/gift-swarm.mjs" sessions
+    ;;
+  conflicts)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" conflicts | jq . 2>/dev/null || node "$SCRIPT_DIR/utils/gift-swarm.mjs" conflicts
+    ;;
+  context)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" context
+    ;;
+  sweep)
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" sweep
+    ;;
+  lock)
+    shift
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" lock "$@"
+    ;;
+  status)
+    echo "=== Swarm Status ==="
+    echo "Agent: ${GIFT_AGENT_ID:-$(whoami)}"
+    echo ""
+    echo "--- Active Sessions ---"
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" sessions | jq -r '.[] | "  \(.agent) (pid:\(.pid), files:\(.files|length), stale:\(.stale // false))"' 2>/dev/null || echo "  (no sessions or jq not available)"
+    echo ""
+    echo "--- Conflicts ---"
+    node "$SCRIPT_DIR/utils/gift-swarm.mjs" conflicts | jq -r '.[] | "  \(.type // "⚠"): \(.file) — \(.agents | join(", "))"' 2>/dev/null || echo "  (no conflicts)"
+    ;;
+  intent)
+    shift
+    node "$SCRIPT_DIR/utils/gift-swarm-intent.mjs" "$@"
+    ;;
+  notify)
+    shift
+    node "$SCRIPT_DIR/utils/gift-swarm-notify.mjs" "$@"
+    ;;
+  conciliar)
+    shift
+    node "$SCRIPT_DIR/utils/gift-swarm-conciliar.mjs" "$@"
+    ;;
+  sovereignty)
+    shift
+    node "$SCRIPT_DIR/utils/gift-sovereignty.mjs" "$@"
+    ;;
+  api)
+    echo "  ⛬ Запуск Swarm API на порту ${SWARM_API_PORT:-8093}..."
+    node "$SCRIPT_DIR/utils/swarm-api.mjs"
+    ;;
+  dashboard)
+    echo "  ⛬ Открываю дашборд..."
+    if ! curl -s "http://localhost:${SWARM_API_PORT:-8093}/api/swarm/status" > /dev/null 2>&1; then
+      echo "  Запускаю API в фоне..."
+      node "$SCRIPT_DIR/utils/swarm-api.mjs" &
+      sleep 2
+    fi
+    echo "  Дашборд: http://localhost:${SWARM_API_PORT:-8093}/dashboard"
+    ;;
+  *)
+    echo "gift-swarm — Стигмергийная координация агентов"
+    echo ""
+    echo "Команды:"
+    echo "  register            — зарегистрировать сессию"
+    echo "  heartbeat           — обновить heartbeat"
+    echo "  deregister          — дерегистрировать сессию"
+    echo "  sessions            — список активных сессий"
+    echo "  conflicts [--window N] — обнаруженные конфликты"
+    echo "  context             — контекст для агента"
+    echo "  sweep               — очистить stale сессии + touches"
+    echo "  lock acquire|release|check --file <path>"
+    echo "  status              — сводка"
+    echo "  intent declare|check|board|clear — доска намерений"
+    echo "  notify check|watch|journal       — уведомления о конфликтах"
+    echo "  conciliar resolve|escalate       — авто-собор"
+    echo "  sovereignty generate|map|recommend — суверенитет модулей"
+    echo "  api                 — запустить Swarm API + Dashboard"
+    echo "  dashboard           — открыть дашборд в браузере"
+    echo ""
+    echo "Переменные:"
+    echo "  GIFT_AGENT_ID       — имя агента (по умолчанию: whoami)"
+    echo ""
+    echo "Быстрый старт:"
+    echo "  gift-dev-setup      — onboarding нового разработчика"
+    echo "  gift-code           — DeepSeek + КИС + W-матрица"
+    echo "  gift-swarm status   — кто что делает"
+    ;;
+esac

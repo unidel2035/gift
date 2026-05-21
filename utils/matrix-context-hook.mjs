@@ -211,7 +211,42 @@ try {
   }
 } catch {}
 
-// ── 5. Pending предложения (не более 5 штук) ─────────────────────────────
+// ── 5. Swarm: активные агенты и блокировки ────────────────────────────────
+try {
+  // Register session on first call in this process
+  const SWARM = resolve(ROOT, 'utils/gift-swarm.mjs');
+  if (existsSync(SWARM)) {
+    const { listActiveSessions, detectConflicts, swarmContext, registerSession, activeSession } = await import(SWARM);
+
+    // Auto-register if not yet registered
+    const agentId = process.env.GIFT_AGENT_ID || '_claude';
+    if (!activeSession()) {
+      registerSession(agentId, { claudeSession: process.env.CLAUDE_SESSION_ID || '' });
+    }
+
+    const ctx = swarmContext();
+    if (ctx) {
+      lines.push('');
+      lines.push('[Swarm — активные агенты:]');
+      lines.push(ctx);
+    }
+  }
+} catch {}
+
+// ── 5b. Intent broadcast — кто что собрался трогать ───────────────────────
+try {
+  const INTENT = resolve(ROOT, 'utils/gift-swarm-intent.mjs');
+  if (existsSync(INTENT)) {
+    const { intentContext } = await import(INTENT);
+    const ctx = intentContext();
+    if (ctx) {
+      lines.push('');
+      lines.push(ctx);
+    }
+  }
+} catch {}
+
+// ── 6. Pending предложения (не более 5 штук) ─────────────────────────────
 try {
   const PROPOSALS_FILE = resolve(ROOT, 'data/proposals.json');
   if (existsSync(PROPOSALS_FILE)) {

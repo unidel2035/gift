@@ -119,6 +119,17 @@ try {
     // не обязательно
   }
 
+  // ── Swarm: deregister session on stop ──────────────────────────────────
+  try {
+    const SWARM = resolve(ROOT, 'utils/gift-swarm.mjs');
+    if (existsSync(SWARM)) {
+      const { deregisterSession, sweepStale } = await import(SWARM);
+      deregisterSession();
+      // Sweep all stale sessions to keep swarm clean
+      sweepStale();
+    }
+  } catch {}
+
 } catch {
   // TF не загрузился — молчим
 }

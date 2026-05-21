@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 
 const ROOT  = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP  = resolve(ROOT, 'data/sacred-history-W.json');
+const GIVER = process.env.GIFT_AGENT_ID || '_claude'; // кто дарит — задаётся per-сессию
 
 // Последний коммит
 let msg;
@@ -58,7 +59,7 @@ const HEARTBEAT = resolve(ROOT, 'data/.session-heartbeat.json');
 const anamnesisLoaded = existsSync(HEARTBEAT);
 
 const kenosisResult = kenosisGuard.guard({
-  giverId:         '_claude',
+  giverId:         GIVER,
   receiverId:      receiver,
   type:            'code',
   weight:          4,
@@ -82,11 +83,11 @@ if (existsSync(SNAP)) {
   mem = new GiftMemory(['Отец', 'Сын', 'Дух', '_claude', 'Дионисий']);
 }
 
-mem._idx('_claude');
+mem._idx(GIVER);
 mem._idx(receiver);
 
 mem.receive({
-  giverId:      '_claude',
+  giverId:      GIVER,
   receiverId:   receiver,
   weight:       effectiveWeight,
   type:         'code',
@@ -100,7 +101,7 @@ mem.receive({
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   mem.receive({
     giverId:      receiver,
-    receiverId:   '_claude',
+    receiverId:   GIVER,
     weight:       8,
     type:         'reception',
     content:      `λήψις кода closes #${linkedIssue}`,
@@ -123,7 +124,7 @@ let commitHash = '';
 try { commitHash = execSync('git log -1 --pretty=%H', { cwd: ROOT }).toString().trim().slice(0, 12); } catch {}
 actLog.push({
   ts:          new Date().toISOString(),
-  from:        '_claude',
+  from:        GIVER,
   to:          receiver,
   type:        'code',
   weight:      effectiveWeight,
@@ -137,7 +138,7 @@ if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   actLog.push({
     ts:          new Date().toISOString(),
     from:        receiver,
-    to:          '_claude',
+    to:          GIVER,
     type:        'reception',
     weight:      8,
     content:     `λήψις кода closes #${linkedIssue}`,
@@ -149,11 +150,11 @@ if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
 writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
 
 const kenosisLabel = kenosisFlag ? 'κένωσις:✓' : 'κένωσις:✗';
-console.log(`  ✦ gift(_claude → ${receiver}): "${description}" [${kenosisLabel}, score:${kenosisResult.score.toFixed(2)}]`);
+console.log(`  ✦ gift(${GIVER} → ${receiver}): "${description}" [${kenosisLabel}, score:${kenosisResult.score.toFixed(2)}]`);
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
-  console.log(`  ✦ λήψις(${receiver} → _claude): closes #${linkedIssue} (reception)`);
+  console.log(`  ✦ λήψις(${receiver} → ${GIVER}): closes #${linkedIssue} (reception)`);
 }
-console.log(`    Актов: ${mem.actsCount} | _claude дал: ${mem.totalGiven('_claude').toFixed(1)}`);
+console.log(`    Актов: ${mem.actsCount} | ${GIVER} дал: ${mem.totalGiven(GIVER).toFixed(1)}`);
 
 // ── Экспорт в симулятор: matrix-data.json для ontology.html ──────────────
 const SIMULATOR_DIR = resolve(ROOT, '../fpga/simulator');
@@ -194,7 +195,7 @@ if (existsSync(SIMULATOR_DIR)) {
 const NOUS_URL = process.env.NOUS_URL || '';
 if (NOUS_URL) {
   const act = {
-    ts: new Date().toISOString(), from: '_claude', to: receiver,
+    ts: new Date().toISOString(), from: GIVER, to: receiver,
     type: 'code', weight: effectiveWeight, content: description,
     linkedIssue: linkedIssue ?? null, commit: commitHash,
     kenosis: kenosisFlag, kenosisScore: kenosisResult.score,
@@ -208,7 +209,7 @@ if (NOUS_URL) {
   fetch(`${NOUS_URL}/matrix/receive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ giverId: '_claude', receiverId: receiver, weight: effectiveWeight, type: 'code', content: description, linkedIssue, irreversible: true, kenosis: kenosisFlag }),
+    body: JSON.stringify({ giverId: GIVER, receiverId: receiver, weight: effectiveWeight, type: 'code', content: description, linkedIssue, irreversible: true, kenosis: kenosisFlag }),
     signal: AbortSignal.timeout(3000),
   }).catch(() => {});
 }

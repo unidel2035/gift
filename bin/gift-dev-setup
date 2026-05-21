@@ -1,0 +1,142 @@
+#!/bin/bash
+# gift-dev-setup — Onboarding разработчика в стигмергийную среду
+# Каждый из 5 разработчиков запускает ЭТО один раз.
+# Скрипт регистрирует лицо в W-матрице и настраивает сессию.
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+GIFT_ROOT="$SCRIPT_DIR"
+
+echo ""
+echo "  ╔═════════════════════════════════════════════╗"
+echo "  ║  GIFT SWARM — Onboarding разработчика      ║"
+echo "  ╚═════════════════════════════════════════════╝"
+echo ""
+
+# ── 1. Идентификация ──────────────────────────────────────────────────────
+if [ -z "$GIFT_AGENT_ID" ]; then
+  echo -n "  Имя разработчика (латиница, без пробелов): "
+  read AGENT_NAME
+  if [ -z "$AGENT_NAME" ]; then
+    AGENT_NAME="dev-$(whoami)"
+    echo "  Использую: $AGENT_NAME"
+  fi
+else
+  AGENT_NAME="$GIFT_AGENT_ID"
+  echo "  GIFT_AGENT_ID уже установлен: $AGENT_NAME"
+fi
+
+# ── 2. Экспорт в .bashrc если ещё не ──────────────────────────────────────
+if ! grep -q "GIFT_AGENT_ID=$AGENT_NAME" ~/.bashrc 2>/dev/null; then
+  echo "" >> ~/.bashrc
+  echo "# Gift Swarm — идентификация разработчика" >> ~/.bashrc
+  echo "export GIFT_AGENT_ID=$AGENT_NAME" >> ~/.bashrc
+  echo "export GIFT_SWARM_ENABLED=true" >> ~/.bashrc
+  echo "  ✓ Добавлено в ~/.bashrc"
+else
+  echo "  • Уже в ~/.bashrc"
+fi
+export GIFT_AGENT_ID="$AGENT_NAME"
+export GIFT_SWARM_ENABLED=true
+
+# ── 3. Регистрация в W-матрице (лицо в онтологии) ─────────────────────────
+echo ""
+echo "  Регистрирую $AGENT_NAME в W-матрице..."
+
+node -e "
+  const { GiftMemory } = await import('$SCRIPT_DIR/src/core/GiftMemory.js');
+  const { readFileSync, writeFileSync, existsSync } = await import('fs');
+  const { resolve } = await import('path');
+
+  const SNAP = resolve('$SCRIPT_DIR', 'data/sacred-history-W.json');
+  let mem;
+  if (existsSync(SNAP)) {
+    mem = GiftMemory.fromSnapshot(JSON.parse(readFileSync(SNAP, 'utf8')));
+  } else {
+    mem = new GiftMemory(['_claude', 'Дионисий', '_koinon', '_abyss']);
+  }
+
+  const agentId = '$AGENT_NAME';
+  if (mem._idx(agentId) === -1) {
+    mem._idx(agentId);
+    // Регистрируем дар: разработчик входит в общину
+    mem.receive({
+      giverId: agentId,
+      receiverId: '_koinon',
+      weight: 1,
+      type: 'entry',
+      content: agentId + ' входит в swarm',
+      irreversible: true,
+    });
+    // Приветственный акт от общины
+    mem._idx('_koinon');
+    mem.receive({
+      giverId: '_koinon',
+      receiverId: agentId,
+      weight: 8,
+      type: 'welcome',
+      content: 'приветствие swarm: ' + agentId,
+      irreversible: true,
+    });
+    writeFileSync(SNAP, JSON.stringify(mem.snapshot(), null, 2));
+    console.log('  ✓ $AGENT_NAME добавлен в W-матрицу (лиц: ' + mem.n + ', актов: ' + mem.actsCount + ')');
+  } else {
+    console.log('  • $AGENT_NAME уже в матрице (индекс ' + p + ')');
+  }
+" 2>/dev/null && echo "  ✓ W-матрица обновлена" || echo "  ⚠ W-матрица недоступна (продолжаем)"
+
+# ── 4. Swarm регистрация ──────────────────────────────────────────────────
+echo ""
+echo "  Регистрирую swarm-сессию..."
+node "$SCRIPT_DIR/utils/gift-swarm.mjs" register --agent "$AGENT_NAME" 2>/dev/null && \
+  echo "  ✓ Swarm-сессия активна" || echo "  ⚠ Swarm не зарегистрирован"
+
+# ── 5. Git конфигурация ───────────────────────────────────────────────────
+GIT_NAME=$(git config user.name 2>/dev/null || echo "")
+GIT_EMAIL=$(git config user.email 2>/dev/null || echo "")
+echo ""
+echo "  Git: $GIT_NAME <$GIT_EMAIL>"
+
+# Проверяем хуки
+HOOKS_DIR="$SCRIPT_DIR/.git/hooks"
+if [ -d "$HOOKS_DIR" ]; then
+  # pre-commit с swarm проверкой
+  if [ ! -f "$HOOKS_DIR/pre-commit" ]; then
+    cat > "$HOOKS_DIR/pre-commit" << 'HOOKEOF'
+#!/bin/bash
+# Gift Swarm pre-commit — проверяет конфликты перед коммитом
+ROOT="$(git rev-parse --show-toplevel)"
+if [ -f "$ROOT/utils/gift-swarm-pre-commit.mjs" ]; then
+  node "$ROOT/utils/gift-swarm-pre-commit.mjs" || exit 0
+fi
+HOOKEOF
+    chmod +x "$HOOKS_DIR/pre-commit"
+    echo "  ✓ pre-commit хук установлен"
+  else
+    echo "  • pre-commit хук уже существует"
+  fi
+fi
+
+# ── 6. Сводка ─────────────────────────────────────────────────────────────
+echo ""
+echo "  ╔═════════════════════════════════════════════╗"
+echo "  ║  $AGENT_NAME готов к работе               ║"
+echo "  ╚═════════════════════════════════════════════╝"
+echo ""
+echo "  Что работает:"
+echo "    • GIFT_AGENT_ID=$AGENT_NAME"
+echo "    • W-матрица: все дары кода записываются от $AGENT_NAME"
+echo "    • Swarm: сессия видна другим агентам"
+echo "    • Блокировки: автоматически при Write/Edit"
+echo "    • Конфликты: детекция пересечений 60с"
+echo "    • Pre-commit: проверка перед коммитом"
+echo ""
+echo "  Команды:"
+echo "    gift-swarm status     — кто активен"
+echo "    gift-swarm conflicts  — конфликты сейчас"
+echo "    gift-swarm sessions   — все сессии"
+echo ""
+echo "  Начни работу:"
+echo "    gift-code             — DeepSeek + КИС + W-матрица"
+echo "    gift-dev              — автономный разработчик"
+echo ""
