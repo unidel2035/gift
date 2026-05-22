@@ -213,26 +213,42 @@ class SimulationWorld:
         self.time += self.drone.dt
         self.drone.tick()
 
-        # Проверка обнаружения целей (в радиусе 500м)
+        # ── DEMO MODE: sequential target flyover ──────────────────
         s = self.drone.state
+
+        # Find next undetected target
+        next_target = None
         for t in self.targets:
-            if not t.visible: continue
-            dist = math.sqrt((s.x - t.x)**2 + (s.y - t.y)**2)
-            if dist < 500 and not t.detected:
-                t.detected = True
+            if not t.detected and t.visible:
+                next_target = t
+                break
+
+        if next_target:
+            dist = math.sqrt((s.x - next_target.x)**2 + (s.y - next_target.y)**2)
+            if dist < 60 and not next_target.detected:
+                # Arrived at target - classify
+                next_target.detected = True
+                self.mission_phase = "target_found"
+                self.classify_target(next_target.id)
+                self.drone.set_target(next_target.x, next_target.y, s.z)  # hover
                 self.events.append({
-                    "time": self.time,
-                    "type": "detection",
-                    "target_id": t.id,
-                    "target_type": t.type,
+                    "time": self.time, "type": "detection",
+                    "target_id": next_target.id, "target_type": next_target.type,
                     "distance": dist,
                 })
-                self.mission_phase = "target_found"
+            elif dist >= 60:
+                # Fly toward target
+                self.drone.set_target(next_target.x, next_target.y, 120)
+                self.mission_phase = "patrol"
+        else:
+            # All targets classified — RTB
+            self.mission_phase = "rtb"
+            self.drone.set_target(0, 0, 100)
 
         # Авто-возврат при низкой батарее
         if s.battery < 20:
             self.mission_phase = "rtb"
-            self.drone.set_target(0, 0, 100)
+            self.drone.set_target(0, 0, 50)
 
     def classify_target(self, target_id: int) -> dict:
         """Классификация цели через правила (имитация C++ классификатора)"""

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>РОЙ СЕРАФИМ — Поле боя</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box} body{overflow:hidden;background:#000;font-family:monospace}
+.hud{position:fixed;top:8px;left:8px;background:rgba(0,0,0,0.85);color:#0f0;font:10px/1.4 monospace;padding:10px;border-radius:5px;z-index:100;min-width:240px;border:1px solid #333}
+.alert{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font:bold 20px monospace;z-index:999;text-align:center;pointer-events:none;text-shadow:0 0 20px #000}
+.legend{position:fixed;bottom:8px;right:8px;background:rgba(0,0,0,0.8);color:#aaa;font:9px/1.5 monospace;padding:8px;border-radius:4px;z-index:100;border:1px solid #333}
+@keyframes pop{0%{opacity:1;transform:translate(-50%,-50%) scale(0.3)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}}
+@keyframes fire{0%,100%{opacity:0.6;transform:scale(0.8)}50%{opacity:1;transform:scale(1.2)}}
+</style>
+</head>
+<body>
+<div class="hud" id="hud">Загрузка...</div>
+<div class="legend">🟦 Scout · 🟨 Interceptor · 🟥 FPV<br>⬜ цель · 🟡 обнаружена · 🔴 атака · 💀 уничтожена</div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const API='http://localhost:8100'; const SZ=2000;
+
+// ═══ SCENE ══════════════════════════════════════════════════
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x445566);
+scene.fog=new THREE.FogExp2(0x556677,0.00015);
+const cam=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,10,5000);
+cam.position.set(0,800,1000);
+const rdr=new THREE.WebGLRenderer({antialias:true});
+rdr.setSize(innerWidth,innerHeight); rdr.shadowMap.enabled=true;
+rdr.shadowMap.type=THREE.PCFSoftShadowMap;
+rdr.toneMapping=THREE.ACESFilmicToneMapping; rdr.toneMappingExposure=1.1;
+document.body.appendChild(rdr.domElement);
+
+// ═══ LIGHT ══════════════════════════════════════════════════
+const sun=new THREE.DirectionalLight(0xffeedd,2.8);
+sun.position.set(400,700,200); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=5; sun.shadow.camera.far=4000;
+sun.shadow.camera.left=-1200; sun.shadow.camera.right=1200;
+sun.shadow.camera.top=1200; sun.shadow.camera.bottom=-1200;
+scene.add(sun); scene.add(new THREE.AmbientLight(0x445566,1.1));
+scene.add(new THREE.HemisphereLight(0x8899bb,0x445533,0.5));
+
+// ═══ BATTLEFIELD TERRAIN ════════════════════════════════════
+const terrainGeo=new THREE.PlaneGeometry(SZ,SZ,120,120);
+const pos=terrainGeo.attributes.position.array;
+const colors=new Float32Array(pos.length);
+
+function crater(x,z,r,d){return d*Math.exp(-((x*x+z*z)/(r*r)));}
+function trench(x,z,px,pz,w,d){return d*Math.exp(-(Math.pow((x-px)*Math.cos(0.5)+(z-pz)*Math.sin(0.5),2)/(w*w*4)));}
+
+for(let i=0;i<pos.length;i+=3){
+    let x=pos[i], z=pos[i+1];
+    // Base terrain
+    let h=Math.sin(x*0.002)*Math.cos(z*0.003)*20+Math.sin(x*0.005+z*0.005)*12+Math.cos(x*0.008)*Math.sin(z*0.007)*8;
+    // Craters (bomb impacts)
+    h+=crater(x-300,z-200,25,-6)+crater(x+200,z+350,20,-5)+crater(x+500,z+300,30,-8)+crater(x-400,z-200,18,-4);
+    h+=crater(x+100,z-500,15,-3)+crater(x-500,z+100,22,-6)+crater(x+300,z-100,28,-7)+(Math.random()-0.5)*2;
+    // Trenches around strongpoint (x=300,z=200)
+    h+=trench(x,z,300,200,8,-2.5)+trench(x,z,320,180,8,-2.5)+trench(x,z,280,220,8,-2.5);
+    h+=trench(x,z,-200,350,7,-2)+trench(x,z,-180,330,7,-2);
+    // Bunker mound
+    h+=crater(x+200,z-350,15,3);
+    // EW station clearing
+    h+=crater(x-500,z+300,35,-1.5)+crater(x-480,z+280,20,-1);
+    pos[i+2]=h;
+    // Color by height
+    let c; let ah=Math.abs(h);
+    if(h<-4) c=[0.35,0.25,0.15]; // dark mud (crater)
+    else if(h<-2) c=[0.4,0.3,0.17]; // mud
+    else if(h<2) c=[0.35,0.45,0.18]; // grass
+    else if(h<8) c=[0.4,0.5,0.2]; // light grass
+    else c=[0.45,0.55,0.22]; // hilltop
+    // Add noise
+    c=c.map(v=>Math.min(1,Math.max(0,v+(Math.random()-0.5)*0.06)));
+    colors[i]=c[0]; colors[i+1]=c[1]; colors[i+2]=c[2];
+}
+terrainGeo.setAttribute('color',new THREE.BufferAttribute(colors,3));
+terrainGeo.computeVertexNormals();
+const terrainMat=new THREE.MeshPhongMaterial({vertexColors:true,flatShading:true,shininess:5});
+const terrain=new THREE.Mesh(terrainGeo,terrainMat);
+terrain.rotation.x=-Math.PI/2; terrain.receiveShadow=true; scene.add(terrain);
+
+// ═══ ROADS (dirt tracks) ════════════════════════════════════
+const roadGeo=new THREE.PlaneGeometry(30,SZ);
+const roadMat=new THREE.MeshPhongMaterial({color:0x5c4a32});
+[[-350,0],[350,0],[0,-350],[0,350]].forEach(([x,z])=>{
+    const r=new THREE.Mesh(roadGeo,roadMat); r.rotation.x=-Math.PI/2; r.position.set(x,0.15,z); scene.add(r);
+});
+
+// ═══ TRENCH MARKS ═══════════════════════════════════════════
+function addTrenchLine(x1,z1,x2,z2){
+    const dx=x2-x1, dz=z2-z1; const len=Math.sqrt(dx*dx+dz*dz);
+    const geo=new THREE.PlaneGeometry(3,len);
+    const mat=new THREE.MeshPhongMaterial({color:0x3a2a14,transparent:true,opacity:0.7});
+    const line=new THREE.Mesh(geo,mat);
+    line.rotation.x=-Math.PI/2; line.rotation.z=-Math.atan2(dx,dz);
+    line.position.set((x1+x2)/2,0.2,(z1+z2)/2);
+    scene.add(line);
+}
+addTrenchLine(280,180,340,220); addTrenchLine(280,220,340,180);
+addTrenchLine(-220,330,-180,370); addTrenchLine(-180,330,-220,370);
+
+// ═══ DESTROYED VEHICLES (wrecks) ════════════════════════════
+function addWreck(x,z,rot){
+    const g=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.BoxGeometry(6,2,3),new THREE.MeshPhongMaterial({color:0x443322}));
+    body.position.y=1; g.add(body);
+    const turret=new THREE.Mesh(new THREE.CylinderGeometry(1.8,2,1,8),new THREE.MeshPhongMaterial({color:0x554433}));
+    turret.position.y=2.5; turret.rotation.z=0.5; g.add(turret);
+    g.position.set(x,0,z); g.rotation.y=rot; scene.add(g);
+}
+addWreck(-350,-200,0.3); addWreck(450,250,1.2);
+
+// ═══ BARBED WIRE (around strongpoint) ═══════════════════════
+function addWire(x,z,n){
+    for(let i=0;i<n;i++){
+        const post=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,3,6),new THREE.MeshPhongMaterial({color:0x6b5b3e}));
+        const ang=(i/n)*Math.PI*2; const r=40+Math.random()*10;
+        post.position.set(x+Math.cos(ang)*r,1.5,z+Math.sin(ang)*r);
+        scene.add(post);
+    }
+}
+addWire(300,200,12); addWire(-200,350,8);
+
+// ═══ SMOKE PARTICLES ════════════════════════════════════════
+const smokeParticles=[];
+function addSmoke(x,z){
+    const geo=new THREE.SphereGeometry(3,8,8);
+    const mat=new THREE.MeshBasicMaterial({color:0x888888,transparent:true,opacity:0.4,depthWrite:false});
+    const p=new THREE.Mesh(geo,mat);
+    p.position.set(x,8,z); p.userData={life:1,baseX:x,baseZ:z}; scene.add(p);
+    smokeParticles.push(p);
+}
+addSmoke(300,200); addSmoke(-200,350);
+
+// ═══ TREES (forest patches) ═════════════════════════════════
+for(let i=0;i<350;i++){
+    const tx=(Math.random()-0.5)*SZ*0.9, tz=(Math.random()-0.5)*SZ*0.9;
+    if(Math.abs(tx)<30&&Math.abs(tz)<30) continue;
+    const h=4+Math.random()*18;
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(1,1.8,h,6),new THREE.MeshPhongMaterial({color:0x5a3a1e}));
+    trunk.position.set(tx,h/2,tz); trunk.castShadow=true; scene.add(trunk);
+    const leaves=new THREE.Mesh(new THREE.ConeGeometry(2.5+h*0.12,5+h*0.25,6),new THREE.MeshPhongMaterial({color:0x1a4a0a+Math.floor(Math.random()*5)*0x051005}));
+    leaves.position.set(tx,h+3,tz); leaves.castShadow=true; scene.add(leaves);
+}
+
+// ═══ DRONES ═════════════════════════════════════════════════
+const droneData=[{color:0x3388ff,role:'Scout'},{color:0xffaa00,role:'Interceptor'},{color:0xff3333,role:'FPV'}];
+const drones=[];
+droneData.forEach(d=>{
+    const g=new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(2.5,0.5,1.8),new THREE.MeshPhongMaterial({color:d.color,specular:0xaaaaaa,shininess:40})));
+    for(let a=0;a<4;a++){
+        const ang=a*Math.PI/2+Math.PI/4;
+        const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,4.5,6),new THREE.MeshPhongMaterial({color:0x555555}));
+        arm.rotation.z=Math.PI/2; arm.rotation.y=ang; arm.position.set(Math.cos(ang)*1.8,0,Math.sin(ang)*1.8); g.add(arm);
+        const mot=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.4,12),new THREE.MeshPhongMaterial({color:0x888888}));
+        mot.position.copy(arm.position).add(new THREE.Vector3(Math.cos(ang)*2.3,0,Math.sin(ang)*2.3)); g.add(mot);
+        const prop=new THREE.Group(); prop.add(new THREE.Mesh(new THREE.BoxGeometry(2.5,0.04,0.5),new THREE.MeshPhongMaterial({color:0xcccccc,transparent:true,opacity:0.4})));
+        prop.position.copy(mot.position); prop.userData={speed:0}; g.add(prop);
+    }
+    const label=document.createElement('div');
+    label.style.cssText='position:absolute;color:#fff;font:bold 9px monospace;pointer-events:none;text-shadow:0 0 6px #000';
+    document.body.appendChild(label); g.userData={label,role:d.role};
+    scene.add(g); drones.push(g);
+});
+
+// ═══ TARGETS ════════════════════════════════════════════════
+const TCFG={strongpoint:[0xff3333,14,'ОПОРНИК'],bunker:[0x996633,8,'БЛИНДАЖ'],ew_station:[0xff8800,12,'РЭБ'],vehicle:[0x3366ff,6,'ТЕХНИКА'],person:[0x33cc33,2,'ЧЕЛОВЕК'],decoy:[0x999999,10,'МАКЕТ']};
+const targets=[];
+['strongpoint','bunker','ew_station','vehicle','person','decoy'].forEach((t,i)=>{
+    const cfg=TCFG[t]; const g=new THREE.Group();
+    // Main body
+    const s=cfg[1]; const h=t==='bunker'?4:t==='vehicle'?2.5:3;
+    const box=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),new THREE.MeshPhongMaterial({color:cfg[0],emissive:new THREE.Color(cfg[0]).multiplyScalar(0.05)}));
+    box.position.y=h/2; box.castShadow=true; g.add(box);
+    // Base plate
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(s*0.55,s*0.55,0.2,6),new THREE.MeshPhongMaterial({color:cfg[0]})));
+    // Sandbags (for strongpoint)
+    if(t==='strongpoint'){
+        for(let b=0;b<12;b++){
+            const bag=new THREE.Mesh(new THREE.BoxGeometry(2.5,1,1.2),new THREE.MeshPhongMaterial({color:0x8a7a5a}));
+            bag.position.set(Math.cos(b/12*Math.PI*2)*s*0.7,0.6,Math.sin(b/12*Math.PI*2)*s*0.7);
+            bag.rotation.y=b/12*Math.PI*2; g.add(bag);
+        }
+    }
+    // Antenna (EW station)
+    if(t==='ew_station'){
+        const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,18,8),new THREE.MeshPhongMaterial({color:0x999999}));
+        pole.position.y=9; g.add(pole);
+        const dish=new THREE.Mesh(new THREE.ConeGeometry(4,3,8,4),new THREE.MeshPhongMaterial({color:0xcccccc}));
+        dish.position.y=19; g.add(dish);
+    }
+    const tx=[300,-200,500,-400,100,-500][i]; const tz=[200,350,-300,-200,500,-100][i];
+    g.position.set(tx,0,tz); g.userData={type:t,detected:false,classified:'',attack:false,killed:false};
+    scene.add(g); targets.push(g);
+});
+
+// ═══ FPV TRAIL ══════════════════════════════════════════════
+const trailPts=[new THREE.Vector3(),new THREE.Vector3()];
+const trailLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints(trailPts),new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0.6}));
+scene.add(trailLine);
+
+// ═══ MAIN LOOP ══════════════════════════════════════════════
+async function loop(){
+    requestAnimationFrame(loop);
+    try{
+        const r=await fetch(API+'/api/swarm'); const data=await r.json();
+        if(!data||!data.drones) return;
+
+        // Drones
+        data.drones.forEach((d,i)=>{
+            const dm=drones[i]; if(!dm||d.killed){if(dm)dm.visible=false;return;}
+            dm.visible=true;
+            dm.position.lerp(new THREE.Vector3(d.x,d.y||100,d.z),0.12);
+            dm.rotation.y=THREE.MathUtils.lerp(dm.rotation.y,-(d.heading-90)*Math.PI/180,0.12);
+            dm.children.forEach(c=>{if(c.userData&&c.userData.speed!==undefined)c.rotateY(d.role==='fpv'&&d.phase==='attack'?1.8:0.7);});
+            const v=new THREE.Vector3(d.x,d.y+15,d.z).project(cam);
+            const lb=dm.userData.label;
+            if(lb&&v.z<1){
+                lb.style.left=((v.x+1)/2*innerWidth)+'px';
+                lb.style.top=((-v.y+1)/2*innerHeight)+'px';
+                const ph={patrol:'🔵',classify:'🟡',attack:'🔴',rtb:'⚫',hold:'⏸',dead:'💀'};
+                lb.textContent=`${dm.userData.role} ${ph[d.phase]||'?'} ${d.battery?.toFixed(0)}%`;
+                lb.style.color=d.phase==='attack'?'#ff4444':d.phase==='classify'?'#ffaa00':'#aaa';
+            }
+        });
+
+        // Targets
+        data.targets.forEach((t,i)=>{
+            const tm=targets[i]; if(!tm) return;
+            if(t.killed){tm.visible=false;return;}
+            const box=tm.children[0];
+            if(t.attack && tm.userData.classified!==t.classified){
+                box.material.emissive=new THREE.Color(0xff0000); box.material.emissiveIntensity=2;
+                const el=document.createElement('div'); el.className='alert';
+                el.innerHTML=t.type==='decoy'||t.type==='person'?`🟢 ${TCFG[t.type]?.[2]||t.type}: НЕ АТАКОВАТЬ`:`🔴 ${TCFG[t.type]?.[2]||t.type}: АТАКОВАТЬ!`;
+                el.style.color=t.type==='decoy'||t.type==='person'?'#44ff44':'#ff2222';
+                el.style.animation='pop 2s ease-out forwards'; document.body.appendChild(el);
+                setTimeout(()=>el.remove(),2500);
+            } else if(t.detected && !t.classified){
+                box.material.emissive=new THREE.Color(0x444400); box.material.emissiveIntensity=1;
+            }
+            tm.userData.classified=t.classified;
+        });
+
+        // FPV trail
+        const fpv=data.drones[2];
+        if(fpv.phase==='attack'&&!fpv.killed){
+            trailPts.unshift(new THREE.Vector3(fpv.x,fpv.y||80,fpv.z));
+            if(trailPts.length>60) trailPts.length=60;
+            trailLine.geometry.setFromPoints(trailPts);
+        }
+
+        // Smoke animation
+        smokeParticles.forEach(p=>{
+            p.userData.life-=0.005; if(p.userData.life<0) p.userData.life=1;
+            p.position.y=8+Math.sin(Date.now()*0.003+p.userData.baseX)*3;
+            p.material.opacity=0.25+Math.sin(Date.now()*0.005)*0.15;
+            p.scale.setScalar(1+Math.sin(Date.now()*0.004)*0.3);
+        });
+
+        // HUD
+        const alive=data.drones.filter(d=>!d.killed).length;
+        const killedTg=data.targets.filter(t=>t.killed).length;
+        document.getElementById('hud').innerHTML=data.drones.map(d=>
+            `${d.id}: (${d.x?.toFixed(0)},${d.z?.toFixed(0)}) ${d.phase} 🔋${d.battery?.toFixed(0)}%`+(d.killed?' 💀':'')
+        ).join('<br>')+`<br><b>Целей: ${killedTg}/${data.targets.length} | Дронов: ${alive}/3</b>`;
+
+        // Camera follows scout
+        const s=data.drones[0];
+        cam.position.lerp(new THREE.Vector3(s.x+200,250,s.z+200),0.025);
+        cam.lookAt(s.x,0,s.z);
+    }catch(e){}
+    rdr.render(scene,cam);
+}
+
+window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();rdr.setSize(innerWidth,innerHeight);});
+loop();
+</script>
+</body>
+</html>
