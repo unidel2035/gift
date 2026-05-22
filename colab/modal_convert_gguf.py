@@ -52,6 +52,8 @@ MODEL_MAP = {
     "eva":     "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
     "bezalel": "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
     "serafim": "unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit",
+    "serafim-1.5b": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+    "all":     "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
 }
 
 
@@ -108,20 +110,62 @@ def convert_adapter_to_gguf(agent: str, adapter_zip: bytes) -> bytes:
     os.environ["PATH"] = f"{venv_path}/bin:{os.environ.get('PATH', '')}"
     print(f"✓ venv создан: {venv_path}")
 
-    _orig_input = builtins.input
-    builtins.input = lambda prompt="": (print(f"[auto-confirm]: {prompt}") or "y")
+    # Используем Unsloth для мержа весов (это работает), затем вручную конвертируем
+    # через уже собранные llama.cpp бинарники (Unsloth-сборка llama.cpp сломана)
+    merged_dir = f"/tmp/merged/{agent}"
+    os.makedirs(merged_dir, exist_ok=True)
+    print("Сохраняем смерженную модель в 16-bit...")
+    model.save_pretrained(merged_dir)
+    tokenizer.save_pretrained(merged_dir)
+    print(f"✓ Модель сохранена в {merged_dir}")
 
-    try:
-        model.save_pretrained_gguf(gguf_dir, tokenizer, quantization_method="q4_k_m")
-    finally:
-        builtins.input = _orig_input
+    # Ручная конвертация через llama.cpp с явным указанием модели
+    convert_script = "/root/llama.cpp/convert_hf_to_gguf.py"
+    if not os.path.exists(convert_script):
+        raise RuntimeError(f"convert_hf_to_gguf.py not found at {convert_script}")
 
-    # Находим GGUF файл
+    # Убедимся что config.json содержит model_type (нужно для конвертера)
+    config_path = os.path.join(merged_dir, "config.json")
+    if os.path.exists(config_path):
+        import json
+        with open(config_path) as f: cfg = json.load(f)
+        if "model_type" not in cfg:
+            cfg["model_type"] = "qwen2"
+            with open(config_path, "w") as f: json.dump(cfg, f)
+            print("✓ Добавлен model_type=qwen2 в config.json")
+
+    f16_path = os.path.join(gguf_dir, f"{agent}.gguf")
+    print(f"Конвертируем HF → GGUF f16...")
+    subprocess.run([
+        "python", convert_script, merged_dir,
+        "--outfile", f16_path,
+        "--outtype", "f16",
+    ], check=True)
+    print(f"✓ f16 GGUF: {os.path.getsize(f16_path) / 1e9:.2f} GB")
+
+    # Квантуем в q4_k_m
+    quantizer = "/root/llama.cpp/build/bin/llama-quantize"
+    if not os.path.exists(quantizer):
+        import glob
+        found = glob.glob("/root/llama.cpp/**/llama-quantize", recursive=True)
+        if found: quantizer = found[0]
+        else: raise RuntimeError("llama-quantize not found")
+
+    q4_path = os.path.join(gguf_dir, f"{agent}-Q4_K_M.gguf")
+    print(f"Квантуем f16 → q4_k_m...")
+    subprocess.run([quantizer, f16_path, q4_path, "Q4_K_M"], check=True)
+    print(f"✓ Q4_K_M GGUF: {os.path.getsize(q4_path) / 1e9:.2f} GB")
+
+    # Удаляем f16 чтобы не тащить
+    os.remove(f16_path)
+
+    # Находим GGUF файл (теперь ищем Q4_K_M)
     gguf_files = [f for f in os.listdir(gguf_dir) if f.endswith('.gguf')]
     if not gguf_files:
         raise RuntimeError(f"GGUF не создан в {gguf_dir}. Файлы: {os.listdir(gguf_dir)}")
 
-    gguf_file = gguf_files[0]
+    # Предпочитаем q4_k_m
+    gguf_file = next((f for f in gguf_files if 'Q4_K_M' in f), gguf_files[0])
     gguf_path = os.path.join(gguf_dir, gguf_file)
     gguf_size = os.path.getsize(gguf_path)
     print(f"✓ GGUF: {gguf_file} ({gguf_size / 1e9:.2f} GB)")

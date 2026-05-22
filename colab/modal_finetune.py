@@ -40,6 +40,7 @@ MODEL_MAP = {
     "eva":     "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
     "bezalel": "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
     "serafim": "unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit",
+    "serafim-1.5b": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
     "all":     "unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
 }
 
@@ -123,6 +124,12 @@ def finetune(agent: str, dataset_jsonl: bytes, modelfile_content: str = "") -> b
     EOS_TOKEN = tokenizer.eos_token
 
     def format_sample(sample):
+        # ChatML format (from serafim-combined.jsonl)
+        if "messages" in sample and sample["messages"]:
+            msgs = sample["messages"]
+            text = tokenizer.apply_chat_template(msgs, tokenize=False) + EOS_TOKEN
+            return {"text": text}
+        # Legacy Alpaca format
         text = ALPACA_TEMPLATE.format(
             system=sample.get("system", ""),
             instruction=sample.get("instruction", ""),
