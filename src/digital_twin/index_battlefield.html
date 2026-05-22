@@ -14,7 +14,7 @@
 </head>
 <body>
 <div class="hud" id="hud">Загрузка...</div>
-<div class="legend">🟦 Scout · 🟨 Interceptor · 🟥 FPV<br>⬜ цель · 🟡 обнаружена · 🔴 атака · 💀 уничтожена</div>
+<div class="legend">🟦 Scout · 🟨 Interceptor · 🟥 FPV<br>⬜ цель · 🟡 обнаружена · 🔴 атака · 💀 уничтожена<br>🤖 Serafim · 🟢GPS 🟡NAV 🔴JAM · 📡EW</div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -167,7 +167,7 @@ droneData.forEach(d=>{
 });
 
 // ═══ TARGETS ════════════════════════════════════════════════
-const TCFG={strongpoint:[0xff3333,14,'ОПОРНИК'],bunker:[0x996633,8,'БЛИНДАЖ'],ew_station:[0xff8800,12,'РЭБ'],vehicle:[0x3366ff,6,'ТЕХНИКА'],person:[0x33cc33,2,'ЧЕЛОВЕК'],decoy:[0x999999,10,'МАКЕТ']};
+const TCFG={strongpoint:[0xff3333,14,'ОПОРНИК'],bunker:[0x996633,8,'БЛИНДАЖ'],ew_station:[0xff8800,12,'РЭБ'],vehicle:[0x3366ff,6,'ТЕХНИКА'],person:[0x33cc33,2,'ЧЕЛОВЕК'],decoy:[0x999999,10,'МАКЕТ'],artillery:[0xff6600,10,'АРТИЛЛЕРИЯ'],mlrs:[0xff0000,12,'РСЗО'],sam:[0xff0066,14,'ПВО'],command_post:[0xffff00,12,'КОМАНДНЫЙ ПУНКТ'],ammo_dump:[0xaa6600,9,'СКЛАД БК'],trench:[0x888844,3,'ТРАНШЕЯ'],bridge:[0x888888,14,'МОСТ'],minefield:[0xff4444,5,'МИННОЕ ПОЛЕ'],drone_swarm:[0x00ffff,4,'РОЙ ДРОНОВ']};
 const targets=[];
 ['strongpoint','bunker','ew_station','vehicle','person','decoy'].forEach((t,i)=>{
     const cfg=TCFG[t]; const g=new THREE.Group();
@@ -235,10 +235,14 @@ async function loop(){
             if(t.attack && tm.userData.classified!==t.classified){
                 box.material.emissive=new THREE.Color(0xff0000); box.material.emissiveIntensity=2;
                 const el=document.createElement('div'); el.className='alert';
-                el.innerHTML=t.type==='decoy'||t.type==='person'?`🟢 ${TCFG[t.type]?.[2]||t.type}: НЕ АТАКОВАТЬ`:`🔴 ${TCFG[t.type]?.[2]||t.type}: АТАКОВАТЬ!`;
+                const llmAction = t.llm_action || '?';
+                const consensus = t.consensus || {};
+                const votes = consensus.votes ? JSON.stringify(consensus.votes) : '';
+                el.innerHTML=t.type==='decoy'||t.type==='person'||t.type==='trench'||t.type==='bridge'||t.type==='minefield'?`🟢 ${TCFG[t.type]?.[2]||t.type}: НЕ АТАКОВАТЬ`:`🔴 ${TCFG[t.type]?.[2]||t.type}: АТАКОВАТЬ!`;
+                el.innerHTML += `<br><span style="font-size:12px;color:#0ff">🤖 Собор: ${llmAction} (${consensus.attack_count||'?'}/${Object.keys(votes).length||3}🚁) ${consensus.protocol||''}</span>`;
                 el.style.color=t.type==='decoy'||t.type==='person'?'#44ff44':'#ff2222';
-                el.style.animation='pop 2s ease-out forwards'; document.body.appendChild(el);
-                setTimeout(()=>el.remove(),2500);
+                el.style.animation='pop 2.5s ease-out forwards'; document.body.appendChild(el);
+                setTimeout(()=>el.remove(),3500);
             } else if(t.detected && !t.classified){
                 box.material.emissive=new THREE.Color(0x444400); box.material.emissiveIntensity=1;
             }
@@ -264,9 +268,12 @@ async function loop(){
         // HUD
         const alive=data.drones.filter(d=>!d.killed).length;
         const killedTg=data.targets.filter(t=>t.killed).length;
-        document.getElementById('hud').innerHTML=data.drones.map(d=>
-            `${d.id}: (${d.x?.toFixed(0)},${d.z?.toFixed(0)}) ${d.phase} 🔋${d.battery?.toFixed(0)}%`+(d.killed?' 💀':'')
-        ).join('<br>')+`<br><b>Целей: ${killedTg}/${data.targets.length} | Дронов: ${alive}/3</b>`;
+        document.getElementById('hud').innerHTML=data.drones.map(d=>{
+            const navIcon = d.gps_jammed ? '🔴' : d.nav_mode==='GPS_DENIED' ? '🟡' : '🟢';
+            return `${d.id}: (${d.x?.toFixed(0)},${d.z?.toFixed(0)}) ${d.phase} ${navIcon}${d.nav_mode||'GPS'} 🔋${d.battery?.toFixed(0)}%`+(d.killed?' 💀':'');
+        }).join('<br>')+`<br><b>Целей: ${killedTg}/${data.targets.length} | Дронов: ${alive}/3</b>`+
+        `<br><span style="color:#0ff">🤖 Serafim: ${data.serafim?.decisions||0} решений</span>`+
+        (data.ew?.active_jammers ? `<br><span style="color:#f44">📡 EW: ${data.ew.active_jammers} jammer(s)</span>` : '');
 
         // Camera follows scout
         const s=data.drones[0];
