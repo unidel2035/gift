@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <cstdio>
 #include <algorithm>
 
 namespace fuzzy_classifier {
@@ -307,6 +308,71 @@ struct SymbolicProcessor {
             }
         }
         return TargetClass::UNKNOWN;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KnoDL-подход: DSL для правил классификации (Pospelov & Mamulat, 2025)
+//
+// Идея: правила описываются декларативно, без переобучения.
+// Оператор может добавить правило на лету — «если RCS > X И скорость > Y → враг».
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct KnoDLRule {
+    const char* name;           // человекочитаемое имя правила
+    const char* condition;      // DSL-условие: "rcs > 0.6 AND speed > 0.4"
+    TargetClass result;         // результат классификации
+    float priority;             // приоритет (выше = первее)
+};
+
+// DSL-парсер для условий вида "feature OP value [AND/OR feature OP value]"
+inline bool eval_kodl_condition(const char* cond, const float features[8]) {
+    // Простая реализация: разбор одного условия "idx OP val"
+    int idx = -1;
+    float val = 0;
+    char op[8] = {0};
+
+    // Определяем признак по имени
+    if      (strstr(cond, "size"))    { idx = 0; }
+    else if (strstr(cond, "speed"))   { idx = 1; }
+    else if (strstr(cond, "alt"))     { idx = 2; }
+    else if (strstr(cond, "rcs"))     { idx = 3; }
+    else if (strstr(cond, "heat"))    { idx = 4; }
+    else if (strstr(cond, "aspect"))  { idx = 5; }
+    else if (strstr(cond, "traj"))    { idx = 6; }
+    else if (strstr(cond, "rf"))      { idx = 7; }
+    else return false;
+
+    if (sscanf(cond, "%*[^0-9.]%f", &val) < 1) return false;
+
+    if (strstr(cond, ">=") || strstr(cond, ">")) return features[idx] >= val;
+    if (strstr(cond, "<=") || strstr(cond, "<")) return features[idx] <= val;
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Бортовой конвейер: YOLO → Symbolic → NeuroFuzzy → Serafim
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct OnboardPipeline {
+    SymbolicProcessor sym;
+    NeuroFuzzyClassifier nfc;
+    float confidence_threshold = 0.7f;
+
+    // Полный цикл: признаки → символьный → (если не уверен) → нейро-fuzzy
+    NeuroFuzzyClassifier::ClassificationResult process(const TargetFeatures& f) {
+        // Быстрый путь: символьные правила (1μs)
+        TargetClass quick = sym.quick_classify(f);
+        if (quick != TargetClass::UNKNOWN) {
+            NeuroFuzzyClassifier::ClassificationResult r;
+            r.target = quick;
+            r.confidence = 1.0f;
+            r.name = TARGET_NAMES[(int)quick];
+            return r;
+        }
+
+        // Медленный путь: нейро-fuzzy (5μs)
+        return nfc.classify_detailed(f);
     }
 };
 
