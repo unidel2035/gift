@@ -358,20 +358,29 @@ class TrainingArena:
                                      f"Возвращение на базу (bat={agent.battery:.0f}%)")
 
     def _update_air_defense(self, events: list):
-        """Обновить ПВО — стреляет по вражеским дронам (и базам)"""
+        """Обновить ПВО — стреляет по вражеским дронам (и базам). Контр-ПВО: синие РЭБ подавляют."""
         for ad in self.air_defense:
             if not ad["active"]:
                 continue
+            # Контр-ПВО: синие РЭБ дроны подавляют
+            jammed = False
+            for agent in self.blue_agents.values():
+                if agent.phase == CombatPhase.DEAD or agent.role != "РЭБ":
+                    continue
+                dist_to_ad = math.sqrt((agent.x - ad["x"])**2 + (agent.z - ad["z"])**2)
+                if dist_to_ad < 1200:
+                    jammed = True; break
+            effective_lethality = ad["lethality"] * (0.2 if jammed else 1.0)
+
             for agent in self.blue_agents.values():
                 if agent.phase == CombatPhase.DEAD:
                     continue
                 dist = math.sqrt((agent.x - ad["x"])**2 + (agent.z - ad["z"])**2)
-                # ПВО бьёт по воздушным целям И по наземным базам (если в радиусе)
                 can_hit = (agent.y > ad["min_alt"]) or (agent.role == "НАЗМ" and dist < ad["range"] * 0.5)
                 if dist < ad["range"] and can_hit:
-                    lethality = ad["lethality"] * (1 - dist/ad["range"])
+                    lethality = effective_lethality * (1 - dist/ad["range"])
                     if agent.role == "НАЗМ":
-                        lethality *= 0.3  # базу труднее поразить
+                        lethality *= 0.3
                     if random.random() < lethality:
                         agent.phase = CombatPhase.DEAD
                         agent.deaths += 1
@@ -379,7 +388,8 @@ class TrainingArena:
                             "event": "SHOT_DOWN", "victim": f"{agent.name}({agent.id})",
                             "by": ad["id"], "tick": self.tick
                         })
-                        self.kill_feed.append(f"🛡 {ad['id']} сбил {agent.name}")
+                        jtag = " [ПОДАВЛЕНО]" if jammed else ""
+                        self.kill_feed.append(f"🛡 {ad['id']} сбил {agent.name}{jtag}")
                         self._record_gift(agent.id, "_koinon", "time", 10,
                                         f"Сбит ПВО {ad['id']} — жертва принята")
 
@@ -518,6 +528,9 @@ class TrainingManager:
         self.total_gift_acts += len(game.game_gift_acts)
         self.total_gift_weight += game.total_gift_weight
 
+        # Запись в реальную W-матрицу
+        self._flush_to_wmatrix(game)
+
         # Сохранить выживших агентов
         for agent in game.blue_agents.values():
             if agent.phase != CombatPhase.DEAD:
@@ -537,6 +550,25 @@ class TrainingManager:
             "gift_weight": round(game.total_gift_weight, 1),
             "weather": game.weather,
         })
+
+    def _flush_to_wmatrix(self, game):
+        """Записать боевой опыт игры в реальную W-матрицу"""
+        try:
+            import urllib.request
+            body = json.dumps({
+                "giverId": "training_arena",
+                "receiverId": "_koinon",
+                "type": "time",
+                "content": f"Игра {game.game_id}: {game.winner}, {len(game.game_gift_acts)} даров, вес {game.total_gift_weight:.0f}",
+                "amount": game.total_gift_weight
+            }).encode()
+            req = urllib.request.Request(
+                "http://173.249.2.184:8086/anamnesis_add_gift",
+                body, {"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass  # сервер памяти недоступен — работаем локально
 
     def get_training_status(self) -> dict:
         return {

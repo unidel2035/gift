@@ -193,7 +193,7 @@ class SwarmDrone:
         self.last_llm_decision = {"action": "patrol", "heading": None, "target_priority": "nearest"}
         self.last_llm_response = ""
         self.last_llm_inference_ms = 0
-        self.llm_query_interval = 99999  # дроны не ходят в LLM сами (рой решает)
+        self.llm_query_interval = random.randint(80, 160)  # каждый дрон думает каждые 4-8s
         self.ticks_since_query = 0
         self.pending_query: Optional[Future] = None
         self.llm_queries_total = 0
@@ -446,6 +446,9 @@ class SwarmManager:
         self._update_air_defense()
         self._check_winner()
         self._update_llm_stats()
+        # Запись в W-матрицу каждые 1000 тиков
+        if self.tick % 1000 == 0 and self.total_gifts > 0:
+            self._flush_to_wmatrix()
 
     def _update_swarm_brain(self):
         """Стратегический LLM для всего роя — вызывается каждые 50 тиков"""
@@ -555,17 +558,52 @@ class SwarmManager:
             drone.last_llm_decision["action"] = "rtb"
 
     def _update_air_defense(self):
+        # ═══ КОНТР-ПВО: синие РЭБ дроны подавляют ПВО ═══
         for ad in self.air_defense:
             if not ad["active"]: continue
+            # Проверить, подавлено ли ПВО синими РЭБ
+            jammed = False
+            for drone in self.blue_drones.values():
+                if not drone.alive or drone.preset_name != "jammer": continue
+                dist_to_ad = math.sqrt((drone.x - ad["x"])**2 + (drone.z - ad["z"])**2)
+                if dist_to_ad < 1200:  # РЭБ радиус подавления
+                    jammed = True
+                    ad["jammed_by"] = drone.name
+                    break
+
+            effective_lethality = ad["lethality"] * (0.2 if jammed else 1.0)
+
             for drone in self.blue_drones.values():
                 if not drone.alive: continue
                 dist = math.sqrt((drone.x - ad["x"])**2 + (drone.z - ad["z"])**2)
                 if dist < ad["range"] and drone.y > ad["min_alt"]:
-                    if random.random() < ad["lethality"] * (1 - dist/ad["range"]):
+                    if random.random() < effective_lethality * (1 - dist/ad["range"]):
                         drone.alive = False; drone.phase = "dead"
                         ad["targets_engaged"] += 1
-                        self.kill_feed.append(f"🛡 {ad['id']} сбил {drone.name}")
+                        jtag = " [ПОДАВЛЕНО]" if jammed else ""
+                        self.kill_feed.append(f"🛡 {ad['id']} сбил {drone.name}{jtag}")
                         self._record_gift(drone, "sacrifice", 10)
+
+    def _flush_to_wmatrix(self):
+        """Записать накопленный боевой опыт в реальную W-матрицу"""
+        if self.total_gifts == 0: return
+        try:
+            import urllib.request
+            body = json.dumps({
+                "giverId": "swarm_blue",
+                "receiverId": "_koinon",
+                "type": "time",
+                "content": f"Боевой опыт: {self.total_gifts} актов, вес {self.total_gift_weight:.0f}",
+                "amount": self.total_gift_weight
+            }).encode()
+            req = urllib.request.Request(
+                "http://173.249.2.184:8086/anamnesis_add_gift",
+                body, {"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+            return True
+        except Exception:
+            return False  # сервер памяти недоступен — не критично
 
     def _check_winner(self):
         ba = sum(1 for d in self.blue_drones.values() if d.alive)
@@ -670,6 +708,24 @@ def sim_thread():
         swarm_mgr.tick_all()
         time.sleep(0.05)
 
+def warmup_llm():
+    """Прогреть Serafim модель — загрузить и держать в памяти"""
+    print("  🧠 Прогрев Serafim 1.5B...")
+    try:
+        body = json.dumps({
+            "model": SERAFIM_MODEL, "prompt": "OK", "stream": False,
+            "keep_alive": 600, "options": {"num_predict": 3}
+        }).encode()
+        req = urllib.request.Request(OLLAMA_URL, body, {"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=45)
+        data = json.loads(resp.read())
+        ms = data.get("eval_duration", 0) // 1_000_000
+        print(f"  ✅ Модель загружена ({ms}ms), keep_alive=600s")
+        return True
+    except Exception as e:
+        print(f"  ⚠️ Прогрев не удался: {e}")
+        return False
+
 def main():
     print("╔══════════════════════════════════════════════════════════╗")
     print("║  SWARM FLEET — Serafim LLM как мозг каждого дрона       ║")
@@ -679,6 +735,9 @@ def main():
     print(f"  🧠 LLM: {SERAFIM_MODEL} ({len(CHARACTER_PROMPTS)} характеров)")
     print(f"  🌐 http://localhost:8105")
     print()
+
+    warmup_llm()
+
     threading.Thread(target=sim_thread, daemon=True).start()
     HTTPServer(("0.0.0.0", 8105), SwarmHandler).serve_forever()
 
