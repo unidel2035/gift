@@ -18,6 +18,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import deque
 
 sys.path.insert(0, '/home/unidel/gift/src/digital_twin')
+from flight_control import FlightController, ManeuverType, TacticalApproach
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 SERAFIM_MODEL = "serafim-1.5b"
@@ -35,10 +36,15 @@ class DroneBench:
         self.role = "РАЗВ"
         self.team = "blue"
 
-        # Позиция
-        self.x = 0.0; self.z = 0.0; self.y = 120.0
-        self.vx = 20.0; self.vz = 15.0
-        self.heading = 45.0; self.battery = 92.0
+        # Настоящий полётный контроллер
+        self.fc = FlightController()
+        self.fc.state.x = 0.0
+        self.fc.state.z = 0.0
+        self.fc.state.y = 120.0
+        self.fc.state.yaw = 0.785  # 45°
+        self.fc.state.airspeed = 15.0
+
+        self.battery = 92.0
         self.phase = "patrol"
 
         # Сенсоры
@@ -155,22 +161,24 @@ class DroneBench:
     # ═══ ТИК СИМУЛЯЦИИ ═══════════════════════════════════
 
     def tick(self):
-        """Один тик работы дрона"""
-        # Движение
-        self.x += self.vx * 0.1
-        self.z += self.vz * 0.1
+        """Один тик работы дрона — настоящая физика полёта"""
+        # Обновление полётного контроллера (ПИД + манёвры)
+        self.fc.update(0.1)
+
+        # Синхронизация состояния
+        s = self.fc.state
         self.battery -= 0.005
-        self.heading = (self.heading + random.uniform(-2, 2)) % 360
+        self.phase = s.maneuver.value
+        self.heading = math.degrees(s.yaw) % 360
 
-        # Обновление сенсоров
-        self.sensors["camera"] = min(1.0, max(0.0, self.sensors["camera"] + random.uniform(-0.05, 0.05)))
-        self.sensors["thermal"] = min(1.0, max(0.0, self.sensors["thermal"] + random.uniform(-0.03, 0.03)))
-        self.sensors["radio"] = min(1.0, max(0.0, self.sensors["radio"] + random.uniform(-0.02, 0.05)))
-
-        # Обновление плат
-        self.boards["cube_orange"]["baro_pa"] = 101325 * math.exp(-self.y / 8400.0) + random.gauss(0, 1)
+        # Обновление плат из реального полёта
+        self.boards["cube_orange"]["baro_pa"] = 101325 * math.exp(-s.y / 8400.0) + random.gauss(0, 1)
+        self.boards["cube_orange"]["mode"] = "GUIDED" if s.target_lock else "AUTO"
+        self.boards["tang_nano"]["l1_target"] = "ОПОРНИК" if s.target_lock else "—"
         self.boards["tang_nano"]["response_us"] = 0.5 + random.uniform(0, 1.0)
-        self.boards["orange_pi5"]["cpu_load"] = 0.1 + random.uniform(0, 0.3)
+        self.boards["orange_pi5"]["l2_classifier"] = "ОПОРНИК 85%" if s.target_lock else "—"
+        self.boards["orange_pi5"]["l2_confidence"] = 0.85 if s.target_lock else 0.0
+        self.boards["orange_pi5"]["cpu_load"] = 0.3 if s.target_lock else 0.12
 
         # Обновление сценария
         for t in self.targets_visible:
@@ -179,17 +187,35 @@ class DroneBench:
             e["distance"] += random.uniform(-50, 50)
 
         # Периодический LLM-запрос
-        if random.random() < 0.05 and not self.llm_pending:
+        if random.random() < 0.03 and not self.llm_pending:
             self.query_llm()
 
+        # Применение LLM-решения к полётному контроллеру
+        if self.llm_action != "patrol" and self.fc.approach_phase == 0:
+            target = self.targets_visible[0] if self.targets_visible else None
+            self.fc.execute_llm_command(self.llm_action, target)
+            self.llm_action = "patrol"  # сброс после выполнения
+
     def get_state(self):
+        s = self.fc.state
+        fc_state = self.fc.get_state()
         return {
             "drone": {
                 "id": self.id, "name": self.name, "role": self.role, "team": self.team,
-                "x": round(self.x, 1), "z": round(self.z, 1), "y": round(self.y, 1),
-                "vx": round(self.vx, 1), "vz": round(self.vz, 1),
-                "heading": round(self.heading, 1), "battery": round(self.battery, 1),
-                "phase": self.phase,
+                "x": fc_state["position"]["x"], "z": fc_state["position"]["z"],
+                "y": fc_state["position"]["y"],
+                "vx": fc_state["velocity"]["vx"], "vz": fc_state["velocity"]["vz"],
+                "vy": fc_state["velocity"]["vy"],
+                "airspeed": fc_state["velocity"]["airspeed"],
+                "heading": fc_state["attitude"]["yaw_deg"],
+                "roll": fc_state["attitude"]["roll_deg"],
+                "pitch": fc_state["attitude"]["pitch_deg"],
+                "battery": round(self.battery, 1),
+                "phase": fc_state["maneuver"],
+                "approach": fc_state["approach"],
+                "approach_phase": fc_state["approach_phase"],
+                "throttle": fc_state["controls"]["throttle_pct"],
+                "has_target": fc_state["target_lock"],
             },
             "sensors": self.sensors,
             "targets": self.targets_visible,
@@ -204,6 +230,7 @@ class DroneBench:
                 "pending": self.llm_pending,
             },
             "boards": self.boards,
+            "flight_log": fc_state["action_log"],
             "event_log": list(self.event_log),
         }
 
@@ -342,10 +369,18 @@ async function update() {
       <span class="stat">Y: <span class="val">${dr.y}</span>м</span><br>
       <span class="stat">Vx: <span class="val">${dr.vx}</span></span>
       <span class="stat">Vz: <span class="val">${dr.vz}</span></span>
+      <span class="stat">Vy: <span class="val">${dr.vy}</span></span><br>
+      <span class="stat">Скорость: <span class="val">${dr.airspeed}</span> м/с</span>
       <span class="stat">Курс: <span class="val">${dr.heading}°</span></span><br>
+      <span class="stat">Крен: <span class="val">${dr.roll}°</span></span>
+      <span class="stat">Тангаж: <span class="val">${dr.pitch}°</span></span>
+      <span class="stat">Тяга: <span class="val">${dr.throttle}%</span></span><br>
       <span class="stat">Батарея: <span class="val">${dr.battery}%</span></span>
       <div class="bar"><div class="bar-fill ${dr.battery>60?'bar-green':dr.battery>20?'bar-yellow':'bar-red'}" style="width:${dr.battery}%"></div></div>
-      <span class="stat">Фаза: <span class="act">${dr.phase}</span></span>
+      <span class="stat">Манёвр: <span class="act">${dr.phase}</span></span>
+      <span class="stat">Заход: <span class="val">${dr.approach}</span></span>
+      <span class="stat">Фаза захода: <span class="val">${dr.approach_phase}</span></span><br>
+      <span class="stat">Цель захвачена: <span class="${dr.has_target?'val':'info'}">${dr.has_target?'✅ ДА':'—'}</span></span>
       <span class="stat">Роль: <span class="val">${dr.role}</span></span>
     `;
 
