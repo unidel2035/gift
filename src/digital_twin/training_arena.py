@@ -179,15 +179,24 @@ class TrainingArena:
         # Проверка победы
         blue_alive = sum(1 for a in self.blue_agents.values() if a.phase != CombatPhase.DEAD)
         red_alive = sum(1 for a in self.red_agents.values() if a.phase != CombatPhase.DEAD)
+        max_ticks = 5000  # тайм-лимит игры
 
         if blue_alive == 0 and red_alive > 0:
-            self.winner = "red"
-            self.red_score += 1
+            self.winner = "red"; self.red_score += 1
             tick_events.append({"event": "GAME_OVER", "winner": "red", "tick": self.tick})
         elif red_alive == 0 and blue_alive > 0:
-            self.winner = "blue"
-            self.blue_score += 1
+            self.winner = "blue"; self.blue_score += 1
             tick_events.append({"event": "GAME_OVER", "winner": "blue", "tick": self.tick})
+        elif self.tick >= max_ticks:
+            # Тайм-лимит: побеждает сторона с большим числом выживших
+            if blue_alive > red_alive:
+                self.winner = "blue"; self.blue_score += 1
+            elif red_alive > blue_alive:
+                self.winner = "red"; self.red_score += 1
+            else:
+                self.winner = "draw"
+            tick_events.append({"event": "GAME_OVER", "winner": self.winner, "tick": self.tick,
+                              "reason": "time_limit", "blue_alive": blue_alive, "red_alive": red_alive})
 
         self.duration_ticks = self.tick
         return {"tick": self.tick, "events": tick_events}
@@ -291,10 +300,23 @@ class TrainingArena:
             agent.vz = 10 * math.cos(self.tick * 0.003)
 
         elif agent.role == "НАЗМ":
-            # База не двигается
+            # База не двигается, но уязвима для камикадзе и FPV
             agent.phase = CombatPhase.DEPLOY
             agent.vx = agent.vz = 0
             agent.y = 0
+            # База уязвима — враг может атаковать на y=0
+            if nearest_enemy and nearest_dist < 20:
+                # Враг достиг базы — уничтожает её
+                agent.phase = CombatPhase.DEAD
+                agent.deaths += 1
+                nearest_enemy.kills += 1
+                events.append({
+                    "event": "BASE_DESTROYED",
+                    "base": f"{agent.name}({agent.id})",
+                    "by": f"{nearest_enemy.name}({nearest_enemy.id})",
+                    "team": agent.team, "tick": self.tick,
+                })
+                self.kill_feed.append(f"🏚 {nearest_enemy.name} уничтожил базу {agent.name}")
 
         # Физика
         agent.x += agent.vx * self.dt
@@ -336,17 +358,21 @@ class TrainingArena:
                                      f"Возвращение на базу (bat={agent.battery:.0f}%)")
 
     def _update_air_defense(self, events: list):
-        """Обновить ПВО — стреляет по вражеским дронам"""
+        """Обновить ПВО — стреляет по вражеским дронам (и базам)"""
         for ad in self.air_defense:
             if not ad["active"]:
                 continue
-            # ПВО стреляет по синим
             for agent in self.blue_agents.values():
                 if agent.phase == CombatPhase.DEAD:
                     continue
                 dist = math.sqrt((agent.x - ad["x"])**2 + (agent.z - ad["z"])**2)
-                if dist < ad["range"] and agent.y > ad["min_alt"]:
-                    if random.random() < ad["lethality"] * (1 - dist/ad["range"]):
+                # ПВО бьёт по воздушным целям И по наземным базам (если в радиусе)
+                can_hit = (agent.y > ad["min_alt"]) or (agent.role == "НАЗМ" and dist < ad["range"] * 0.5)
+                if dist < ad["range"] and can_hit:
+                    lethality = ad["lethality"] * (1 - dist/ad["range"])
+                    if agent.role == "НАЗМ":
+                        lethality *= 0.3  # базу труднее поразить
+                    if random.random() < lethality:
                         agent.phase = CombatPhase.DEAD
                         agent.deaths += 1
                         events.append({
@@ -454,7 +480,7 @@ class TrainingManager:
 
         # Режим
         self.auto_restart = True  # автоматический рестарт после конца игры
-        self.training_speed = 1   # множитель скорости
+        self.training_speed = 5   # множитель скорости (ускорено)
 
     def start_new_game(self):
         """Начать новую игру"""
