@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>🛸 Serafim Swarm — Боевой ИИ</title>
+<style>
+*{margin:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'Segoe UI',monospace;user-select:none}
+canvas{display:block}
+#ui{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+#ui>*{pointer-events:auto}
+
+/* HUD top */
+#top{display:flex;justify-content:space-between;padding:16px 20px}
+#status{background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 16px;color:#0f0;font-size:12px;line-height:1.5;backdrop-filter:blur(10px)}
+#status .val{color:#fff;font-weight:bold}
+
+/* Serafim panel - CENTER */
+#serafim-panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+#serafim-panel>*{pointer-events:auto}
+#serafim-box{background:rgba(10,10,20,0.9);border:2px solid #f80;border-radius:14px;padding:16px 28px;backdrop-filter:blur(15px);min-width:280px}
+#serafim-label{color:#888;font-size:9px;text-transform:uppercase;letter-spacing:3px}
+#serafim-action{font-size:36px;font-weight:900;margin:6px 0;transition:color 0.3s}
+#serafim-reason{color:#aaa;font-size:11px;max-width:250px;margin:0 auto;line-height:1.4}
+#serafim-meta{color:#555;font-size:9px;margin-top:6px}
+#serafim-btns{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.btn{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;transition:transform 0.1s}
+.btn:active{transform:scale(0.95)}
+.btn-accept{background:#0a0;color:#fff}
+.btn-reject{background:#800;color:#fff}
+.btn-ask{background:#f80;color:#000}
+
+/* Bottom bar */
+#bottom{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:end;padding:12px 20px}
+#telemetry{background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;color:#aaa;font-size:10px;line-height:1.5;backdrop-filter:blur(10px)}
+#telemetry span{color:#fff}
+#quick-btns{display:flex;gap:6px;flex-wrap:wrap;max-width:300px}
+.qbtn{background:rgba(255,136,0,0.2);border:1px solid rgba(255,136,0,0.3);color:#f80;padding:6px 10px;border-radius:4px;font-size:10px;cursor:pointer;transition:background 0.2s}
+.qbtn:hover{background:rgba(255,136,0,0.4)}
+
+/* Minimap */
+#minimap{position:absolute;bottom:16px;right:16px;background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:8px;width:140px;height:140px;backdrop-filter:blur(10px)}
+
+/* Kill feed */
+#feed{position:absolute;right:16px;top:120px;width:220px;text-align:right;font-size:10px}
+.feed-item{color:#aaa;padding:2px 0;animation:fadeIn 0.3s}
+.feed-item .kill{color:#f55}.feed-item .info{color:#4af}
+@keyframes fadeIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* Loading */
+#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:18px;text-align:center}
+#loading .spin{display:inline-block;width:30px;height:30px;border:3px solid #333;border-top-color:#f80;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="loading"><div class="spin"></div><br>Загрузка мира...</div>
+
+<div id="ui">
+  <div id="top">
+    <div id="status">
+      🛸 <span class="val" id="alt">0</span>m · ⚡<span class="val" id="bat">100</span>%<br>
+      🎯 <span class="val" id="speed">0</span> м/с · 📡 <span class="val" id="mode">SITL</span><br>
+      💀 Целей: <span class="val" id="tgt">5</span> · Убито: <span class="val" id="kills">0</span>
+    </div>
+  </div>
+
+  <div id="serafim-panel">
+    <div id="serafim-box">
+      <div id="serafim-label">Serafim · Суворов</div>
+      <div id="serafim-action" style="color:#888">—</div>
+      <div id="serafim-reason">Загрузка Serafim...</div>
+      <div id="serafim-meta">⌛ ожидание</div>
+      <div id="serafim-btns">
+        <button class="btn btn-accept" onclick="pilotDecide(true);this.blur()">✅ ПРИНЯТЬ</button>
+        <button class="btn btn-reject" onclick="pilotDecide(false);this.blur()">❌ ОТКЛОНИТЬ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom">
+    <div id="telemetry">
+      Roll:<span id="roll">0</span>° Pitch:<span id="pitch">0</span>° Yaw:<span id="yaw">0</span>°<br>
+      GPS <span id="gps">—</span> · Armed:<span id="armed">NO</span>
+    </div>
+    <div id="quick-btns">
+      <button class="qbtn" onclick="quickAsk('Вижу танк на 400м','400','танк')">🎯 Танк</button>
+      <button class="qbtn" onclick="quickAsk('Вижу РЭБ на 800м','800','РЭБ')">📡 РЭБ</button>
+      <button class="qbtn" onclick="quickAsk('Вижу опорник','300','опорник')">🏚 Опорник</button>
+      <button class="qbtn" onclick="quickAsk('Патрулирую','','')">🔍 Патруль</button>
+      <button class="qbtn" onclick="quickAsk('Батарея 8%, возвращаюсь','','')">🪫 RTB</button>
+      <button class="qbtn" onclick="quickAsk('Вижу человека','300','человек')">👤 Чел</button>
+    </div>
+  </div>
+
+  <canvas id="minimap" width="140" height="140"></canvas>
+  <div id="feed"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// 3D WORLD
+// ═══════════════════════════════════════════════════════════════
+const W=4000, H=4000;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87CEEB);
+scene.fog=new THREE.FogExp2(0x87CEEB,0.00015);
+
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,1,5000);
+camera.position.set(200,300,400);camera.lookAt(0,100,0);
+
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;
+
+// Sun
+const sun=new THREE.DirectionalLight(0xfff5e6,1.5);
+sun.position.set(800,1000,400);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.near=1;sun.shadow.camera.far=5000;
+sun.shadow.camera.left=-1000;sun.shadow.camera.right=1000;
+sun.shadow.camera.top=1000;sun.shadow.camera.bottom=-1000;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x8899bb,0.5));
+scene.add(new THREE.HemisphereLight(0x87CEEB,0x3a5a3a,0.4));
+
+// ─── TERRAIN ───
+const terrainGeo=new THREE.PlaneGeometry(W,H,80,80);
+const verts=terrainGeo.attributes.position;
+for(let i=0;i<verts.count;i++){
+  let x=verts.getX(i),z=verts.getY(i);
+  // Реалистичный рельеф
+  let h=Math.sin(x*0.002)*Math.cos(z*0.002)*25+Math.sin(x*0.005+z*0.005)*12+Math.sin(x*0.01)*Math.cos(z*0.015)*8;
+  // Холмы
+  h+=Math.exp(-((x-500)*(x-500)+(z-300)*(z-300))/200000)*40;
+  h+=Math.exp(-((x+600)*(x+600)+(z+500)*(z+500))/150000)*50;
+  h+=Math.exp(-((x+200)*(x+200)+(z-700)*(z-700))/180000)*35;
+  // Дороги (плоские)
+  if(Math.abs(z-100)<15||Math.abs(x+300)<15) h*=0.3;
+  verts.setZ(i,h);
+}
+terrainGeo.computeVertexNormals();
+
+const terrainMat=new THREE.MeshStandardMaterial({color:0x5a8a4a,roughness:0.9,flatShading:false});
+const terrain=new THREE.Mesh(terrainGeo,terrainMat);
+terrain.rotation.x=-Math.PI/2;terrain.receiveShadow=true;
+scene.add(terrain);
+
+// ─── WATER ───
+const waterGeo=new THREE.PlaneGeometry(W+500,H+500);
+const water=new THREE.Mesh(waterGeo,new THREE.MeshStandardMaterial({color:0x3388cc,roughness:0.1,metalness:0.3,transparent:true,opacity:0.7}));
+water.rotation.x=-Math.PI/2;water.position.y=-5;
+scene.add(water);
+
+// ─── TREES ───
+for(let i=0;i<200;i++){
+  let x=(Math.random()-0.5)*W*0.8,z=(Math.random()-0.5)*H*0.8;
+  let h=2+Math.random()*6;
+  let tree=new THREE.Group();
+  tree.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.4,h),new THREE.MeshStandardMaterial({color:0x8B6914})));
+  let crown=new THREE.Mesh(new THREE.ConeGeometry(2+Math.random()*3,4+Math.random()*4,8),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.25+Math.random()*0.1,0.7,0.2+Math.random()*0.3)}));
+  crown.position.y=h/2+2;tree.add(crown);
+  tree.position.set(x,0,z);tree.castShadow=true;tree.receiveShadow=true;
+  scene.add(tree);
+}
+
+// ─── BUILDINGS ───
+for(let i=0;i<12;i++){
+  let x=(Math.random()-0.5)*W*0.6,z=(Math.random()-0.5)*H*0.6;
+  let bw=4+Math.random()*12,bd=4+Math.random()*12,bh=5+Math.random()*20;
+  let b=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.08,0.1,0.4+Math.random()*0.3),roughness:0.8}));
+  b.position.set(x,bh/2,z);b.castShadow=true;b.receiveShadow=true;
+  scene.add(b);
+}
+
+// ─── GRID ───
+const grid=new THREE.GridHelper(W,40,0x445544,0x334433);
+scene.add(grid);
+
+// ─── DRONES ───
+const drones={},targets={};
+
+function createDroneObj(color){
+  let g=new THREE.Group();
+  let body=new THREE.Mesh(new THREE.BoxGeometry(2,0.7,3.5),new THREE.MeshStandardMaterial({color,roughness:0.3,metalness:0.5}));
+  body.castShadow=true;g.add(body);
+  for(let s=-1;s<=1;s+=2){
+    let arm=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,6),new THREE.MeshStandardMaterial({color:0x444444,metalness:0.6}));
+    arm.rotation.z=Math.PI/2;arm.position.x=s*3.5;g.add(arm);
+  }
+  for(let sx=-1;sx<=1;sx+=2)for(let sz=-1;sz<=1;sz+=2){
+    let prop=new THREE.Mesh(new THREE.BoxGeometry(5,0.15,0.6),new THREE.MeshStandardMaterial({color:0xcccccc,transparent:true,opacity:0.4}));
+    prop.position.set(sx*3.5,0.8,sz*2.5);prop.name='prop';g.add(prop);
+  }
+  scene.add(g);return g;
+}
+
+function createTargetObj(role){
+  let colors={танк:0x886633,РЭБ:0x334488,опорник:0x666655,ПВО:0x883333,техника:0x777755,человек:0xccaa88};
+  let sizes={танк:[7,3,10],РЭБ:[5,4,5],опорник:[12,3,8],ПВО:[4,6,4],техника:[6,3,8],человек:[1,2,1]};
+  let s=sizes[role]||[5,3,5];
+  let m=new THREE.Mesh(new THREE.BoxGeometry(...s),new THREE.MeshStandardMaterial({color:colors[role]||0xff4444,roughness:0.7}));
+  m.position.y=s[1]/2;m.castShadow=true;m.receiveShadow=true;
+  // Red marker on top
+  let marker=new THREE.Mesh(new THREE.SphereGeometry(0.5,8,8),new THREE.MeshBasicMaterial({color:0xff0000}));
+  marker.position.y=s[1]+1.5;m.add(marker);
+  scene.add(m);return m;
+}
+
+// Create fleet
+const PILOT_ID='pilot';
+for(let i=1;i<=4;i++) drones['blue-'+i]=createDroneObj(0x4488ff);
+for(let i=1;i<=8;i++) drones['red-'+i]=createDroneObj(0xff4444);
+drones[PILOT_ID]=createDroneObj(0x00ff00); // pilot
+
+targets['T1']=createTargetObj('танк');targets['T1'].position.set(400,0,200);
+targets['T2']=createTargetObj('РЭБ');targets['T2'].position.set(-300,0,500);
+targets['T3']=createTargetObj('опорник');targets['T3'].position.set(600,0,-300);
+targets['T4']=createTargetObj('ПВО');targets['T4'].position.set(-500,0,-400);
+targets['T5']=createTargetObj('техника');targets['T5'].position.set(200,0,-600);
+
+// ═══════════════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════════════
+const API='http://localhost:8150/api/state';
+const COPILOT='http://localhost:8600';
+let tick=0,kills=0,lastDronePos={x:0,y:100,z:0},droneYaw=0;
+
+function pilotDecide(accept){
+  let actEl=document.getElementById('serafim-action');
+  let act=actEl.textContent;
+  fetch(`${COPILOT}/api/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({index:tick,accepted:accept,outcome:accept?'accepted':'rejected',lesson:accept?'':'Отклонено пилотом'})});
+  actEl.style.color=accept?'#0f0':'#f44';
+  document.getElementById('serafim-reason').textContent=accept?'✅ ПРИНЯТО: '+act:'❌ ОТКЛОНЕНО: '+act;
+  document.getElementById('serafim-meta').textContent='Опыт записан ✓';
+  // Flash effect on panel
+  let box=document.getElementById('serafim-box');
+  box.style.borderColor=accept?'#0f0':'#f44';
+  box.style.transform='scale(1.05)';
+  setTimeout(()=>{box.style.borderColor='#f80';box.style.transform='scale(1)';},800);
+  setTimeout(()=>{actEl.style.color='#f80';},2000);
+}
+
+function quickAsk(sit,dist,enemy){
+  fetch(`${COPILOT}/api/ask`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({situation:sit,distance:dist,battery:90,enemies:enemy})})
+  .then(r=>r.json()).then(d=>{
+    document.getElementById('serafim-action').textContent=d.advice.toUpperCase();
+    document.getElementById('serafim-action').style.color='#f80';
+    document.getElementById('serafim-reason').textContent=d.reason.substring(0,200);
+    document.getElementById('serafim-meta').textContent=`${d.latency_ms|0}ms · уверенность ${((d.confidence||0.8)*100)|0}%`;
+  });
+}
+
+async function update(){
+  try{
+    let r=await fetch(API);let s=await r.json();
+    tick=s.tick||tick+1;
+    let d=s.drone||{},dec=s.decision;
+
+    // HUD
+    document.getElementById('alt').textContent=d.y?.toFixed(0)||'—';
+    document.getElementById('bat').textContent=d.battery?.toFixed(0)||'—';
+    let spd=Math.sqrt((d.vx||0)**2+(d.vy||0)**2+(d.vz||0)**2);
+    document.getElementById('speed').textContent=spd.toFixed(1);
+    document.getElementById('roll').textContent=((d.roll||0)*57).toFixed(1);
+    document.getElementById('pitch').textContent=((d.pitch||0)*57).toFixed(1);
+    document.getElementById('yaw').textContent=((d.yaw||0)*57).toFixed(0);
+    document.getElementById('armed').textContent=d.armed?'YES':'NO';
+    document.getElementById('tgt').textContent=s.sensors?.enemies_left||0;
+
+    // Serafim
+    if(dec){
+      document.getElementById('serafim-action').textContent=dec.action.toUpperCase();
+      document.getElementById('serafim-action').style.color={attack:'#f44',observe:'#48f',rtb:'#0f0',patrol:'#888'}[dec.action]||'#fff';
+      document.getElementById('serafim-reason').textContent=(dec.reason||'').substring(0,200);
+    }
+
+    // Kill events
+    if(s.events) s.events.forEach(e=>{
+      if(e.event==='KILL'){kills++;document.getElementById('kills').textContent=kills;
+        document.getElementById('feed').innerHTML=`<div class="feed-item"><span class="kill">💥 ${e.target}</span></div>`+document.getElementById('feed').innerHTML;}
+    });
+
+    // 3D: update drone positions
+    if(d.x!==undefined){
+      let dx=d.x-lastDronePos.x,dz=d.z-lastDronePos.z,dy=d.y-lastDronePos.y;
+      lastDronePos={x:d.x,y:d.y,z:d.z};
+      droneYaw=d.yaw||droneYaw;
+
+      // Move pilot drone
+      let pilot=drones[PILOT_ID];
+      if(pilot){pilot.position.set(d.x,d.y,d.z);pilot.rotation.y=droneYaw;}
+      // Animate props
+      Object.values(drones).forEach(g=>g.children.forEach(c=>{if(c.name==='prop')c.rotation.y+=0.5+spd*0.1;}));
+
+      // Update targets
+      if(s.enemies) s.enemies.forEach(t=>{
+        let obj=targets[t.id];
+        if(obj){obj.position.set(t.x,obj.position.y,t.z);if(t.destroyed)obj.children[0]?.material?.color?.setHex(0x333333);}
+      });
+
+      // Camera: cinematic follow
+      let camDist=80,camHeight=40;
+      let cx=d.x-Math.sin(droneYaw)*camDist,cy=d.y+camHeight,cz=d.z-Math.cos(droneYaw)*camDist;
+      camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.1);
+      camera.lookAt(d.x+Math.sin(droneYaw)*100,d.y-10,d.z+Math.cos(droneYaw)*100);
+    }
+
+    // Minimap
+    let mm=document.getElementById('minimap'),ctx=mm.getContext('2d');
+    ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,140,140);
+    let sc=0.025,cx=70,cy=70;
+    if(s.enemies) s.enemies.forEach(t=>{
+      let mx=cx+(t.x-(d.x||0))*sc,mz=cy+(t.z-(d.z||0))*sc;
+      ctx.fillStyle=t.destroyed?'#333':'#f44';ctx.fillRect(mx-2,mz-2,4,4);
+    });
+    ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
+    // Direction
+    ctx.strokeStyle='#0f0';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.sin(droneYaw)*8,cy-Math.cos(droneYaw)*8);ctx.stroke();
+
+  }catch(e){console.error(e)}
+  renderer.render(scene,camera);
+  setTimeout(update,150);
+}
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// Hide loading
+setTimeout(()=>{document.getElementById('loading').style.display='none';},1500);
+update();
+// Initial Serafim ask
+setTimeout(()=>quickAsk('Патрулирую','',''),3000);
+</script>
+</body>
+</html>
