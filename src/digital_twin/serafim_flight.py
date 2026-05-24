@@ -302,7 +302,11 @@ class SerafimFlightController:
                 "roll": round(self.drone.roll, 2), "pitch": round(self.drone.pitch, 2), "yaw": round(self.drone.yaw, 2),
                 "battery": round(self.drone.battery, 1), "armed": self.drone.armed,
             },
-            "decision": self.last_decision,
+            "decision": {
+                "action": self.last_decision.action.value,
+                "reason": self.last_decision.reason[:200],
+                "confidence": self.last_decision.confidence,
+            } if self.last_decision else None,
             "sensors": {
                 "nearest_enemy": sensors["nearest_enemy"]["id"] if sensors["nearest_enemy"] else None,
                 "nearest_dist": round(sensors["nearest_dist"], 0),
@@ -612,17 +616,50 @@ class SerafimFlightServer:
                 else:
                     self.send_response(404); self.end_headers()
 
+        # Start MAVLink UDP broadcast for QGroundControl
+        self._start_mavlink_udp(ctrl)
+
         server = HTTPServer(("0.0.0.0", self.port), Handler)
         print(f"\n{'='*60}")
         print(f"  Serafim Flight — {ctrl.drone_id}")
-        print(f"  MAVLink: http://localhost:{self.port}/api/mavlink/heartbeat")
+        print(f"  MAVLink UDP: :14550 (QGroundControl)")
         print(f"  Веб:    http://localhost:{self.port}")
         print(f"  {'='*60}")
         print(f"  GET /api/arm     — запустить миссию")
         print(f"  GET /api/state   — телеметрия + Serafim")
-        print(f"  Serafim V2 Q8 управляет дроном через MAVLink v2")
+        print(f"  QGroundControl → UDP 127.0.0.1:14550 → Connect")
         print(f"  {'='*60}\n")
         server.serve_forever()
+
+    def _start_mavlink_udp(self, ctrl):
+        """Broadcast MAVLink to UDP :14550 for QGroundControl via pymavlink."""
+        import socket, threading
+        from pymavlink import mavutil
+
+        class UDPSender:
+            def __init__(self, host, port):
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.addr = (host, port)
+            def write(self, data):
+                self.sock.sendto(data, self.addr)
+
+        sender = UDPSender('127.0.0.1', 14550)
+        mav = mavutil.mavlink.MAVLink(sender, srcSystem=1, srcComponent=1)
+
+        def _broadcast():
+            while True:
+                d = ctrl.drone
+                base_mode = 81 if d.armed else 0
+                mav.heartbeat_send(2, 3, base_mode, 0, 4)
+                mav.sys_status_send(0, 0, 0, 0, 11000, -1, int(d.battery), 0, 0, 0, 0, 0, 0)
+                lat = int((55.75 + d.x*1e-5)*1e7)
+                lon = int((37.62 + d.z*1e-5)*1e7)
+                alt_mm = int(d.y*1000)
+                mav.global_position_int_send(0, lat, lon, alt_mm, alt_mm,
+                    int(d.vx*100), int(d.vy*100), int(d.vz*100), int(d.yaw*100))
+                time.sleep(1)
+
+        threading.Thread(target=_broadcast, daemon=True).start()
 
 
 # ═══════════════════════════════════════════════════════════════
