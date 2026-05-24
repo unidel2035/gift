@@ -82,11 +82,16 @@ class SwarmGameWorld:
         # Частицы (взрывы, трассеры)
         self.particles: deque = deque(maxlen=100)
 
-        # Serafim
+        # Serafim (асинхронные предложения)
         self.serafim_agents: Dict[str, SerafimAgent] = {}
         for fid, drone in self.drones.items():
             if drone.team == "blue" and not drone.is_pilot:
                 self.serafim_agents[fid] = SerafimAgent(fid, drone.role, "blue")
+
+        # Кеш предложений Serafim (фоновая нить обновляет)
+        self._cached_suggestion = None
+        self._suggestion_lock = threading.Lock()
+        self._start_suggestion_thread()
 
         # Кентавр
         self.cockpit = CentaurCockpit("pilot-1", pilot_name, pilot_age)
@@ -102,6 +107,30 @@ class SwarmGameWorld:
         self.score = 0
         self.kills = 0
         self.deaths = 0
+
+    def _start_suggestion_thread(self):
+        """Фоновая нить для предложений Serafim (без блокировки API)."""
+        import threading as thr
+        def _refresh():
+            while True:
+                try:
+                    pilot = self._get_pilot_drone()
+                    if pilot and pilot.alive:
+                        sit = self._build_pilot_situation(pilot)
+                        serafim = list(self.serafim_agents.values())[0] if self.serafim_agents else None
+                        if serafim:
+                            dec = serafim.decide_sync(sit, timeout_s=5)
+                            with self._suggestion_lock:
+                                self._cached_suggestion = {
+                                    "action": dec.action.value,
+                                    "reason": dec.reason[:200],
+                                    "confidence": dec.confidence,
+                                }
+                except:
+                    pass
+                time.sleep(3)
+        t = thr.Thread(target=_refresh, daemon=True)
+        t.start()
 
     def _init_drones(self):
         """Создать дроны для игры."""
@@ -434,17 +463,8 @@ class SwarmGameWorld:
                 particles_state.append(p.copy())
                 p["life"] -= 0.02
 
-        # Serafim-предложение для пилота
-        suggestion = None
-        if pilot and pilot.alive:
-            sit = self._build_pilot_situation(pilot)
-            try:
-                serafim = self.serafim_agents.get("blue-2")  # любой Serafim
-                if serafim:
-                    dec = serafim.decide_sync(sit, timeout_s=3)
-                    suggestion = {"action": dec.action.value, "reason": dec.reason[:200]}
-            except:
-                pass
+        # Serafim-предложение (кешированное, не блокирует)
+        suggestion = self._cached_suggestion
 
         return {
             "tick": self.tick_count,
