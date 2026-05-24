@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>🛸 Serafim Swarm Game</title>
+<style>
+*{margin:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:monospace}
+canvas{display:block}
+#hud{position:absolute;top:0;left:0;right:0;pointer-events:none;padding:20px}
+#hud *{pointer-events:auto}
+#top-bar{display:flex;justify-content:space-between;align-items:start}
+#status{background:rgba(0,0,0,0.7);border:1px solid #333;border-radius:8px;padding:10px 16px;color:#0f0;font-size:14px}
+#action-box{background:rgba(0,0,0,0.8);border:2px solid #f80;border-radius:10px;padding:14px 20px;text-align:center;min-width:200px}
+#action-box .label{color:#888;font-size:10px;text-transform:uppercase}
+#action-box .action{color:#f80;font-size:28px;font-weight:bold}
+#action-box .reason{color:#aaa;font-size:11px;margin-top:4px;max-width:250px}
+#bottom{position:absolute;bottom:20px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:end}
+#telemetry{background:rgba(0,0,0,0.7);border:1px solid #333;border-radius:8px;padding:8px 12px;color:#aaa;font-size:10px;line-height:1.6}
+#telemetry span{color:#fff}
+#minimap{background:rgba(0,0,0,0.7);border:1px solid #333;border-radius:8px;width:150px;height:150px}
+#feed{position:absolute;right:20px;top:50%;transform:translateY(-50%);width:250px;max-height:300px;overflow-y:hidden;font-size:10px;color:#aaa;text-align:right}
+.feed-entry{padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.feed-entry .kill{color:#f55}.feed-entry .info{color:#4af}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="top-bar">
+    <div id="status">
+      <div>🛸 <span id="mode">SITL</span> | ⚡ <span id="bat">100</span>%</div>
+      <div>📡 <span id="alt">0</span>m | 🎯 <span id="speed">0</span> m/s</div>
+      <div>🎯 Целей: <span id="targets">5</span> | 💀 <span id="kills">0</span></div>
+    </div>
+    <div id="action-box">
+      <div class="label">SERAFIM · СУВОРОВ</div>
+      <div class="action" id="action">—</div>
+      <div class="reason" id="reason"></div>
+    </div>
+  </div>
+  <div id="bottom">
+    <div id="telemetry">
+      <div>Крен: <span id="roll">0</span>° | Тангаж: <span id="pitch">0</span>° | Курс: <span id="yaw">0</span>°</div>
+      <div>GPS: <span id="gps">—</span></div>
+      <div>Режим: <span id="fmode">—</span> | Armed: <span id="armed">—</span></div>
+    </div>
+    <canvas id="minimap" width="150" height="150"></canvas>
+  </div>
+</div>
+<div id="feed"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// THREE.JS WORLD
+// ═══════════════════════════════════════════════════════════════
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 500, 3000);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 1, 5000);
+camera.position.set(0, 300, 500);
+camera.lookAt(0, 100, 0);
+
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c'), antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+
+// Освещение
+const sun = new THREE.DirectionalLight(0xffffcc, 1.2);
+sun.position.set(500, 800, 300);
+sun.castShadow = true;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x334466, 0.6));
+
+// Земля
+const groundGeo = new THREE.PlaneGeometry(4000, 4000, 40, 40);
+// Лёгкий рельеф
+const pos = groundGeo.attributes.position;
+for (let i=0; i<pos.count; i++) {
+  let x = pos.getX(i), y = pos.getY(i);
+  pos.setZ(i, Math.sin(x*0.003)*Math.cos(y*0.003)*15 + Math.sin(x*0.01+y*0.01)*8);
+}
+groundGeo.computeVertexNormals();
+const ground = new THREE.Mesh(groundGeo, new THREE.MeshPhongMaterial({color:0x3a5a3a, flatShading:true}));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Сетка
+const grid = new THREE.GridHelper(4000, 40, 0x335533, 0x224422);
+scene.add(grid);
+
+// Дроны и цели (динамически)
+const drones = {};  // id -> THREE.Group
+const targets = {}; // id -> THREE.Mesh
+
+function createDrone(id, isPilot) {
+  const g = new THREE.Group();
+  // Тело
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 1, 5),
+    new THREE.MeshPhongMaterial({color:isPilot?0x00ff00:0x4488ff})
+  );
+  g.add(body);
+  // Лучи
+  for (let s=-1; s<=1; s+=2) {
+    const arm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 8),
+      new THREE.MeshPhongMaterial({color:0x666666})
+    );
+    arm.rotation.z = Math.PI/2;
+    arm.position.x = s*4;
+    g.add(arm);
+  }
+  // Пропеллеры
+  for (let sx=-1; sx<=1; sx+=2) {
+    for (let sz=-1; sz<=1; sz+=2) {
+      const prop = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 0.2, 0.8),
+        new THREE.MeshPhongMaterial({color:0xcccccc, transparent:true, opacity:0.5})
+      );
+      prop.position.set(sx*4, 1, sz*3);
+      prop.name = 'prop';
+      g.add(prop);
+    }
+  }
+  scene.add(g);
+  drones[id] = g;
+  return g;
+}
+
+function createTarget(id, role) {
+  const colors = {танк:0x886644, РЭБ:0x4444aa, опорник:0x666655, ПВО:0xaa4444, техника:0x888866};
+  const sizes = {танк:8, РЭБ:6, опорник:10, ПВО:5, техника:5};
+  const g = new THREE.Mesh(
+    new THREE.BoxGeometry(sizes[role]||5, 3, sizes[role]||5),
+    new THREE.MeshPhongMaterial({color:colors[role]||0xff4444})
+  );
+  g.position.y = 1.5;
+  g.castShadow = true;
+  scene.add(g);
+  targets[id] = g;
+  return g;
+}
+
+// Начальные объекты
+const pilotDrone = createDrone('pilot', true);
+for (let i=1; i<=4; i++) createDrone('blue-'+i, false);
+for (let i=1; i<=8; i++) createDrone('red-'+i, false).children[0].material.color.setHex(0xff4444);
+createTarget('T1','танк').position.set(400,0,200);
+createTarget('T2','РЭБ').position.set(-300,0,500);
+createTarget('T3','опорник').position.set(600,0,-300);
+createTarget('T4','ПВО').position.set(-500,0,-400);
+createTarget('T5','техника').position.set(200,0,-600);
+
+// ═══════════════════════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════════════════════
+const API = 'http://localhost:8101/api/state';
+let tick = 0, kills = 0;
+
+async function update() {
+  try {
+    const r = await fetch(API);
+    const s = await r.json();
+    tick = s.tick || tick+1;
+
+    // Update HUD
+    const d = s.drone || {};
+    document.getElementById('alt').textContent = d.y?.toFixed(0)||'—';
+    document.getElementById('speed').textContent = Math.sqrt((d.vx||0)**2+(d.vz||0)**2).toFixed(1);
+    document.getElementById('bat').textContent = d.battery?.toFixed(0)||'—';
+    document.getElementById('roll').textContent = (d.roll||0).toFixed(1);
+    document.getElementById('pitch').textContent = (d.pitch||0).toFixed(1);
+    document.getElementById('yaw').textContent = (d.yaw||0).toFixed(1);
+    document.getElementById('armed').textContent = d.armed?'YES':'NO';
+
+    // Serafim decision
+    const dec = s.decision;
+    if (dec && dec.action) {
+      document.getElementById('action').textContent = dec.action.toUpperCase();
+      document.getElementById('action').style.color = {attack:'#f44',observe:'#48f',rtb:'#0f0',patrol:'#888'}[dec.action]||'#fff';
+      document.getElementById('reason').textContent = (dec.reason||'').substring(0,150);
+    }
+
+    // Targets
+    const enemiesLeft = s.sensors?.enemies_left || 0;
+    document.getElementById('targets').textContent = enemiesLeft;
+
+    // Kill feed
+    if (s.events) s.events.forEach(e => {
+      if (e.event==='KILL') {
+        kills++;
+        document.getElementById('kills').textContent = kills;
+        const feed = document.getElementById('feed');
+        feed.innerHTML = `<div class="feed-entry"><span class="kill">💥 ${e.target}</span></div>` + feed.innerHTML;
+      }
+    });
+
+    // Update 3D positions - drone at center
+    if (d.x !== undefined && d.y !== undefined && d.z !== undefined) {
+      // Move all objects relative to drone
+      for (const [id, obj] of Object.entries(drones)) {
+        if (id === 'pilot') {
+          obj.position.set(0, d.y, 0);
+          obj.rotation.y = d.yaw || 0;
+        }
+      }
+      // Move targets relative to drone
+      if (s.enemies) {
+        s.enemies.forEach(t => {
+          const obj = targets[t.id];
+          if (obj) {
+            obj.position.set(t.x - d.x, obj.position.y, t.z - d.z);
+            if (t.destroyed) obj.material.color.setHex(0x333333);
+          }
+        });
+      }
+      // Camera follows drone
+      camera.position.set(
+        Math.sin(d.yaw||0) * 100,
+        (d.y||100) + 50,
+        Math.cos(d.yaw||0) * 100
+      );
+      camera.lookAt(Math.sin(d.yaw||0)*200, (d.y||100)-20, Math.cos(d.yaw||0)*200);
+    }
+
+    // Animate propellers
+    Object.values(drones).forEach(g => {
+      g.children.forEach(c => {
+        if (c.name==='prop') c.rotation.y += 0.8;
+      });
+    });
+
+    // Minimap
+    const mm = document.getElementById('minimap');
+    const ctx = mm.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,150,150);
+    ctx.strokeStyle = '#333'; ctx.strokeRect(0,0,150,150);
+    const scale = 0.03;
+    if (s.enemies) s.enemies.forEach(t => {
+      const mx = 75 + (t.x - (d.x||0)) * scale;
+      const mz = 75 + (t.z - (d.z||0)) * scale;
+      ctx.fillStyle = t.destroyed ? '#333' : '#f44';
+      ctx.fillRect(mx-2, mz-2, 4, 4);
+    });
+    ctx.fillStyle = '#0f0'; ctx.fillRect(73, 73, 4, 4); // pilot center
+
+  } catch(e) { console.error(e); }
+
+  renderer.render(scene, camera);
+  setTimeout(update, 200);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+update();
+</script>
+</body>
+</html>
