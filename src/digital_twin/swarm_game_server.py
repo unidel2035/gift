@@ -68,7 +68,7 @@ class SwarmGameWorld:
         self.pilot_name = pilot_name
         self.pilot_age = pilot_age
         self.map_size = 4000
-        self.tick = 0
+        self.tick_count = 0
         self.winner = None
 
         # Дроны
@@ -165,7 +165,7 @@ class SwarmGameWorld:
 
     def tick(self, pilot_input: dict = None) -> dict:
         """Один тик игры."""
-        self.tick += 1
+        self.tick_count += 1
         dt = 0.1
         events = []
 
@@ -209,7 +209,7 @@ class SwarmGameWorld:
             self.winner = "red"
 
         return {
-            "tick": self.tick,
+            "tick": self.tick_count,
             "winner": self.winner,
             "blue_alive": blue_alive,
             "red_alive": red_alive,
@@ -290,7 +290,7 @@ class SwarmGameWorld:
             return
 
         # Упрощённо: каждые 5 тиков запрашиваем решение
-        if self.tick % 5 == 0:
+        if self.tick_count % 5 == 0:
             # Найти ближайшего врага
             nearest_enemy = None
             nearest_dist = float('inf')
@@ -354,8 +354,8 @@ class SwarmGameWorld:
                 drone.vx = -drone.x / dist * 30
                 drone.vz = -drone.z / dist * 30
         else:
-            drone.vx = 10 * math.sin(self.tick * 0.01 + hash(drone.id) % 50)
-            drone.vz = 10 * math.cos(self.tick * 0.01 + hash(drone.id) % 50)
+            drone.vx = 10 * math.sin(self.tick_count * 0.01 + hash(drone.id) % 50)
+            drone.vz = 10 * math.cos(self.tick_count * 0.01 + hash(drone.id) % 50)
 
         drone.battery -= 0.01
         if drone.battery <= 0:
@@ -388,8 +388,8 @@ class SwarmGameWorld:
                 events.append({"event": "ENEMY_KILL", "victim": nearest_blue.name, "by": drone.name})
                 self.particles.append({"type": "explosion", "x": nearest_blue.x, "y": nearest_blue.y, "z": nearest_blue.z, "life": 1.0})
         else:
-            drone.vx = 8 * math.sin(self.tick * 0.008 + hash(drone.id) % 40)
-            drone.vz = 8 * math.cos(self.tick * 0.008 + hash(drone.id) % 40)
+            drone.vx = 8 * math.sin(self.tick_count * 0.008 + hash(drone.id) % 40)
+            drone.vz = 8 * math.cos(self.tick_count * 0.008 + hash(drone.id) % 40)
 
         drone.battery -= 0.01
         if drone.battery <= 0:
@@ -447,7 +447,7 @@ class SwarmGameWorld:
                 pass
 
         return {
-            "tick": self.tick,
+            "tick": self.tick_count,
             "winner": self.winner,
             "score": self.score,
             "kills": self.kills,
