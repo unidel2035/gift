@@ -459,108 +459,191 @@ class SerafimFlightController:
 FLIGHT_HTML = r"""<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<title>Serafim Flight — {drone_id}</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🛸 Serafim — Боевой ИИ роя</title>
 <style>
-*{{margin:0;box-sizing:border-box}}
-body{{background:#0a0a12;color:#c8ccd4;font-family:monospace;display:flex;height:100vh}}
-#panel{{width:300px;background:#111118;padding:14px;overflow-y:auto;border-right:1px solid #222}}
-#view{{flex:1;position:relative}}
-canvas{{display:block}}
-h2{{color:#4af;font-size:14px;margin-bottom:8px}}
-.stat{{display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid #1a1a22}}
-.stat .val{{color:#fff}}
-.action{{font-size:20px;font-weight:bold;padding:8px;text-align:center;border-radius:6px;margin:8px 0}}
-.action.attack{{background:#400;color:#f44}}
-.action.observe{{background:#004;color:#48f}}
-.action.rtb{{background:#040;color:#0f0}}
-.action.patrol{{background:#222;color:#888}}
-#log{{font-size:10px;max-height:150px;overflow-y:auto}}
-.log-entry{{padding:1px 0;border-bottom:1px solid #1a1a22}}
+*{margin:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}
+body{background:#0a0a12;color:#c8ccd4;overflow:hidden;height:100vh;display:flex}
+#left{width:260px;background:#111118;padding:10px;overflow-y:auto;border-right:1px solid #222;font-size:11px}
+#center{flex:1;position:relative}
+#right{width:280px;background:#111118;padding:10px;overflow-y:auto;border-left:1px solid #222;font-size:11px}
+canvas{display:block}
+h3{color:#f80;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:1px}
+.stat{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #1a1a22}
+.stat .val{color:#fff;font-weight:bold}
+.btn{display:block;width:100%;padding:8px;margin:3px 0;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:bold;transition:transform 0.1s}
+.btn:active{transform:scale(0.95)}
+.btn-attack{background:#800;color:#fff}
+.btn-observe{background:#048;color:#fff}
+.btn-rtb{background:#080;color:#fff}
+.btn-patrol{background:#444;color:#ccc}
+.btn-arm{background:#f80;color:#000;font-size:14px;padding:10px}
+#serafim-box{background:#1a1a1e;border:2px solid #f80;border-radius:8px;padding:10px;margin:8px 0;text-align:center}
+#serafim-action{font-size:24px;font-weight:900;color:#f80}
+#serafim-reason{font-size:10px;color:#aaa;margin-top:4px;max-height:40px;overflow:hidden}
+#log{max-height:150px;overflow-y:auto;font-size:10px}
+.log-e{color:#aaa;padding:1px 0;border-bottom:1px solid #1a1a22}
+.log-e .a{color:#f80}.log-e .k{color:#f55}.log-e .i{color:#4af}
+#minimap{width:100%;height:140px;background:rgba(0,0,0,0.5);border-radius:4px}
 </style>
 </head>
 <body>
-<div id="panel">
-  <h2>🛸 Serafim Flight</h2>
-  <div style="font-size:10px;color:#aaa;margin-bottom:10px">{drone_id} | Serafim V2 Q8 | MAVLink v2</div>
+<div id="left">
+  <h3>🚀 УПРАВЛЕНИЕ</h3>
+  <button class="btn btn-arm" onclick="arm()">⬆ ARM / TAKEOFF</button>
+  <button class="btn btn-attack" onclick="quick('Вижу танк на 400м','400','танк')">🎯 АТАКА: Танк</button>
+  <button class="btn btn-attack" onclick="quick('Вижу РЭБ на 800м','800','РЭБ')">📡 АТАКА: РЭБ</button>
+  <button class="btn btn-attack" onclick="quick('Вижу опорник','300','опорник')">🏚 АТАКА: Опорник</button>
+  <button class="btn btn-observe" onclick="quick('Вижу человека','300','человек')">👤 НАБЛЮДАТЬ</button>
+  <button class="btn btn-rtb" onclick="quick('Батарея 8%, возвращаюсь','','')">🪫 RTB</button>
+  <button class="btn btn-patrol" onclick="quick('Патрулирую','','')">🔍 ПАТРУЛЬ</button>
 
-  <div id="action-display" class="action patrol">—</div>
+  <h3>🤖 SERAFIM</h3>
+  <div id="serafim-box">
+    <div id="serafim-action">—</div>
+    <div id="serafim-reason">Ожидание...</div>
+  </div>
+  <div style="display:flex;gap:4px">
+    <button class="btn" style="background:#0a0;color:#fff;flex:1" onclick="feedback(true)">✅</button>
+    <button class="btn" style="background:#800;color:#fff;flex:1" onclick="feedback(false)">❌</button>
+  </div>
 
-  <h3>📊 ТЕЛЕМЕТРИЯ</h3>
-  <div class="stat"><span>Высота</span><span class="val" id="alt">—</span></div>
-  <div class="stat"><span>Скорость</span><span class="val" id="speed">—</span></div>
-  <div class="stat"><span>Батарея</span><span class="val" id="bat">—</span></div>
-  <div class="stat"><span>Крен/Тангаж</span><span class="val" id="att">—</span></div>
-  <div class="stat"><span>Курс</span><span class="val" id="hdg">—</span></div>
-  <div class="stat"><span>Врагов</span><span class="val" id="enemies">—</span></div>
-  <div class="stat"><span>Ближайший</span><span class="val" id="nearest">—</span></div>
-  <div class="stat"><span>Время полёта</span><span class="val" id="ftime">—</span></div>
-  <div class="stat"><span>Дальность</span><span class="val" id="dist">—</span></div>
-  <div class="stat"><span>Решений Serafim</span><span class="val" id="decisions">—</span></div>
+  <h3>📡 ТЕЛЕМЕТРИЯ</h3>
+  <div class="stat"><span>Высота</span><span class="val" id="alt">0</span></div>
+  <div class="stat"><span>Скорость</span><span class="val" id="spd">0</span></div>
+  <div class="stat"><span>Батарея</span><span class="val" id="bat">100%</span></div>
+  <div class="stat"><span>Режим</span><span class="val" id="mode">—</span></div>
+  <div class="stat"><span>Целей</span><span class="val" id="tgt">5</span></div>
+  <div class="stat"><span>Убито</span><span class="val" id="kills">0</span></div>
+  <div class="stat"><span>Тик</span><span class="val" id="tck">0</span></div>
+  <div class="stat"><span>Serafim</span><span class="val" id="sact">—</span></div>
+</div>
+
+<div id="center"><canvas id="c"></canvas></div>
+
+<div id="right">
+  <h3>🗺 МИНИ-КАРТА</h3>
+  <canvas id="minimap" width="280" height="140"></canvas>
+
+  <h3>🎯 ЦЕЛИ</h3>
+  <div id="targets-list"></div>
 
   <h3>📝 ЛОГ</h3>
   <div id="log"></div>
 </div>
-<div id="view"><canvas id="c"></canvas></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-var api='/api/state';
-async function update(){{
-  try{{
-    let r=await fetch(api);let s=await r.json();
-    let d=s.drone;
-    document.getElementById('alt').textContent=d.y.toFixed(0)+'м';
-    document.getElementById('speed').textContent=Math.sqrt(d.vx*d.vx+d.vy*d.vy+d.vz*d.vz).toFixed(1)+'м/с';
-    document.getElementById('bat').textContent=d.battery.toFixed(0)+'%';
-    document.getElementById('att').textContent=(d.roll*57).toFixed(1)+'°/'+(d.pitch*57).toFixed(1)+'°';
-    document.getElementById('hdg').textContent=(d.yaw*57).toFixed(0)+'°';
-    document.getElementById('enemies').textContent=(s.sensors?.enemies_left||0);
-    document.getElementById('nearest').textContent=(s.sensors?.nearest_dist||'—')+'м';
-    document.getElementById('ftime').textContent=(s.stats?.flight_time||0).toFixed(1)+'с';
-    document.getElementById('dist').textContent=(s.stats?.distance_flown||0).toFixed(0)+'м';
-    document.getElementById('decisions').textContent=(s.stats?.decisions||0);
+// ═══ 3D WORLD ═══
+const W=4000,scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87CEEB);
+scene.fog=new THREE.FogExp2(0x87CEEB,0.00015);
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,1,5000);
+camera.position.set(200,250,400);camera.lookAt(0,100,0);
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+renderer.setSize(1,1);renderer.shadowMap.enabled=true;
+const sun=new THREE.DirectionalLight(0xffffcc,1.2);sun.position.set(500,800,300);scene.add(sun);
+scene.add(new THREE.AmbientLight(0x446688,0.5));
+const grid=new THREE.GridHelper(W,40,0x445544,0x334433);scene.add(grid);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(W,W),new THREE.MeshPhongMaterial({color:0x4a7a3a}));
+ground.rotation.x=-Math.PI/2;ground.position.y=-0.5;scene.add(ground);
+// Trees
+for(let i=0;i<100;i++){let x=(Math.random()-0.5)*W,z=(Math.random()-0.5)*W;let t=new THREE.Mesh(new THREE.ConeGeometry(2+Math.random()*3,4+Math.random()*5,6),new THREE.MeshPhongMaterial({color:0x335522}));t.position.set(x,2,z);scene.add(t);}
+// Buildings
+for(let i=0;i<8;i++){let x=(Math.random()-0.5)*W*0.6,z=(Math.random()-0.5)*W*0.6;let b=new THREE.Mesh(new THREE.BoxGeometry(5+Math.random()*10,8+Math.random()*20,5+Math.random()*10),new THREE.MeshPhongMaterial({color:0x666666}));b.position.set(x,4,z);scene.add(b);}
 
-    let act=s.decision?.action||'patrol';
-    let el=document.getElementById('action-display');
-    el.textContent=act.toUpperCase();
-    el.className='action '+act;
+const drones={},targets={};
+function mkDrone(c){let g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(2,0.6,3.5),new THREE.MeshPhongMaterial({color:c})));for(let s=-1;s<=1;s+=2){g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,6),new THREE.MeshPhongMaterial({color:0x444}))).rotation.z=Math.PI/2;g.children[g.children.length-1].position.x=s*3.5}for(let a=0;a<4;a++){let p=new THREE.Mesh(new THREE.BoxGeometry(5,0.1,0.5),new THREE.MeshPhongMaterial({color:0xccc,transparent:true,opacity:0.4}));p.position.set((a<2?-1:1)*3.5,0.8,(a%2==0?-1:1)*2.5);p.name='prop';g.add(p)}scene.add(g);return g}
+function mkTarget(r){let cl={танк:0x886633,РЭБ:0x334488,опорник:0x666655,ПВО:0x883333,техника:0x777755}[r]||0xf44;let t=new THREE.Mesh(new THREE.BoxGeometry(6,3,8),new THREE.MeshPhongMaterial({color:cl}));t.position.y=1.5;scene.add(t);return t}
+drones['pilot']=mkDrone(0x00ff00);
+for(let i=1;i<=4;i++)drones['b'+i]=mkDrone(0x4488ff);
+for(let i=1;i<=4;i++)drones['r'+i]=mkDrone(0xff4444);
+targets['T1']=mkTarget('танк');targets['T1'].position.set(400,0,200);
+targets['T2']=mkTarget('РЭБ');targets['T2'].position.set(-300,0,500);
+targets['T3']=mkTarget('опорник');targets['T3'].position.set(600,0,-300);
+targets['T4']=mkTarget('ПВО');targets['T4'].position.set(-500,0,-400);
+targets['T5']=mkTarget('техника');targets['T5'].position.set(200,0,-600);
 
-    // Лог
-    if(s.log){{
-      document.getElementById('log').innerHTML=s.log.slice(-12)
-        .map(l=>'<div class="log-entry">'+l+'</div>').join('');
-    }}
+// ═══ GAME STATE ═══
+let tick=0,kills=0,dronePos={x:0,y:0,z:0},droneYaw=0,lastAction='';
+
+function arm(){fetch('/api/arm').then(r=>r.json()).then(d=>{if(d.armed)log('🚀 Взлёт!','i')})}
+function quick(sit,dist,enemy){
+  document.getElementById('serafim-action').textContent='...';
+  document.getElementById('serafim-reason').textContent='Serafim думает...';
+  fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({situation:sit,distance:dist,battery:80,enemies:enemy})})
+  .then(r=>r.json()).then(d=>{
+    document.getElementById('serafim-action').textContent=d.advice.toUpperCase();
+    document.getElementById('serafim-action').style.color={attack:'#f44',observe:'#48f',rtb:'#0f0',patrol:'#888'}[d.advice]||'#f80';
+    document.getElementById('serafim-reason').textContent=d.reason.substring(0,200);
+    lastAction=d.advice;
+    log('🤖 Serafim: '+d.advice.toUpperCase(),'a');
+  });
+}
+function feedback(acc){
+  document.getElementById('serafim-action').style.color=acc?'#0f0':'#f44';
+  setTimeout(()=>document.getElementById('serafim-action').style.color='#f80',1500);
+  log(acc?'✅ ПРИНЯТО: '+lastAction:'❌ ОТКЛОНЕНО: '+lastAction, acc?'i':'k');
+}
+function log(msg,cls){let d=document.getElementById('log');d.innerHTML='<div class="log-e"><span class="'+cls+'">'+msg+'</span></div>'+d.innerHTML;}
+
+async function update(){
+  try{
+    let r=await fetch('/api/state');let s=await r.json();
+    tick=s.tick||tick+1;let d=s.drone||{},dec=s.decision;
+    if(!d)return setTimeout(update,300);
+
+    // HUD
+    document.getElementById('alt').textContent=(d.y||0).toFixed(0)+'м';
+    document.getElementById('spd').textContent=Math.sqrt((d.vx||0)**2+(d.vz||0)**2).toFixed(1)+'м/с';
+    document.getElementById('bat').textContent=(d.battery||0).toFixed(0)+'%';
+    document.getElementById('tck').textContent=tick;
+    document.getElementById('tgt').textContent=s.sensors?.enemies_left||0;
+    document.getElementById('kills').textContent=kills;
+    let act=dec?dec.action:'—';
+    document.getElementById('sact').textContent=act.toUpperCase();
+    document.getElementById('mode').textContent=d.armed?'ARMED':'DISARMED';
+
+    if(dec && !document.getElementById('serafim-action').textContent.match(/[A-Z]/)){
+      document.getElementById('serafim-action').textContent=dec.action.toUpperCase();
+      document.getElementById('serafim-reason').textContent=(dec.reason||'').substring(0,200);
+    }
+
+    // Events
+    if(s.events)s.events.forEach(e=>{if(e.event==='KILL'){kills++;log('💥 '+e.target,'k')}});
 
     // 3D
-    let canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-    canvas.width=canvas.parentElement.clientWidth;canvas.height=window.innerHeight;
-    let w=canvas.width,h=canvas.height,cx=w/2,cy=h/2,scale=0.8;
-    ctx.fillStyle='#0a0a12';ctx.fillRect(0,0,w,h);
-    // Сетка
-    ctx.strokeStyle='#1a1a2a';ctx.lineWidth=1;
-    for(let i=-1000;i<=1000;i+=100){{
-      ctx.beginPath();ctx.moveTo(cx+i*scale,0);ctx.lineTo(cx+i*scale,h);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(0,cy+i*scale);ctx.lineTo(w,cy+i*scale);ctx.stroke();
-    }}
-    // Враги
-    if(s.enemies) s.enemies.forEach(e=>{{
-      let x=cx+(e.x-d.x)*scale,z=cy-(e.z-d.z)*scale;
-      ctx.fillStyle=e.destroyed?'#333':'#f44';
-      ctx.beginPath();ctx.arc(x,z,6,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#fff';ctx.font='9px mono';ctx.fillText(e.role,x+8,z+3);
-    }});
-    // Дрон (центр)
-    ctx.fillStyle=d.armed?'#0f0':'#888';
-    ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.fill();
-    // Направление
-    ctx.strokeStyle='#0f0';ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.sin(d.yaw)*15,cy-Math.cos(d.yaw)*15);ctx.stroke();
-    // База
-    ctx.fillStyle='#48f';ctx.beginPath();ctx.arc(cx-d.x*scale,cy+d.z*scale,10,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#fff';ctx.font='9px mono';ctx.fillText('БАЗА',cx-d.x*scale+12,cy+d.z*scale+3);
-  }}catch(e){{}}setTimeout(update,300);}}
-update();
-</script></body></html>"""
+    dronePos={x:d.x||0,y:d.y||0,z:d.z||0};droneYaw=d.yaw||0;
+    let p=drones['pilot'];if(p){p.position.set(dronePos.x,dronePos.y,dronePos.z);p.rotation.y=droneYaw}
+    Object.values(drones).forEach(g=>g.children.forEach(c=>{if(c.name==='prop')c.rotation.y+=0.5}));
+    if(s.enemies)s.enemies.forEach(t=>{let o=targets[t.id];if(o){o.position.set(t.x,o.position.y,t.z);if(t.destroyed)o.material.color.setHex(0x333)}});
+    // Camera
+    camera.position.lerp(new THREE.Vector3(dronePos.x-Math.sin(droneYaw)*80,dronePos.y+40,dronePos.z-Math.cos(droneYaw)*80),0.1);
+    camera.lookAt(dronePos.x+Math.sin(droneYaw)*100,dronePos.y-10,dronePos.z+Math.cos(droneYaw)*100);
 
+    // Minimap
+    let mm=document.getElementById('minimap'),ctx=mm.getContext('2d');
+    ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,280,140);
+    let sc=0.03,cx=140,cy=70;
+    if(s.enemies)s.enemies.forEach(t=>{let mx=cx+(t.x-dronePos.x)*sc,my=cy+(t.z-dronePos.z)*sc;ctx.fillStyle=t.destroyed?'#333':'#f44';ctx.fillRect(mx-2,my-2,4,4)});
+    ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#0f0';ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.sin(droneYaw)*8,cy-Math.cos(droneYaw)*8);ctx.stroke();
+
+    // Targets list
+    let tl='';if(s.enemies)s.enemies.forEach(t=>{tl+=`<div class="stat"><span>${t.role}</span><span class="val">${t.destroyed?'💀':'🟢'}</span></div>`});
+    document.getElementById('targets-list').innerHTML=tl;
+
+  }catch(e){}
+  renderer.render(scene,camera);
+  setTimeout(update,200);
+}
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+update();
+log('🟢 Система готова. Жми ARM для взлёта.','i');
+</script>
+</body></html>
+"""
 
 class SerafimFlightServer:
     def __init__(self, controller: SerafimFlightController, port=8101):
@@ -586,6 +669,21 @@ class SerafimFlightServer:
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
                     self.wfile.write(json.dumps(state, ensure_ascii=False).encode())
+
+                elif self.path == "/api/ask" and self.command == "POST":
+                    content_length = int(self.headers.get('Content-Length', 0))
+                    body = json.loads(self.rfile.read(content_length))
+                    sit = body.get('situation',''); dist = body.get('distance','')
+                    bat = body.get('battery',80); enemy = body.get('enemies','')
+                    # Build prompt and ask Serafim
+                    prompt = f"Ты дрон-разведчик. Враги: {enemy}. Дистанция: {dist}м. Батарея: {bat}%. {sit}. Решение:"
+                    from serafim_agent import SerafimAgent, TacticalSituation
+                    a = SerafimAgent("ui-1","РАЗВ","blue")
+                    sit_obj = a.build_situation(enemies=[{"id":"R1","role":enemy,"dist_m":float(dist) if dist.replace('.','').isdigit() else 500}],
+                        nearest_enemy_dist=float(dist) if dist.replace('.','').isdigit() else 500, battery=bat)
+                    dec = a.decide_sync(sit_obj, timeout_s=8)
+                    self.send_response(200); self.send_header("Content-type","application/json"); self.end_headers()
+                    self.wfile.write(json.dumps({"advice":dec.action.value,"reason":dec.reason[:200],"latency_ms":dec.latency_ms}).encode())
 
                 elif self.path == "/api/arm":
                     ctrl.drone.arm()
@@ -648,6 +746,7 @@ class SerafimFlightServer:
 
         def _broadcast():
             while True:
+                ctrl.tick()  # двигаем физику!
                 d = ctrl.drone
                 base_mode = 81 if d.armed else 0
                 mav.heartbeat_send(2, 3, base_mode, 0, 4)
@@ -661,6 +760,101 @@ class SerafimFlightServer:
 
         threading.Thread(target=_broadcast, daemon=True).start()
 
+
+
+# ═══════════════════════════════════════════════════════════════
+# ВЕБ-СЕРВЕР
+# ═══════════════════════════════════════════════════════════════
+
+class SerafimFlightServer:
+    def __init__(self, controller, port=8101):
+        self.ctrl = controller
+        self.port = port
+
+    def start(self):
+        ctrl = self.ctrl
+        import json as _json
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/" or self.path == "/index.html":
+                    html = FLIGHT_HTML
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(html.encode())
+
+                elif self.path == "/api/state":
+                    state = ctrl.state_dict()
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(_json.dumps(state, ensure_ascii=False).encode())
+
+                elif self.path == "/api/arm":
+                    ctrl.drone.arm()
+                    ctrl.drone.y = 100
+                    self.send_response(200); self.send_header("Content-type", "application/json"); self.end_headers()
+                    self.wfile.write(b'{"armed":true}')
+
+                elif self.path == "/api/mavlink/heartbeat":
+                    msg = mavlink_heartbeat()
+                    self.send_response(200); self.send_header("Content-type", "application/octet-stream"); self.end_headers()
+                    self.wfile.write(msg)
+
+                else:
+                    self.send_response(404); self.end_headers()
+
+            def do_POST(self):
+                if self.path == "/api/ask":
+                    cl = int(self.headers.get('Content-Length', 0))
+                    body = _json.loads(self.rfile.read(cl))
+                    sit = body.get('situation',''); dist = body.get('distance','')
+                    bat = body.get('battery',80); enemy = body.get('enemies','')
+                    from serafim_agent import SerafimAgent, TacticalSituation
+                    a = SerafimAgent("ui-1","РАЗВ","blue")
+                    d = float(dist) if dist and dist.replace('.','').isdigit() else 500
+                    so = a.build_situation(enemies=[{"id":"R1","role":enemy,"dist_m":d}],
+                        nearest_enemy_dist=d, battery=bat)
+                    dec = a.decide_sync(so, timeout_s=8)
+                    self.send_response(200); self.send_header("Content-type","application/json"); self.end_headers()
+                    self.wfile.write(_json.dumps({"advice":dec.action.value,"reason":dec.reason[:200],"latency_ms":dec.latency_ms}).encode())
+
+        self._start_mavlink_udp(ctrl)
+        server = HTTPServer(("0.0.0.0", self.port), Handler)
+        print(f"\n{'='*60}\n  Serafim Flight + MAVLink + 3D Game\n  http://localhost:{self.port}\n  MAVLink UDP: :14550 (QGroundControl)\n{'='*60}\n")
+        server.serve_forever()
+
+    def _start_mavlink_udp(self, ctrl):
+        import socket, struct, threading
+        from pymavlink import mavutil
+
+        class UDPSender:
+            def __init__(self, host, port):
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.addr = (host, port)
+            def write(self, data):
+                self.sock.sendto(data, self.addr)
+
+        sender = UDPSender('127.0.0.1', 14550)
+        mav = mavutil.mavlink.MAVLink(sender, srcSystem=1, srcComponent=1)
+
+        def _broadcast():
+            while True:
+                ctrl.tick()
+                d = ctrl.drone
+                base_mode = 81 if d.armed else 0
+                mav.heartbeat_send(2, 3, base_mode, 0, 4)
+                mav.sys_status_send(0, 0, 0, 0, 11000, -1, int(d.battery), 0, 0, 0, 0, 0, 0)
+                lat = int((55.75 + d.x*1e-5)*1e7)
+                lon = int((37.62 + d.z*1e-5)*1e7)
+                alt_mm = int(d.y*1000)
+                mav.global_position_int_send(0, lat, lon, alt_mm, alt_mm,
+                    int(d.vx*100), int(d.vy*100), int(d.vz*100), int(d.yaw*100))
+                time.sleep(1)
+
+        threading.Thread(target=_broadcast, daemon=True).start()
 
 # ═══════════════════════════════════════════════════════════════
 # MAIN

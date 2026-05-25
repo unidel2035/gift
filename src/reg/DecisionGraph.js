@@ -126,9 +126,10 @@ export class DecisionGraph {
           (d.project || '').toLowerCase(),
           (d.team || []).join(' ').toLowerCase(),
         ].join(' ');
-        // Короткий запрос — точное совпадение. Длинный — любое слово
-        if (words.length <= 2) return haystack.includes(query.toLowerCase());
-        return words.some(w => haystack.includes(w));
+        // 1 слово — точное. 2+ слов — большинство слов должно совпасть
+        if (words.length === 1) return haystack.includes(query.toLowerCase());
+        const matched = words.filter(w => haystack.includes(w)).length;
+        return matched >= Math.ceil(words.length / 2);
       })
       .slice(-limit);
 
@@ -141,6 +142,8 @@ export class DecisionGraph {
         status: d.status,
         when: d.ts,
         description: d.description?.slice(0, 150),
+        domain: d.domain,
+        project: d.project,
       });
 
       if (d.verdict === 'rejected' || d.status === 'superseded') {
