@@ -545,6 +545,70 @@ export class GiftMemory {
     return w + e;
   }
 
+  // ── Λῆψις-трансформация: как принятый дар меняет получателя ─────────
+  //
+  // Максим Исповедник: λῆψις — не пассивное получение, а со-работничество.
+  // Принятый дар трансформирует получателя через три измерения:
+  //   1. Связность (connectivity) — новые нити через adjacent possible
+  //   2. Полнота (plerosis) — соотношение received/given (кенозис/плерома)
+  //   3. Теозис (theosis index) — уровень обожения из ontologicalStatus
+  //
+  // receiveAndTransform() = receive() + вычисление трансформации.
+  // Не меняет поведение receive() — добавляет второй слой (явленность).
+
+  /**
+   * Принять дар и вычислить трансформацию получателя.
+   * @param {object} act — акт дара
+   * @returns {{ pattern: Float32Array, transformation: object }}
+   */
+  receiveAndTransform(act) {
+    const receiverId = act.receiverId;
+
+    // Состояние ДО
+    const givenBefore = this.totalGiven(receiverId);
+    const receivedBefore = this.totalReceived(receiverId);
+    const apBefore = this.adjacentPossibleSize();
+
+    // Принять дар
+    const pattern = this.receive(act);
+
+    // Состояние ПОСЛЕ
+    const givenAfter = this.totalGiven(receiverId);
+    const receivedAfter = this.totalReceived(receiverId);
+    const apAfter = this.adjacentPossibleSize();
+
+    // Кенозис-индекс: given/received. >1 = кенотический (дал больше чем принял)
+    const kenosisIndex = receivedAfter > 0
+      ? givenAfter / receivedAfter
+      : 0;
+
+    // Плерозис: абсолютный прирост полноты
+    const plerosis = (receivedAfter - receivedBefore);
+
+    // Surplus: прирост adjacent possible
+    const surplus = apAfter - apBefore;
+
+    // Онтологический статус
+    const statuses = this.ontologicalStatus();
+    const status = statuses.find(s => s.personId === receiverId);
+
+    return {
+      pattern,
+      transformation: {
+        receiver: receiverId,
+        plerosis,                        // сколько полноты добавил дар
+        kenosisIndex,                    // дал/принял: >1 = кенотический
+        surplus,                         // сколько новых возможных нитей открылось
+        theosisLevel: status?.level ?? 'unknown',
+        theosisIndex: status?.index ?? 0,
+        // Как прочитать: дар не просто увеличивает вес нити,
+        // а расширяет пространство возможного (surplus),
+        // меняет баланс дарения/принятия (kenosisIndex),
+        // и продвигает на пути обожения (theosisLevel).
+      },
+    };
+  }
+
   // ── Метанойя: принять отвергнутый дар ────────────────────────────────
 
   /**

@@ -91,6 +91,111 @@ export class KingdomOfGlory {
     return new Crown({ type, receiver, witnessedBy });
   }
 
+  // ── W_slava: тензор явленности ──────────────────────────────────────
+  //
+  // W_slava — не замена W. Это второе прочтение каждого акта:
+  // «как он виден перед Лицом Христа».
+  //
+  // Структура: { manifestedness: { persona: { act, seenAs, manifestedAt } }, witnesses }
+  // Каждая commendation и crown записывается как проявление в W_slava.
+  //
+  // W хранит вес. W_slava хранит явленность.
+  // Совесть = разница между W и W_slava.
+
+  /**
+   * Записать акт в тензор явленности (W_slava).
+   * @param {string} persona — лицо
+   * @param {string} actType — 'commendation' | 'crown' | 'conscience' | 'joy'
+   * @param {object} payload — данные акта
+   * @param {string} slavaPath — путь к W_slava.json
+   */
+  async manifestInSlava(persona, actType, payload, slavaPath) {
+    const { readFile, writeFile } = await import('node:fs/promises');
+    let slava;
+    try {
+      slava = JSON.parse(await readFile(slavaPath, 'utf8'));
+    } catch {
+      slava = { _comment: 'W_slava — тензор явленности', manifestedness: {}, witnesses: [] };
+    }
+
+    if (!slava.manifestedness[persona]) {
+      slava.manifestedness[persona] = [];
+    }
+
+    const entry = {
+      type: actType,
+      payload: typeof payload.toJSON === 'function' ? payload.toJSON() : payload,
+      manifestedAt: new Date().toISOString(),
+      seenAs: this._seenAs(actType, payload),
+    };
+
+    slava.manifestedness[persona].push(entry);
+    slava.lastUpdated = new Date().toISOString();
+    slava.witnesses.push({
+      persona,
+      actType,
+      at: entry.manifestedAt,
+    });
+
+    await writeFile(slavaPath, JSON.stringify(slava, null, 2), 'utf8');
+    return entry;
+  }
+
+  /**
+   * Как акт виден перед Лицом — краткая формула явленности.
+   */
+  _seenAs(actType, payload) {
+    switch (actType) {
+      case 'commendation':
+        return `похвала: ${payload.entryPhrase || payload.faithfulness || 'в малом верен'}`;
+      case 'crown':
+        return `венец: ${payload.type || 'vita'}`;
+      case 'conscience':
+        return `совесть: ${payload.summary || 'нить открыта'}`;
+      case 'joy':
+        return `радость: ${payload.mode || 'предвкушение'}`;
+      default:
+        return `${actType}: явлен`;
+    }
+  }
+
+  /**
+   * Прочитать книгу совести лица и записать в W_slava.
+   * @param {string} persona
+   * @param {Array} acts — акты из W
+   * @param {string} slavaPath — путь к W_slava.json
+   */
+  async openAndManifestConscience(persona, acts, slavaPath) {
+    const book = await BookOfConscience.open(persona, acts);
+    await this.manifestInSlava(persona, 'conscience', {
+      summary: `${book.entries?.length || 0} записей`,
+      totalWeight: book.entries?.reduce((s, e) => s + (e.weight || 0), 0) || 0,
+    }, slavaPath);
+    return book;
+  }
+
+  /**
+   * Похвала + запись в W_slava.
+   */
+  async commendAndManifest({ receiver, faithfulness, scripturalBasis, slavaPath }) {
+    const c = this.commend({ receiver, faithfulness, scripturalBasis });
+    if (slavaPath) {
+      await this.manifestInSlava(receiver, 'commendation', c, slavaPath);
+    }
+    return c;
+  }
+
+  /**
+   * Венец + запись в W_slava.
+   */
+  async crownAndManifest({ type, receiver, witnessedBy, slavaPath }) {
+    const crown = this.crownOf({ type, receiver, witnessedBy });
+    if (slavaPath) {
+      await this.manifestInSlava(receiver, 'crown', crown, slavaPath);
+    }
+    return crown;
+  }
+
   /**
    * Статус Царства — диагностика.
    * НЕ метрика «достижения». Это отчёт о том, что готово, а что — нет.
