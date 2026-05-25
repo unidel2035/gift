@@ -181,6 +181,10 @@ export class GiftMemory {
   // ── Принять акт дара ──────────────────────────────────────────────────
 
   receive(act) {
+    // δόσις необратима: замораживаем акт при входе в систему.
+    // После этой точки ни один код не может модифицировать акт.
+    if (!Object.isFrozen(act)) act = Object.freeze({ ...act });
+
     const w        = act.weight ?? 1;
     const isDivineG = DIVINE_PERSONS.has(act.giverId);
     const isDivineR = DIVINE_PERSONS.has(act.receiverId);
@@ -246,8 +250,13 @@ export class GiftMemory {
     // ── Тварь ↔ тварь: Хопфилд + стигмергия ─────────────────────────
     const gi = this._idx(act.giverId);
     const ri = this._idx(act.receiverId);
-    const n  = this.n;
 
+    // _abyss и _koinon — не лица в W. Если оба индекса < 0,
+    // акт записан (actsCount++), но W не обновляется.
+    // Это не потеря: _abyss → тварь идёт через energeia, _koinon — общий получатель.
+    if (gi < 0 && ri < 0) return new Float32Array(this.n);
+
+    const n  = this.n;
     const pat  = encodeVec(act, this.persons);
     const tPat = tf.tensor1d(pat);
 
@@ -259,7 +268,11 @@ export class GiftMemory {
       if (gi >= 0 && ri >= 0) stigma.set(w, gi, ri);
 
       const delta = hopfield.add(stigma.toTensor());
-      this._W.assign(this._W.add(delta));
+      // Дар необратим: W[i][j] ≥ 0 всегда.
+      // Hopfield outer product создаёт отрицательные побочные эффекты —
+      // clamp к нулю снизу. Это не потеря информации: отрицательный вес
+      // в онтологии дара не имеет смысла (нельзя «раздарить»).
+      this._W.assign(this._W.add(delta).relu());
     });
 
     tPat.dispose();
