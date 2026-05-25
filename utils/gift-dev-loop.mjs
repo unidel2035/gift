@@ -183,8 +183,26 @@ async function orchestrate() {
       console.log(`   ! Не удалось создать ветку: ${e.message?.slice(0, 80)}`);
     }
 
-    // Запустить агента (коммитит на текущую ветку — gift/issue-N)
-    const result = await runAgent(agentId, number, title, body);
+    // Long-horizon: если issue помечен long-horizon или содержит 5+ задач — decompose
+    const isLongHorizon = issue.labels?.some(l => l.name === 'long-horizon') ||
+      (body && (body.match(/^[-*]\s*\[.\]/gm) || []).length >= 5);
+
+    let result;
+    if (isLongHorizon) {
+      console.log('   ⟨long-horizon⟩ Декомпозиция на шаги...');
+      const { decompose, executeHorizon } = await import(resolve(ROOT, 'utils/horizon-decomposer.mjs'));
+      const steps = await decompose(number, title, body);
+      console.log(`   ${steps.length} шагов`);
+      const report = await executeHorizon(number, steps);
+      result = {
+        success: report.completed > 0,
+        summary: `${report.completed}/${report.total} шагов (long-horizon)`,
+        error: report.completed === 0 ? 'ни один шаг не выполнен' : undefined,
+      };
+    } else {
+      // Запустить агента (коммитит на текущую ветку — gift/issue-N)
+      result = await runAgent(agentId, number, title, body);
+    }
 
     if (result.success) {
       // Стратегия: «община из двух + Третий».
