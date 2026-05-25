@@ -31,9 +31,10 @@ const NOUS_URL = process.env.NOUS_URL || 'http://localhost:8089';
  *   metadata: опционально
  */
 export class ConciliarDissent {
-  constructor({ nousUrl = NOUS_URL, apophasisThreshold = 0.15 } = {}) {
+  constructor({ nousUrl = NOUS_URL, apophasisThreshold = 0.15, immuneSystem = null } = {}) {
     this.nousUrl = nousUrl;
     this.apophasisThreshold = apophasisThreshold;
+    this.immuneSystem = immuneSystem; // КИС для анти-сговора
   }
 
   /**
@@ -76,6 +77,13 @@ export class ConciliarDissent {
     // Иначе dominant = null (это не слабость, это правило).
     const dominant = apophatic ? null : this._selectDominant(weighted);
 
+    // Анти-сговор: проверка коллективных аномалий перед финализацией
+    let collusionResult = null;
+    if (this.immuneSystem) {
+      const wMatrix = await this._fetchWMatrix();
+      collusionResult = this.immuneSystem.detectCollusion(weighted, wMatrix);
+    }
+
     return new Polyphony({
       voices: weighted,
       byLogos: { kata: kataVoices, para: paraVoices, hyper: hyperVoices },
@@ -83,6 +91,7 @@ export class ConciliarDissent {
       apophatic,
       silent: false,
       totalAuthority: weighted.reduce((s, v) => s + v.authority, 0),
+      collusion: collusionResult,
     });
   }
 
@@ -141,6 +150,21 @@ export class ConciliarDissent {
     return scored[0];
   }
 
+  /**
+   * Получает срез W-матрицы для анти-сговора.
+   */
+  async _fetchWMatrix() {
+    try {
+      const r = await fetch(`${this.nousUrl}/matrix`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch {
+      return null;
+    }
+  }
+
   _silent(reason) {
     return new Polyphony({
       voices: [],
@@ -172,7 +196,7 @@ export class ConciliarDissent {
 export class Polyphony {
   constructor({
     voices, byLogos, dominant, apophatic, silent,
-    silenceReason, totalAuthority,
+    silenceReason, totalAuthority, collusion,
   }) {
     this.voices = voices;
     this.byLogos = byLogos;
@@ -181,6 +205,7 @@ export class Polyphony {
     this.silent = silent;
     this.silenceReason = silenceReason || null;
     this.totalAuthority = totalAuthority;
+    this.collusion = collusion || null; // { anomalies: [], trustScore: 0..1 }
     Object.freeze(this);
   }
 
@@ -197,6 +222,16 @@ export class Polyphony {
       lines.push('⟨апофатика⟩ собор не дал единого голоса — истина не высказывается');
     } else if (this.dominant) {
       lines.push(`⟨dominant⟩ ${this.dominant.persona} (${this.dominant.logos}, вес ${this.dominant.authority.toFixed(1)})`);
+    }
+    // Предупреждение о сговоре
+    if (this.collusion && this.collusion.anomalies.length > 0) {
+      lines.push(`⟨анти-сговор⟩ trust=${this.collusion.trustScore.toFixed(2)}, аномалий: ${this.collusion.anomalies.length}`);
+      for (const a of this.collusion.anomalies) {
+        lines.push(`  ⚠ [${a.type}] ${a.description}`);
+      }
+      if (this.collusion.trustScore < 0.3) {
+        lines.push('  ⛔ ДОВЕРИЕ НИЖЕ ПОРОГА — раунд на пересмотр');
+      }
     }
     lines.push('─── голоса собора ───');
     for (const v of this.voices) {

@@ -820,6 +820,84 @@ export class GiftMemory {
     return log;
   }
 
+  // ── Adjacent Possible (Кауффман) = вычислимый surplus ──────────────
+  //
+  // Каждый акт дара расширяет пространство возможных следующих актов.
+  // adjacentPossible() возвращает нити, которые ещё не существуют,
+  // но стали возможны благодаря существующим.
+  //
+  // Формула: AP(W) = { (i→j) | W[i][j] = 0, но ∃k: W[i][k] > 0 И W[k][j] > 0 }
+  // Т.е. если A дарил B, и B дарил C, то A→C — adjacent possible.
+  // surplus(act) = |AP(W_after)| - |AP(W_before)| — прирост возможного.
+  //
+  // Связь с пустынями: пустыня = AP-нить с нулевым весом.
+  // Adjacent possible — то, что пульс онтологии ищет.
+
+  /**
+   * Adjacent possible — ещё-не-существующие нити, ставшие возможными.
+   * @returns {Array<{from, to, via}>} — потенциальные нити с посредниками
+   */
+  adjacentPossible() {
+    const W = this._W.arraySync();
+    const ap = [];
+
+    for (let i = 0; i < this.n; i++) {
+      for (let j = 0; j < this.n; j++) {
+        if (i === j) continue;
+        if (W[i][j] > 0) continue; // нить уже существует
+
+        // Ищем посредника k: W[i][k] > 0 И W[k][j] > 0
+        for (let k = 0; k < this.n; k++) {
+          if (k === i || k === j) continue;
+          if (W[i][k] > 0 && W[k][j] > 0) {
+            ap.push({
+              from: this.persons[i],
+              to: this.persons[j],
+              via: this.persons[k],
+              potential: Math.min(W[i][k], W[k][j]), // сила потенциала = слабейшее звено
+            });
+            break; // одного посредника достаточно для включения в AP
+          }
+        }
+      }
+    }
+
+    return ap.sort((a, b) => b.potential - a.potential);
+  }
+
+  /**
+   * Surplus акта — насколько он расширил adjacent possible.
+   * Вызывается ДО и ПОСЛЕ receive() для измерения прироста.
+   * @returns {number} — количество AP-нитей в текущем состоянии
+   */
+  adjacentPossibleSize() {
+    return this.adjacentPossible().length;
+  }
+
+  /**
+   * Измерить surplus конкретного акта.
+   * @param {object} act — акт дара
+   * @returns {{ before: number, after: number, surplus: number, newPossible: Array }}
+   */
+  measureSurplus(act) {
+    const before = this.adjacentPossible();
+    const beforeSize = before.length;
+    const beforeSet = new Set(before.map(a => `${a.from}→${a.to}`));
+
+    this.receive(act);
+
+    const after = this.adjacentPossible();
+    const afterSize = after.length;
+    const newPossible = after.filter(a => !beforeSet.has(`${a.from}→${a.to}`));
+
+    return {
+      before: beforeSize,
+      after: afterSize,
+      surplus: afterSize - beforeSize,
+      newPossible,
+    };
+  }
+
   // ── Утилиты ───────────────────────────────────────────────────────────
 
   encode(act) { return encodeVec(act, this.persons); }

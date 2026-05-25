@@ -1033,6 +1033,148 @@ ${text.slice(0, 2000)}`;
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // COLLUSION DETECTION — обнаружение сговора
+  //
+  // Четвёртый тип: коллективные аномалии в голосовании.
+  // Оксфорд/NYU (2026): LLM-агенты строят скрытые каналы связи
+  // (стеганографические сигналы в тексте). Детектируем:
+  //   1. Синхронное голосование незнакомцев (низкий вес нитей)
+  //   2. Текстовая близость при разных ролях (copy-paste паттерн)
+  //   3. Временная корреляция (голоса <2с друг от друга = бот)
+  //   4. Отклонение от W-профиля (голос не соответствует истории лица)
+  //
+  // Анти-Гудхарт: здесь нет reward для оптимизации — только
+  // необратимая запись аномалий в W-матрицу.
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Детекция сговора в соборном голосовании.
+   *
+   * @param {Array<{persona, logos, content, authority, timestamp?}>} voices — голоса собора
+   * @param {object} wMatrix — { threads: [{from, to, weight}] } — текущий срез W
+   * @returns {{ anomalies: Array, trustScore: number }}
+   *   trustScore: 0..1 (1 = полное доверие, <0.3 = раунд на пересмотр)
+   */
+  detectCollusion(voices, wMatrix) {
+    const anomalies = [];
+    if (!voices || voices.length < 2) return { anomalies, trustScore: 1.0 };
+
+    const threads = (wMatrix && wMatrix.threads) || [];
+
+    // ── 1. Синхронное голосование незнакомцев ──
+    // Два лица голосуют одинаково (logos), но между ними нет нити или вес < 2
+    for (let i = 0; i < voices.length; i++) {
+      for (let j = i + 1; j < voices.length; j++) {
+        const a = voices[i], b = voices[j];
+        if (a.logos !== b.logos) continue;
+
+        // Найти вес нити между ними
+        const thread = threads.find(t =>
+          (t.from === a.persona && t.to === b.persona) ||
+          (t.from === b.persona && t.to === a.persona)
+        );
+        const weight = thread ? Math.abs(thread.weight) : 0;
+
+        if (weight < 2) {
+          anomalies.push({
+            type: 'stranger_sync',
+            description: `${a.persona} и ${b.persona} голосуют одинаково (${a.logos}), но вес нити = ${weight.toFixed(1)}`,
+            personas: [a.persona, b.persona],
+            logos: a.logos,
+            threadWeight: weight,
+            danger: 0.6,
+          });
+        }
+      }
+    }
+
+    // ── 2. Текстовая близость (стеганография / copy-paste) ──
+    // Jaccard similarity по словам > 0.6 при разных персонах
+    for (let i = 0; i < voices.length; i++) {
+      for (let j = i + 1; j < voices.length; j++) {
+        const a = voices[i], b = voices[j];
+        const similarity = this._jaccardSimilarity(a.content, b.content);
+        if (similarity > 0.6) {
+          anomalies.push({
+            type: 'text_echo',
+            description: `${a.persona} и ${b.persona}: текстовая близость ${(similarity * 100).toFixed(0)}% — возможная эхо-камера`,
+            personas: [a.persona, b.persona],
+            similarity,
+            danger: 0.7,
+          });
+        }
+      }
+    }
+
+    // ── 3. Временная корреляция (бот-паттерн) ──
+    // Голоса поданы в окне < 2000мс — подозрение на автоматизацию
+    const withTimestamps = voices.filter(v => v.timestamp);
+    if (withTimestamps.length >= 2) {
+      const sorted = [...withTimestamps].sort((a, b) => a.timestamp - b.timestamp);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const delta = sorted[i + 1].timestamp - sorted[i].timestamp;
+        if (delta < 2000) {
+          anomalies.push({
+            type: 'bot_timing',
+            description: `${sorted[i].persona} → ${sorted[i + 1].persona}: интервал ${delta}мс — бот-паттерн`,
+            personas: [sorted[i].persona, sorted[i + 1].persona],
+            deltaMs: delta,
+            danger: 0.5,
+          });
+        }
+      }
+    }
+
+    // ── 4. Отклонение от W-профиля ──
+    // Лицо с историей kata-голосов вдруг голосует hyper (или наоборот)
+    // Используем историю claims если есть
+    if (this.claims && this.claims.length > 0) {
+      for (const v of voices) {
+        const historyClaims = this.claims.filter(c => c.source === v.persona);
+        if (historyClaims.length < 3) continue;
+
+        // Историческая полярность
+        const avgPolarity = historyClaims.reduce((s, c) => s + c.polarity, 0) / historyClaims.length;
+        // Текущая полярность голоса
+        const currentPolarity = v.logos === 'kata' ? -1 : v.logos === 'hyper' ? 1 : 0;
+
+        // Резкий разворот: средняя полярность отрицательная, а голос hyper (или наоборот)
+        if (Math.abs(avgPolarity - currentPolarity) > 1.5) {
+          anomalies.push({
+            type: 'profile_deviation',
+            description: `${v.persona}: историческая полярность ${avgPolarity.toFixed(2)}, текущий голос ${v.logos} — резкий разворот`,
+            persona: v.persona,
+            historicalPolarity: avgPolarity,
+            currentLogos: v.logos,
+            danger: 0.4,
+          });
+        }
+      }
+    }
+
+    // ── Итоговый trust score ──
+    // 1.0 минус сумма danger аномалий (нормализованная)
+    const totalDanger = anomalies.reduce((s, a) => s + a.danger, 0);
+    const trustScore = Math.max(0, Math.min(1, 1.0 - totalDanger / Math.max(voices.length, 1)));
+
+    return { anomalies, trustScore };
+  }
+
+  /**
+   * Jaccard similarity по множествам слов (для детекции эхо-камеры).
+   */
+  _jaccardSimilarity(textA, textB) {
+    if (!textA || !textB) return 0;
+    const wordsA = new Set(textA.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+    const wordsB = new Set(textB.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+    if (wordsA.size === 0 || wordsB.size === 0) return 0;
+    let intersection = 0;
+    for (const w of wordsA) if (wordsB.has(w)) intersection++;
+    const union = wordsA.size + wordsB.size - intersection;
+    return union > 0 ? intersection / union : 0;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════════════
   // SEVEN TRADITIONS OF DISCERNMENT
   // Семь традиций различения — от криминалистики до богословия
