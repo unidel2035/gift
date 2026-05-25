@@ -121,7 +121,19 @@ writeFileSync(KENOSIS_FILE, JSON.stringify(kenosisGuard.export(), null, 2));
 const ACT_INDEX = resolve(ROOT, 'data/act-index.json');
 const actLog = existsSync(ACT_INDEX) ? JSON.parse(readFileSync(ACT_INDEX, 'utf8')) : [];
 let commitHash = '';
-try { commitHash = execSync('git log -1 --pretty=%H', { cwd: ROOT }).toString().trim().slice(0, 12); } catch {}
+let filesChanged = [];
+let insertions = 0, deletions = 0;
+try {
+  commitHash = execSync('git log -1 --pretty=%H', { cwd: ROOT }).toString().trim().slice(0, 12);
+  // Список изменённых файлов + статистика
+  const statRaw = execSync('git diff-tree --no-commit-id --numstat -r HEAD', { cwd: ROOT }).toString().trim();
+  for (const line of statRaw.split('\n').filter(Boolean)) {
+    const [ins, del, file] = line.split('\t');
+    const i = parseInt(ins) || 0, d = parseInt(del) || 0;
+    insertions += i; deletions += d;
+    filesChanged.push({ file, insertions: i, deletions: d });
+  }
+} catch {}
 actLog.push({
   ts:          new Date().toISOString(),
   from:        GIVER,
@@ -133,6 +145,11 @@ actLog.push({
   commit:      commitHash,
   kenosis:     kenosisFlag,
   kenosisScore: kenosisResult.score,
+  // ── Authorship manifest: среда знает, кто что создал ──
+  files:       filesChanged.map(f => f.file),
+  filesCount:  filesChanged.length,
+  insertions,
+  deletions,
 });
 if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
   actLog.push({
@@ -148,6 +165,50 @@ if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
 }
 if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
 writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
+
+// ── Authorship Index: файл → кто создал → когда → зачем ───────────────────
+// Среда знает, кто что сделал. Не нужно спрашивать — достаточно посмотреть.
+const AUTHORSHIP_INDEX = resolve(ROOT, 'data/authorship-index.json');
+const authorship = existsSync(AUTHORSHIP_INDEX)
+  ? JSON.parse(readFileSync(AUTHORSHIP_INDEX, 'utf8'))
+  : {};
+
+for (const fc of filesChanged) {
+  const existing = authorship[fc.file];
+  if (!existing) {
+    // Первое касание — автор
+    authorship[fc.file] = {
+      creator:    GIVER,
+      createdAt:  new Date().toISOString(),
+      createdIn:  commitHash,
+      reason:     description,
+      issue:      linkedIssue,
+      touches:    1,
+      lastTouch:  GIVER,
+      lastTouchAt: new Date().toISOString(),
+      contributors: [GIVER],
+    };
+  } else {
+    // Последующие касания — contributor
+    existing.touches++;
+    existing.lastTouch = GIVER;
+    existing.lastTouchAt = new Date().toISOString();
+    if (!existing.contributors.includes(GIVER)) {
+      existing.contributors.push(GIVER);
+    }
+  }
+}
+
+// Ограничить размер: только файлы которые существуют в git
+const trackedFiles = new Set();
+try {
+  execSync('git ls-files', { cwd: ROOT }).toString().trim().split('\n').forEach(f => trackedFiles.add(f));
+  for (const f of Object.keys(authorship)) {
+    if (!trackedFiles.has(f)) delete authorship[f];
+  }
+} catch {}
+
+writeFileSync(AUTHORSHIP_INDEX, JSON.stringify(authorship, null, 2));
 
 const kenosisLabel = kenosisFlag ? 'κένωσις:✓' : 'κένωσις:✗';
 console.log(`  ✦ gift(${GIVER} → ${receiver}): "${description}" [${kenosisLabel}, score:${kenosisResult.score.toFixed(2)}]`);
