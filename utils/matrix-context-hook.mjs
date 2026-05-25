@@ -246,7 +246,37 @@ try {
   }
 } catch {}
 
-// ── 6. Pending предложения (не более 5 штук) ─────────────────────────────
+// ── 6. Authorship — топ фич проекта (среда знает, кто что создал) ─────────
+try {
+  const AUTH_INDEX = resolve(ROOT, 'data/authorship-index.json');
+  if (existsSync(AUTH_INDEX)) {
+    const auth = JSON.parse(readFileSync(AUTH_INDEX, 'utf8'));
+    // Группируем по reason (фича) — показываем уникальные фичи, не файлы
+    const features = new Map();
+    for (const [file, meta] of Object.entries(auth)) {
+      if (!meta.reason) continue;
+      const key = meta.reason.slice(0, 60);
+      if (!features.has(key)) {
+        features.set(key, { reason: meta.reason, date: meta.createdAt?.slice(0, 10), files: 1, sample: file });
+      } else {
+        features.get(key).files++;
+      }
+    }
+    // Топ-15 фич по количеству файлов (крупнейшие дары)
+    const top = [...features.values()]
+      .sort((a, b) => b.files - a.files)
+      .slice(0, 15);
+    if (top.length) {
+      lines.push('');
+      lines.push('[Авторство — крупные фичи проекта (authorship-index):]');
+      for (const f of top) {
+        lines.push(`  [${f.date}] ${f.reason.slice(0, 70)} (${f.files} файлов)`);
+      }
+    }
+  }
+} catch {}
+
+// ── 7. Pending предложения (не более 5 штук) ─────────────────────────────
 try {
   const PROPOSALS_FILE = resolve(ROOT, 'data/proposals.json');
   if (existsSync(PROPOSALS_FILE)) {
