@@ -285,14 +285,22 @@ async function runAgent(agentId, issueNumber, title, body) {
   return { success: false, error: `роль ${agentId} ещё не подключена` };
 }
 
+/**
+ * Соборный агент: три голоса → полифония → решение → реализация.
+ *
+ * Вместо одного вызова claude — собор из трёх лиц:
+ *   1. Исполнитель (hyper) — предлагает решение
+ *   2. Критик (kata)       — находит слабые места
+ *   3. Свидетель (para)    — оценивает целостность
+ *
+ * После собора: dominant голос → реализация → тесты → коммит.
+ * Анти-сговор (КИС) проверяет голоса перед финализацией.
+ */
 async function runClaudeAgent(issueNumber, title, body) {
   try {
     // Найти релевантные спецификации
     const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
     const query   = `${title} ${body || ''}`;
-
-    // Получаем все релевантные спеки — больше контекста = лучше агент
-    // Claude имеет 200k окно; 20 спеков × ~500 токенов ≈ 10k — вписываемся
     const specs   = await searchSpecs(query, 20);
     const specCtx = formatContext(specs);
 
@@ -300,15 +308,77 @@ async function runClaudeAgent(issueNumber, title, body) {
       console.log(`   Спецификации (${specs.length}): ${specs.slice(0,5).map(s => s.file).join(', ')}${specs.length>5?'...':''}`);
     }
 
-    const prompt = [
+    const issueContext = [
       `GitHub Issue #${issueNumber}: ${title}`,
       body ? `\nОписание:\n${body}` : '',
       specCtx ? `\n${specCtx}` : '',
-      `\nЗадача: реализовать описанное согласно спецификациям. Завершить коммитом:`,
-      `gift(Дионисий): [краткое описание] (closes #${issueNumber})`,
     ].join('');
 
-    // Запускаем claude в режиме --print (не интерактивный)
+    // ── Собор: три голоса ────────────────────────────────────────────
+    const { PolyphonyOrchestrator, VoiceSource } = await import(resolve(ROOT, 'utils/polyphony-orchestrator.mjs'));
+    const { ConciliarDissent } = await import(resolve(ROOT, 'src/theology/ConciliarDissent.js'));
+    const { CognitiveImmuneSystem } = await import(resolve(ROOT, 'src/social/CognitiveImmuneSystem.js'));
+
+    const cis = new CognitiveImmuneSystem();
+    const dissent = new ConciliarDissent({ immuneSystem: cis });
+    const orchestrator = new PolyphonyOrchestrator({ dissent });
+
+    // Три голоса — три лица в собоне
+    orchestrator.addSource(VoiceSource.claudeSubagent('general-purpose', {
+      persona: 'Исполнитель',
+      logos: 'hyper',
+      promptWrap: q => `${issueContext}\n\nТы — Исполнитель. Предложи конкретный план реализации (файлы, функции, тесты). Кратко, 5-10 строк.`,
+    }));
+    orchestrator.addSource(VoiceSource.claudeSubagent('general-purpose', {
+      persona: 'Критик',
+      logos: 'kata',
+      promptWrap: q => `${issueContext}\n\nТы — Критик. Найди 1-3 слабых места в задаче: что может сломаться? Какие аксиомы под угрозой? Что забыли? Кратко.`,
+    }));
+    orchestrator.addSource(VoiceSource.claudeSubagent('general-purpose', {
+      persona: 'Свидетель',
+      logos: 'para',
+      promptWrap: q => `${issueContext}\n\nТы — Свидетель. Оцени: соответствует ли задача онтологии дара (необратимость, кенозис, surplus)? Какой дар она несёт? 2-3 предложения.`,
+    }));
+
+    console.log('   ⟨собор⟩ Собираю голоса (Исполнитель, Критик, Свидетель)...');
+    const polyphony = await orchestrator.ask(`Issue #${issueNumber}: ${title}`);
+
+    if (polyphony.type === 'Silence') {
+      console.log(`   ⟨молчание⟩ ${polyphony.reason}`);
+      return { success: false, error: `собор молчит: ${polyphony.reason}` };
+    }
+
+    // Проверка анти-сговора
+    if (polyphony.collusion && polyphony.collusion.trustScore < 0.3) {
+      console.log(`   ⛔ Анти-сговор: trust=${polyphony.collusion.trustScore.toFixed(2)}`);
+      for (const a of polyphony.collusion.anomalies) {
+        console.log(`      ⚠ ${a.type}: ${a.description}`);
+      }
+      return { success: false, error: 'собор: доверие ниже порога (сговор?)' };
+    }
+
+    // Вывести полифонию
+    console.log(polyphony.toText());
+
+    // ── Реализация: dominant голос определяет направление ────────────
+    const plan = polyphony.hasDominant
+      ? polyphony.dominant.content
+      : polyphony.voices.map(v => v.content).join('\n');
+
+    const criticWarnings = polyphony.byLogos.kata
+      .map(v => v.content).join('\n');
+
+    const prompt = [
+      issueContext,
+      `\n═══ Решение собора ═══`,
+      `План (${polyphony.dominant?.persona || 'полифония'}):`,
+      plan,
+      criticWarnings ? `\nПредупреждения Критика:\n${criticWarnings}` : '',
+      polyphony.apophatic ? '\n⟨апофатика⟩ Собор не дал единого голоса — действуй по своему разумению, но осторожно.' : '',
+      `\nЗадача: реализовать по плану, учитывая предупреждения. Завершить коммитом:`,
+      `gift(Дионисий): [краткое описание] (closes #${issueNumber})`,
+    ].join('\n');
+
     // Петля самоисправления: до 3 попыток
     const MAX_ATTEMPTS = 3;
     let lastError = '';
@@ -318,10 +388,9 @@ async function runClaudeAgent(issueNumber, title, body) {
         ? prompt
         : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
 
-      // Передаём prompt через stdin (обходим ARG_MAX) + dangerously-skip-permissions для автономной работы
       const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
         input: attemptPrompt,
-        cwd: ROOT, timeout: 600_000,  // 10 минут — сервер загружен параллельными сессиями
+        cwd: ROOT, timeout: 600_000,
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -330,7 +399,6 @@ async function runClaudeAgent(issueNumber, title, body) {
         return { success: false, error: errMsg };
       }
 
-      // Запускаем тесты
       console.log(`   Попытка ${attempt}/${MAX_ATTEMPTS} — запускаю тесты...`);
       const test = spawnSync('npm', ['test'], {
         cwd: ROOT, timeout: 250_000,
@@ -338,7 +406,8 @@ async function runClaudeAgent(issueNumber, title, body) {
       });
 
       if (test.status === 0) {
-        return { success: true, summary: `issue #${issueNumber} закрыт (попытка ${attempt})` };
+        const mode = polyphony.apophatic ? 'апофатика' : polyphony.hasDominant ? polyphony.dominant.persona : 'полифония';
+        return { success: true, summary: `issue #${issueNumber} (собор: ${mode}, попытка ${attempt})` };
       }
 
       lastError = (test.stderr || test.stdout || '').slice(0, 500);
