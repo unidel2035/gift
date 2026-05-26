@@ -1182,7 +1182,8 @@ export async function runRepl(opts = {}) {
       onClose: () => {
         session.messages = conversationMessages;
         saveSession(session);
-        console.log(`\n  ${c('dim', 'session saved: ' + session.id)}`);
+        // Уйти на новую строку после промпта и очистить
+        process.stdout.write('\n\n\n\r\x1b[2K');
         process.exit(0);
       },
     });
