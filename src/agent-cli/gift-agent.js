@@ -873,7 +873,15 @@ export async function runRepl(opts = {}) {
       spinner.stop();
 
       const content = response.content || [];
-      let assistantContent = content;
+      let fullText = '';
+
+      // Show text from first response immediately
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          process.stdout.write(renderMarkdown(block.text));
+          fullText += block.text;
+        }
+      }
 
       // Agent loop for tool_use
       let loopMessages = [...messages, { role: 'assistant', content }];
@@ -904,19 +912,18 @@ export async function runRepl(opts = {}) {
         spinner.stop();
         const nextContent = nextResp.content || [];
         loopMessages.push({ role: 'assistant', content: nextContent });
+
+        // Show text from this step immediately
+        for (const block of nextContent) {
+          if (block.type === 'text' && block.text) {
+            process.stdout.write(renderMarkdown(block.text));
+            fullText += block.text;
+          }
+        }
+
         toolUses = nextContent.filter(b => b.type === 'tool_use');
-        assistantContent = nextContent;
 
         if (nextResp.stop_reason === 'end_turn') break;
-      }
-
-      // Show final text + CIS scan
-      let fullText = '';
-      for (const block of assistantContent) {
-        if (block.type === 'text') {
-          process.stdout.write(renderMarkdown(block.text));
-          fullText += block.text;
-        }
       }
       process.stdout.write('\n\n');
 
