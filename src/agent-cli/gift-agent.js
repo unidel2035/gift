@@ -404,6 +404,128 @@ function executeTool(name, input) {
 const PROXY_URL = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:3200';
 const API_KEY = process.env.ANTHROPIC_AUTH_TOKEN || process.env.DEEPSEEK_API_KEY || 'proxy';
 
+async function apiCall(messages, systemPrompt, tools) {
+  const body = {
+    model: 'claude-opus-4-6', // remapped by proxy
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages,
+    tools,
+  };
+
+  const resp = await safeFetch(`${PROXY_URL}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    let errText;
+    try { errText = await resp.text(); } catch { errText = '(no body)'; }
+    throw new Error(`API ${resp.status}: ${errText.slice(0, 300)}`);
+  }
+
+  return resp.json();
+}
+
+/**
+ * Streaming API call — показывает текст по мере генерации.
+ * Возвращает полный response объект (как non-streaming).
+ * onText(chunk) вызывается для каждого фрагмента текста.
+ * onToolUse(name, input) вызывается при начале tool_use.
+ */
+async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse } = {}) {
+  const body = {
+    model: 'claude-opus-4-6',
+    max_tokens: 8192,
+    stream: true,
+    system: systemPrompt,
+    messages,
+    tools,
+  };
+
+  const resp = await safeFetch(`${PROXY_URL}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    let errText;
+    try { errText = await resp.text(); } catch { errText = '(no body)'; }
+    throw new Error(`API ${resp.status}: ${errText.slice(0, 300)}`);
+  }
+
+  // Parse SSE stream
+  const text = await resp.text();
+  const lines = text.split('\n');
+
+  const content = [];
+  let currentBlock = null;
+  let stopReason = null;
+  let usage = { input_tokens: 0, output_tokens: 0 };
+
+  for (const line of lines) {
+    if (!line.startsWith('data: ')) continue;
+    const data = line.slice(6).trim();
+    if (data === '[DONE]') break;
+
+    let event;
+    try { event = JSON.parse(data); } catch { continue; }
+
+    if (event.type === 'message_start' && event.message?.usage) {
+      usage.input_tokens = event.message.usage.input_tokens || 0;
+    }
+
+    if (event.type === 'content_block_start') {
+      currentBlock = event.content_block || {};
+      if (currentBlock.type === 'tool_use' && onToolUse) {
+        onToolUse(currentBlock.name, currentBlock.input || {});
+      }
+    }
+
+    if (event.type === 'content_block_delta') {
+      if (event.delta?.type === 'text_delta' && event.delta.text) {
+        if (onText) onText(event.delta.text);
+        if (currentBlock?.type === 'text') {
+          currentBlock.text = (currentBlock.text || '') + event.delta.text;
+        }
+      }
+      if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+        if (currentBlock?.type === 'tool_use') {
+          currentBlock._jsonBuf = (currentBlock._jsonBuf || '') + event.delta.partial_json;
+        }
+      }
+    }
+
+    if (event.type === 'content_block_stop') {
+      if (currentBlock) {
+        if (currentBlock.type === 'tool_use' && currentBlock._jsonBuf) {
+          try { currentBlock.input = JSON.parse(currentBlock._jsonBuf); } catch {}
+          delete currentBlock._jsonBuf;
+        }
+        content.push(currentBlock);
+        currentBlock = null;
+      }
+    }
+
+    if (event.type === 'message_delta') {
+      stopReason = event.delta?.stop_reason || stopReason;
+      if (event.usage) usage.output_tokens = event.usage.output_tokens || 0;
+    }
+  }
+
+  return { content, stop_reason: stopReason, usage };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // W-Matrix: межсессионная память — что сделали агенты
 // ═══════════════════════════════════════════════════════════════
@@ -518,34 +640,6 @@ function immuneScan(text) {
     writeFileSync(IMMUNE_LOG, (existsSync(IMMUNE_LOG) ? readFileSync(IMMUNE_LOG, 'utf8') : '') + entry);
   } catch {}
   return threats;
-}
-
-async function apiCall(messages, systemPrompt, tools) {
-  const body = {
-    model: 'claude-opus-4-6', // remapped by proxy
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages,
-    tools,
-  };
-
-  const resp = await safeFetch(`${PROXY_URL}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!resp.ok) {
-    let errText;
-    try { errText = await resp.text(); } catch { errText = '(no body)'; }
-    throw new Error(`API ${resp.status}: ${errText.slice(0, 300)}`);
-  }
-
-  return resp.json();
 }
 
 // ═══════════════════════════════════════════════════════════════
