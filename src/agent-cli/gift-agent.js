@@ -1115,6 +1115,17 @@ export async function runRepl(opts = {}) {
   const actCount = (w.acts || []).length;
   const personCount = Object.keys(w.persons || {}).length;
 
+  // Dynamic prompt: статус бэкенда кешируется асинхронно
+  let _statusCache = '...';
+  async function refreshStatus() {
+    try {
+      const r = await fetch(`${PROXY_URL}/_proxy/status`);
+      const data = await r.json();
+      _statusCache = `${data.mode || '?'}:${data.model?.slice(0, 20) || '?'}`;
+    } catch { _statusCache = 'proxy offline'; }
+  }
+  await refreshStatus();
+
   process.stdout.write(`
    ${c('gold', '██████╗ ██╗███████╗████████╗')}
   ${c('gold', '██╔════╝ ██║██╔════╝╚══██╔══╝')}
@@ -1148,21 +1159,10 @@ export async function runRepl(opts = {}) {
   const conversationMessages = session.messages || [];
   let uiReady;
 
-  // Dynamic двухстрочный prompt: статус-бар + строка ввода
-  let _statusCache = '...';
-  async function refreshStatus() {
-    try {
-      const r = await fetch(`${PROXY_URL}/_proxy/status`);
-      const data = await r.json();
-      _statusCache = `${data.mode || '?'}:${data.model?.slice(0, 20) || '?'}`;
-    } catch { _statusCache = 'proxy offline'; }
-  }
-
   function buildPrompt() {
     return `${c('green', '>')} `;
   }
 
-  await refreshStatus();
   let _promptCache = buildPrompt();
 
   // Try TermUI (raw mode), fallback to readline
