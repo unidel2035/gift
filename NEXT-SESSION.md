@@ -1,82 +1,93 @@
-# Задача: довести gift-agent до зрелости
+# Задача: gift-agent → production-ready
 
-Ты — gift-agent, работаешь над самим собой. Файл: `src/agent-cli/gift-agent.js` (988 строк).
+Файл: `src/agent-cli/gift-agent.js` (990 строк)
 
-## Что уже работает
-- Agent loop: prompt → API → tool_use → execute → repeat
-- Tools: Read, Write, Edit, Bash, Grep, Glob
-- W-матрица: запись актов, межсессионная память
-- KoinonBus: чтение сообщений от других агентов
-- CIS: сканирование ответов на манипуляции
-- Sessions: автосохранение, /resume
-- Markdown→ANSI рендеринг
-- Spinner при ожидании
-- Slash-команды: /switch, /login, /matrix, /koinon, /sessions, /resume, /help, /exit
+## Контекст
+gift-agent — standalone coding agent без зависимости от claude binary. Работает через прокси (DeepSeek/RouterAI). Есть: agent loop, 6 tools (Read/Write/Edit/Bash/Grep/Glob), W-matrix, KoinonBus, CIS, sessions, markdown rendering, spinner, TermUI.
 
-## Что нужно сделать (по приоритету)
+## Что сломано сейчас
+1. **Non-streaming** — агент молчит 10-30 сек пока LLM думает. Текст появляется только после полного ответа. Промежуточный текст между tool_use уже показывается, но сам ответ — не стримится.
+2. **Меню `/`** — TermUI подключён но не проверен в реальном TTY через `gift start`. Может глючить.
+3. **Нет permission system** — Write/Edit/Bash выполняются без подтверждения.
 
-### 1. КРИТИЧНО: Streaming ответов + промежуточные комментарии
-Сейчас non-streaming — агент молчит 30+ секунд пока делает 20 tool_use, текст показывает только в конце. Это непригодно.
+## Задачи по приоритету
+
+### 1. SSE Streaming (критично)
+`apiCallStream()` уже написан (строка ~441) но не используется в REPL loop.
 
 Нужно:
-- Показывать текст по мере генерации (как Claude Code)
-- Между tool-вызовами показывать промежуточный текст агента (он часто говорит "Сейчас посмотрю..." перед tool_use)
-- Для streaming: отправлять `stream: true` в API, парсить SSE `data: {...}` events
+- В REPL agent loop (строка ~963) заменить `apiCall()` на `apiCallStream()` для первого вызова
+- `onText: (chunk) => process.stdout.write(renderMarkdown(chunk))` — текст сразу в терминал
+- `onToolUse: (name, input) => spinner.update(name)` — показать что tool вызывается
+- Spinner останавливать когда пошёл текст, запускать когда tool_use
+- `safeFetch` для localhost (прокси) использует native `fetch` — он поддерживает `resp.body` как ReadableStream. Переделать `apiCallStream` чтобы парсил stream инкрементально, а не `await resp.text()` целиком
 
-Файл: `src/agent-cli/gift-agent.js`, функция `apiCall()` — добавить streaming вариант.
-В REPL agent loop (строка ~870): показывать text blocks сразу, не только в конце.
+Тестирование: `gift start`, набрать промпт, текст должен появляться посимвольно.
 
-**ВАЖНО:** даже без SSE streaming можно улучшить — сейчас текст из промежуточных ответов (между tool_use) НЕ показывается. Нужно показывать `textBlocks` на КАЖДОМ шаге цикла, не только на последнем.
+### 2. Permission system
+- Read/Grep/Glob — автоматически (безопасные)
+- Write/Edit — показать diff, спросить `[y/n]` перед выполнением
+- Bash — показать команду, спросить `[y/n]`
+- Флаг `--yes` или `--accept-edits` для автоподтверждения
+- В TermUI: после tool_use показать `  ● Edit file.js [y/n]?` и ждать нажатия
 
-### 2. Фикс меню `/` со стрелками
-Разделитель ────── из prompt убран (был баг — спамился). Сейчас prompt = `❯ `. Проверить что меню `/` работает с TermUI в реальном TTY. Если ломается — дебажить `_renderPrompt()` в `term-ui.js`.
+### 3. Context compaction
+- Считать токены примерно: `text.length / 4`
+- При >100K tokens в conversation — автосжатие
+- Оставить: system prompt + summary старых сообщений + последние 5 turns
+- Slash-команда `/compact` для ручного сжатия
 
-### 3. Добавить MCP gift-tools в gift-agent
-Сейчас gift-agent имеет только базовые tools. Нужно добавить gift-специфичные из `src/agent-cli/gift-tools.js`:
-- `matrix_query` — запрос к W-матрице
-- `matrix_record` — запись акта
-- `sobor_ask` — соборный запрос (3 голоса)
-- `recall_treasure` — поиск в сокровищнице
-- `unfold_treasure` — развёрнуть документ
-- `koinon_say` — отправить сообщение другим агентам
-- `koinon_inbox` — прочитать входящие
+### 4. MCP gift-tools
+Добавить gift-специфичные tools в TOOLS массив + executeTool():
+- `matrix_query` — `loadGiftMemory()`, показать threads/persons
+- `matrix_record` — записать акт в W-матрицу
+- `koinon_say` — `bus.publish({...})`
+- `koinon_inbox` — `bus.pollSince()`
+- `recall_treasure` — поиск в сокровищнице (LcmStore)
+- `sobor_ask` — запустить 3 параллельных LLM-запроса с разными system prompts
 
-Реализовать как дополнительные tools в массиве TOOLS, executeTool() вызывает существующие модули из gift/.
+### 5. Фикс TermUI slash-menu
+Проверить в реальном TTY. Если глючит — дебажить `_renderPrompt()` в `term-ui.js`. Prompt сейчас однострочный `❯ `. Разделитель `────` рисуется один раз после ответа (строка ~1028).
 
-### 3. Streaming ответов
-Сейчас non-streaming (ждём полный ответ). Нужно SSE streaming:
-- Отправлять `stream: true` в API
-- Парсить `data: {...}` events
-- Показывать текст по мере генерации (как Claude Code)
-
-### 4. Context compaction
-При длинных сессиях контекст переполняется. Нужно:
-- Считать токены (примерно: chars/4)
-- При >80% контекста — сжать историю (оставить system + последние 5 сообщений + summary)
-- Slash-команда `/compact`
-
-### 5. Permission system
-Сейчас все tools выполняются автоматически. Нужно:
-- Write/Edit/Bash — спрашивать подтверждение (y/n)
-- Read/Grep/Glob — автоматически
-- Флаг `--accept-edits` для автоподтверждения
-
-## Как работать
+## Как запустить
 ```bash
-# Запустить gift-agent над самим собой
 cd /home/unidel/gift
+
+# Прокси
+export DEEPSEEK_API_KEY=sk-6c45e2f605be470aa127a0ae6d74cc05
+export ROUTERAI_API_KEY=sk-PQcWfL67VhhX0hKC9BgoQzFrFcLAUYV_
+node src/proxy/start-proxy.js "https://api.deepseek.com/anthropic" "$DEEPSEEK_API_KEY" &
+sleep 2
+curl -sX POST http://127.0.0.1:3200/_proxy/mode -d 'backend=deepseek'
+
+# Агент
+ANTHROPIC_BASE_URL=http://127.0.0.1:3200 ANTHROPIC_AUTH_TOKEN=$DEEPSEEK_API_KEY \
+  node src/agent-cli/gift-agent.js
+
+# Или через launcher
 gift start
-# Внутри:
-❯ прочитай NEXT-SESSION.md и начни с пункта 1
 ```
 
-## Проверка
-После каждого изменения — тестируй:
+## Тестирование
 ```bash
-echo "привет" | node src/agent-cli/gift-agent.js
-```
-И в интерактивном TTY:
-```bash
+# Single-turn (pipe)
+echo "покажи первые 3 строки package.json" | node src/agent-cli/gift-agent.js
+
+# Interactive (TTY)
 gift start
-# набери / — должно появиться меню со стрелками
+❯ /help
+❯ /switch ra
+❯ создай файл /tmp/test-gift.txt с текстом "hello"
+❯ /matrix
+❯ /koinon
+❯ /exit
 ```
+
+## Файлы
+- `src/agent-cli/gift-agent.js` — основной агент (990 строк)
+- `src/agent-cli/term-ui.js` — TUI с raw mode и slash-menu (457 строк)
+- `src/proxy/model-proxy.js` — multi-backend прокси
+- `src/proxy/launcher.js` — запуск прокси + агента
+- `src/koinon/KoinonBus.js` — межагентная шина
+- `src/core/GiftMemory.js` — W-матрица (полная)
+- `src/core/LivingMatrix.js` — живая матрица
