@@ -164,8 +164,25 @@ const HELP_SECTIONS = {
   gift web ${C.dim('[--port 3700]')}           — поднять локальный портал (daemon)
   gift web --stop                 — остановить`,
 
+  start: () => `${C.b('Прокси (кодинг через дешёвые LLM):')}
+  gift start                       — кодинг через дешёвые модели (DeepSeek по умолчанию)
+  gift start --backend ra          — через RouterAI (рубли, 360 моделей)
+  gift start --backend ds          — через DeepSeek напрямую
+  ${C.dim('Внутри сессии: /switch ra|ds|or|fw, /login ra <key>')}`,
+
+  switch: () => `${C.b('Переключение бэкенда (на лету):')}
+  gift switch                      — текущий провайдер
+  gift switch ra                   — RouterAI (рубли)
+  gift switch ds                   — DeepSeek
+  gift switch or                   — OpenRouter
+  gift switch fw                   — Fireworks`,
+
+  login: () => `${C.b('Ввод API-ключа (на лету):')}
+  gift login ra <key>              — установить ключ RouterAI + переключить
+  gift login ds <key>              — установить ключ DeepSeek + переключить`,
+
   code: () => `${C.b('Код (DeepSeek + КИС + хуки gift):')}
-  gift code                       — Claude Code на DeepSeek ($0.87/M) с иммунной системой
+  gift code                       — кодинг на DeepSeek ($0.87/M) с иммунной системой
   ${C.dim('Всё от gift (хуки, W-матрица, анамнезис) + дешёвая модель + КИС в прокси.')}
   ${C.dim('Автоподтверждение включено. Работает в текущей директории.')}`,
 
@@ -232,7 +249,7 @@ const HELP_SECTIONS = {
   gift glossary ${C.dim('[find <слово>]')}      — словарь греческих терминов (русск.)`,
 };
 
-const COMMANDS = Object.keys(HELP_SECTIONS).concat(['benchmark', 'completion', 'version']);
+const COMMANDS = Object.keys(HELP_SECTIONS).concat(['benchmark', 'completion', 'version', 'start', 'switch', 'login']);
 
 function help(section = null) {
   if (section && HELP_SECTIONS[section]) {
@@ -315,14 +332,34 @@ if (cmd === 'completion') {
 }
 
 // Без аргументов:
-//   - в TTY (интерактивный shell) → запускаем chat (как `claude` без args)
-//   - не в TTY (pipe, скрипт) → печатаем help (чтобы не блокировать stdin)
+//   - в TTY → меню выбора режима
+//   - не в TTY (pipe, скрипт) → help
 if (!cmd) {
-  if (process.stdin.isTTY) {
-    cmd = 'chat';
-  } else {
+  if (!process.stdin.isTTY) {
     help();
     process.exit(0);
+  }
+
+  // Интерактивный выбор режима
+  const { createInterface } = await import('node:readline');
+  console.log(`
+  ${C.b(C.gold('gift'))} v${readVersion()}
+
+  ${C.b('1')}  ${C.cyan('code')}    Кодинг через дешёвые LLM (DeepSeek/RouterAI)
+  ${C.b('2')}  ${C.violet('sobor')}   Собор лиц — богословский REPL
+
+  ${C.dim('Enter = code  |  gift chat — сразу в собор  |  gift --help — все команды')}
+`);
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise(resolve => {
+    rl.question('  > ', ans => { rl.close(); resolve(ans.trim()); });
+  });
+
+  if (answer === '2' || answer === 'sobor' || answer === 'chat') {
+    cmd = 'chat';
+  } else {
+    cmd = 'start';
   }
 }
 
@@ -697,6 +734,91 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
       // Подкоманды: tick | list | cancel | once | daily | interval
       if (!sub) { help(); process.exit(1); }
       await run('utils/agrypnia-tick.mjs', [sub, ...rest]);
+      break;
+    }
+
+    // ── Proxy layer (deepclaude) ──────────────────────────────────────
+    case 'start': {
+      // gift start [--backend ra|ds|or|fw] [--port 3200] [extra claude args]
+      const { launchWithClaude } = await import(resolve(ROOT, 'src/proxy/launcher.js'));
+      const backendIdx = [sub, ...rest].indexOf('--backend');
+      const portIdx = [sub, ...rest].indexOf('--port');
+      const allArgs = [sub, ...rest].filter(Boolean);
+      const backend = backendIdx >= 0 ? allArgs[backendIdx + 1] : undefined;
+      const port = portIdx >= 0 ? parseInt(allArgs[portIdx + 1]) : 3200;
+      const claudeArgs = allArgs.filter((a, i) =>
+        a !== '--backend' && a !== '--port' &&
+        i !== backendIdx + 1 && i !== portIdx + 1
+      );
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      await launchWithClaude({
+        backend: shortMap[backend] || backend,
+        port,
+        claudeArgs,
+      });
+      break;
+    }
+
+    case 'switch': {
+      // gift switch [ra|ds|or|fw|anthropic]
+      const PROXY = 'http://127.0.0.1:3200';
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      if (!sub) {
+        try {
+          const r = await fetch(`${PROXY}/_proxy/status`);
+          const data = await r.json();
+          console.log(`\nПровайдер: ${C.b(data.label || data.mode)}`);
+          console.log(`Модель: ${data.model || '?'}`);
+          console.log(`Запросов: ${data.requests || 0}\n`);
+        } catch { console.error('Прокси не запущен. Запусти: gift start'); }
+      } else {
+        const backend = shortMap[sub] || sub;
+        try {
+          const r = await fetch(`${PROXY}/_proxy/mode`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: `backend=${backend}`,
+          });
+          const data = await r.json();
+          if (data.error) { console.error(`Ошибка: ${data.error}`); }
+          else { console.log(`${data.previous} → ${C.b(data.mode)} (${data.label || ''})`); }
+        } catch { console.error('Прокси не запущен. Запусти: gift start'); }
+      }
+      break;
+    }
+
+    case 'login': {
+      // gift login ra sk-PQcW...
+      const PROXY = 'http://127.0.0.1:3200';
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      if (!sub || rest.length === 0) {
+        console.log(`
+${C.b('gift login')} <бэкенд> <api-key>
+
+  ra <key>    — RouterAI (рубли, дешёвый)
+  ds <key>    — DeepSeek
+  or <key>    — OpenRouter
+  fw <key>    — Fireworks AI
+`);
+        break;
+      }
+      const backend = shortMap[sub] || sub;
+      const key = rest[0];
+      try {
+        await fetch(`${PROXY}/_proxy/key`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: `backend=${backend}&key=${key}`,
+        });
+        // Auto-switch
+        const r = await fetch(`${PROXY}/_proxy/mode`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: `backend=${backend}`,
+        });
+        const data = await r.json();
+        console.log(`Ключ установлен, переключено на ${C.b(data.mode)} (${data.label || ''})`);
+      } catch { console.error('Прокси не запущен. Запусти: gift start'); }
       break;
     }
 
