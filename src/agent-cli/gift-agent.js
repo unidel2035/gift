@@ -168,6 +168,24 @@ function renderMarkdown(text) {
     ;
 }
 
+// Буферизованный markdown-рендерер: копит чанки до полных строк,
+// чтобы не рвать markdown-синтаксис (##, **, etc.) посередине.
+function createMarkdownStream(out = process.stdout) {
+  let buf = '';
+  return {
+    write(chunk) {
+      buf += chunk;
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) out.write(renderMarkdown(line) + '\n');
+    },
+    flush() {
+      if (buf) out.write(renderMarkdown(buf));
+      buf = '';
+    },
+  };
+}
+
 const THINKING_PHRASES = [
   'размышляю...', 'думаю...', 'анализирую...', 'ищу решение...',
   'погружаюсь...', 'выстраиваю...', 'собираю...', 'оцениваю...',
@@ -996,16 +1014,18 @@ export async function agentLoop(prompt, opts = {}) {
       messages.push(...compacted);
     }
 
+    const md = onText ? null : createMarkdownStream();
     const response = await apiCallStream(messages, systemPrompt, tools, {
       onText: (chunk) => {
         if (onText) onText(chunk);
-        else process.stdout.write(renderMarkdown(chunk));
+        else md.write(chunk);
       },
       onToolUse: (name, input) => {
         if (onToolUse) onToolUse(name, input);
         else process.stderr.write(`${c('cyan', '● ' + name)}${c('dim', ' ' + JSON.stringify(input).slice(0, 80))}\n`);
       },
     });
+    if (md) md.flush();
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
 
@@ -1309,10 +1329,11 @@ export async function runRepl(opts = {}) {
       async function streamCall(msgs, spinLabel) {
         spinner.start(spinLabel);
         streamStarted = false;
+        const md = createMarkdownStream();
         const resp = await apiCallStream(msgs, systemPrompt, TOOLS, {
           onText: (chunk) => {
             if (!streamStarted) { spinner.stop(); streamStarted = true; }
-            process.stdout.write(renderMarkdown(chunk));
+            md.write(chunk);
             fullText += chunk;
           },
           onToolUse: (name, input) => {
@@ -1320,6 +1341,7 @@ export async function runRepl(opts = {}) {
             process.stderr.write(`  ${c('cyan', '● ' + name)} ${c('dim', JSON.stringify(input).slice(0, 80))}\n`);
           },
         });
+        md.flush();
         spinner.stop();
         return resp;
       }
