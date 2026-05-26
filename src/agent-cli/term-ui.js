@@ -137,13 +137,14 @@ export class TermUI {
     if (this._fallbackRl) return;
     this._eraseMenu();
     // Стираем все строки промпта.
-    // После Enter курсор на строку НИЖЕ промпта — поднимаемся на N строк.
+    // После Enter курсор на ПОСЛЕДНЕЙ строке промпта (нижняя рамка),
+    // т.к. \r\n сдвинул с input-строки вниз на 1.
     const lines = this.promptStr.split('\n');
     const out = [];
-    out.push(`\x1b[${lines.length}A`);       // up to first prompt line
+    out.push(`\x1b[${lines.length - 1}A`);   // up to first prompt line (top border)
     for (let i = 0; i < lines.length + 1; i++) {
       out.push('\r' + CLEAR_LINE);
-      if (i < lines.length) out.push('\n'); // \n except last iteration
+      if (i < lines.length) out.push('\n');
     }
     out.push(`\x1b[${lines.length}A`);       // back up to first prompt line
     out.push('\r' + CLEAR_LINE);
@@ -203,13 +204,16 @@ export class TermUI {
       return;
     }
     // Рисуем промпт напрямую (старый уже стёрт release'ом).
-    // _renderPrompt() не вызываем — она для keystroke-обновлений
-    // и предполагает что курсор на позиции промпта.
+    // Буфер на предпоследней строке, последняя — нижняя рамка.
     const lines = this.promptStr.split('\n');
+    const inputIdx = lines.length - 2;
     for (let i = 0; i < lines.length; i++) {
-      process.stdout.write('\r\x1b[2K' + lines[i] + (i < lines.length - 1 ? '\n' : ''));
+      const isInput = i === inputIdx;
+      process.stdout.write('\r\x1b[2K' + lines[i] + (isInput ? '' : ''));
+      if (i < lines.length - 1) process.stdout.write('\n');
     }
-    // Оставляем курсор в конце последней строки промпта
+    // Вернуться на строку ввода
+    process.stdout.write('\x1b[1A');
   }
 
   // ── рендер (всё батчится в один process.stdout.write) ────────────────
@@ -241,13 +245,18 @@ export class TermUI {
       this.menuRowsDrawn = 0;
     }
 
-    // 2) Нарисовать промпт (построчно вниз)
+    // 2) Нарисовать промпт (построчно вниз).
+    // Буфер — на ПРЕДпоследней строке (последняя — нижняя рамка)
+    const inputLineIdx = promptLines.length - 2;  // e.g. 1 for 3-line prompt
     for (let i = 0; i < promptLines.length; i++) {
-      const isLast = i === promptLines.length - 1;
-      out.push('\r' + CLEAR_LINE + promptLines[i] + (isLast ? this.buffer : '\n'));
+      const isInput = i === inputLineIdx;
+      out.push('\r' + CLEAR_LINE + promptLines[i] + (isInput ? this.buffer : ''));
+      if (i < promptLines.length - 1) out.push('\n');
     }
 
-    // 3) Позиция курсора внутри буфера
+    // 3) Вернуться на строку ввода (над нижней рамкой)
+    out.push('\x1b[1A');
+    // Позиция курсора внутри буфера
     const back = total - this.cursor;
     if (back > 0) out.push(`\x1b[${back}D`);
 

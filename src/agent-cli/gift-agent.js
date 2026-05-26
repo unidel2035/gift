@@ -1159,8 +1159,9 @@ export async function runRepl(opts = {}) {
   const conversationMessages = session.messages || [];
   let uiReady;
 
+  const HR = '────────────────────────────────────────────────────────────────';
   function buildPrompt() {
-    return `${c('dim', '────────────────────────────────────────────────')}\n${c('dim', `  ${_statusCache}    ${session.id}    /help`)}\n${c('green', '>')} `;
+    return `${c('dim', HR)}\n${c('green', '❯')} \n${c('dim', HR)}`;
   }
 
   let _promptCache = buildPrompt();
