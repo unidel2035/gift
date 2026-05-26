@@ -703,7 +703,7 @@ export async function runRepl(opts = {}) {
   try {
     const { TermUI } = await import('./term-ui.js');
     ui = new TermUI({
-      prompt: `${c('dim', '─────────────────────────────────────────────────────────────')}\n${c('green', '❯')} `,
+      prompt: `${c('green', '❯')} `,
       slashCommands,
       onLine: (line) => handleInput(line),
       onClose: () => {
@@ -926,8 +926,11 @@ export async function runRepl(opts = {}) {
         process.stderr.write(`  ${c('red', '⚠ CIS:')} ${threats.map(t => t.type).join(', ')}\n`);
       }
 
-      // Save to conversation
-      conversationMessages.push({ role: 'assistant', content: assistantContent });
+      // Save full conversation chain (not just final response)
+      // loopMessages contains: [user, assistant(tools), user(results), assistant(tools), ...]
+      // conversationMessages already has the user message, so append everything after it
+      const newMessages = loopMessages.slice(conversationMessages.length);
+      conversationMessages.push(...newMessages);
 
       // Auto-save session
       session.messages = conversationMessages;
@@ -953,6 +956,7 @@ export async function runRepl(opts = {}) {
       console.error(`  ${c('red', 'Error:')} ${e.message}${cause ? ' (' + cause + ')' : ''}`);
     }
 
+    process.stdout.write(`\n${c('dim', '────────────────────────────────────────────────────────')}\n`);
     if (ui) ui.resume();
   }
 }
