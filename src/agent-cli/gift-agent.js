@@ -906,8 +906,24 @@ const SAFE_TOOLS = new Set(['Read', 'Grep', 'Glob']);
 function toolPreview(tu) {
   const file = tu.input.file_path ? c('dim', ' → ' + (tu.input.file_path || '')) : '';
   switch (tu.name) {
-    case 'Edit':
-      return `${file}\n       ${c('red', '−')} ${c('dim', (tu.input.old_string || '').slice(0, 60))}\n       ${c('green', '+')} ${c('dim', (tu.input.new_string || '').slice(0, 60))}`;
+    case 'Edit': {
+      const oldLines = (tu.input.old_string || '').split('\n');
+      const newLines = (tu.input.new_string || '').split('\n');
+      const maxLines = 12; // не больше 12 строк diff'а
+      const oldShow = oldLines.slice(0, maxLines);
+      const newShow = newLines.slice(0, maxLines);
+      let diff = file + '\n';
+      for (const l of oldShow) {
+        diff += `       ${c('red', '−')} ${c('dim', l.slice(0, 100))}\n`;
+      }
+      for (const l of newShow) {
+        diff += `       ${c('green', '+')} ${l.slice(0, 100)}\n`;
+      }
+      if (oldLines.length > maxLines || newLines.length > maxLines) {
+        diff += `       ${c('dim', '... (' + Math.max(oldLines.length, newLines.length) + ' lines total)')}`;
+      }
+      return diff.trimEnd();
+    }
     case 'Write':
       return `${file}  ${c('dim', '(' + (tu.input.content?.length || 0) + ' bytes)')}
        ${c('dim', (tu.input.content || '').slice(0, 80).replace(/\n/g, '↵'))}`;
@@ -1144,7 +1160,7 @@ export async function runRepl(opts = {}) {
   }
 
   function buildPrompt() {
-    return `${c('dim', `  ${_statusCache}    ${session.id}    /help — команды`)}\n${c('green', '❯')} `;
+    return `${c('dim', _statusCache)} ${c('green', '>')} `;
   }
 
   await refreshStatus();
@@ -1173,7 +1189,7 @@ export async function runRepl(opts = {}) {
     ui.start();
   } catch {
     // Fallback readline
-    const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${c('green', '❯')} ` });
+    const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${c('green', '>')} ` });
     rl.prompt();
     rl.on('line', line => handleInput(line).then(() => rl.prompt()));
     rl.on('close', () => {
