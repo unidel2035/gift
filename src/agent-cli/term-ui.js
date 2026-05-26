@@ -54,6 +54,7 @@ export class TermUI {
     this.history       = [];    // массив прошлых строк
     this.historyIdx    = -1;    // -1 = свежая строка; 0 = последняя в history
     this.savedCurrent  = '';    // что было набрано до ↑
+    this._firstPaint   = true;  // первый рендер — не стираем предыдущий промпт
     this._dataHandler  = this._onData.bind(this);
   }
 
@@ -126,7 +127,49 @@ export class TermUI {
     this.released = true;
     if (this._fallbackRl) return;
     this._eraseMenu();
-    process.stdout.write('\r' + CLEAR_LINE);
+    // Clear all prompt lines
+    const promptLines = this.promptStr.split('\n');
+    if (promptLines.length > 1) {
+      const out = [];
+      out.push(`\x1b[${promptLines.length - 1}A`);
+      for (let i = 0; i < promptLines.length; i++) {
+        out.push('\r' + CLEAR_LINE);
+        if (i < promptLines.length - 1) out.push('\n');
+      }
+      out.push(`\x1b[${promptLines.length - 1}A`);
+      out.push('\r' + CLEAR_LINE);
+      process.stdout.write(out.join(''));
+    } else {
+      process.stdout.write('\r' + CLEAR_LINE);
+    }
+  }
+
+  // Подтверждение [y/n] — работает и в raw, и в fallback режиме
+  async confirmAction(prompt) {
+    if (this._fallbackRl) {
+      return new Promise((resolve) => {
+        this._fallbackRl.question(prompt, (ans) => {
+          resolve(ans.toLowerCase().trim() === 'y' || ans.toLowerCase().trim() === 'yes');
+        });
+      });
+    }
+    return new Promise((resolve) => {
+      process.stderr.write(prompt);
+      const handler = (chunk) => {
+        const ch = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        const key = ch.toLowerCase().trim();
+        if (key === 'y' || key === 'yes') {
+          process.stdin.removeListener('data', handler);
+          process.stderr.write(key + '\n');
+          resolve(true);
+        } else if (key === 'n' || key === 'no' || key === '\x1b' || key === '\x03') {
+          process.stdin.removeListener('data', handler);
+          process.stderr.write(key + '\n');
+          resolve(false);
+        }
+      };
+      process.stdin.on('data', handler);
+    });
   }
 
   resume() {
@@ -159,13 +202,38 @@ export class TermUI {
       out.push(RESTORE_CURS);
       this.menuRowsDrawn = 0;
     }
-    // 2) prompt + buffer
-    out.push('\r' + CLEAR_LINE + this.promptStr + this.buffer);
-    // 3) cursor position
+
+    // 2) erase old prompt (handle multi-line prompt)
+    const promptLines = this.promptStr.split('\n');
+    if (promptLines.length > 1) {
+      // Move up to first line of prompt area, then clear all lines
+      out.push(`\x1b[${promptLines.length - 1}A`);
+      for (let i = 0; i < promptLines.length; i++) {
+        out.push('\r' + CLEAR_LINE);
+        if (i < promptLines.length - 1) out.push('\n');
+      }
+      // Back up to first line again for redraw
+      out.push(`\x1b[${promptLines.length - 1}A`);
+    } else {
+      out.push('\r' + CLEAR_LINE);
+    }
+
+    // 3) prompt + buffer (line by line for multi-line)
+    for (let i = 0; i < promptLines.length; i++) {
+      if (i === promptLines.length - 1) {
+        // Last line: prompt + buffer
+        out.push('\r' + CLEAR_LINE + promptLines[i] + this.buffer);
+      } else {
+        out.push('\r' + CLEAR_LINE + promptLines[i] + '\n');
+      }
+    }
+
+    // 4) cursor position
     const total = [...this.buffer].length;
     const back = total - this.cursor;
     if (back > 0) out.push(`\x1b[${back}D`);
-    // 4) menu
+
+    // 5) menu
     if (this.buffer.startsWith('/')) {
       out.push(this._buildMenu());
     }

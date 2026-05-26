@@ -294,13 +294,88 @@ const TOOLS = [
       required: ['pattern'],
     },
   },
+  {
+    name: 'matrix_query',
+    description: 'Query the W-matrix: show persons, top threads, recent acts.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', enum: ['summary', 'persons', 'threads', 'recent'], description: 'What to query' },
+        limit: { type: 'number', description: 'Max results (default: 10)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'matrix_record',
+    description: 'Record an act (gift) in the W-matrix between two persons.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Giver (person ID)' },
+        to: { type: 'string', description: 'Receiver (person ID)' },
+        content: { type: 'string', description: 'What was given' },
+        type: { type: 'string', description: 'Act type: code, insight, question, covenant, grace' },
+      },
+      required: ['from', 'to', 'content'],
+    },
+  },
+  {
+    name: 'koinon_say',
+    description: 'Publish a message to the KoinonBus (inter-agent communication).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Target agent or * for broadcast' },
+        topic: { type: 'string', description: 'Message topic' },
+        message: { type: 'string', description: 'Message body' },
+      },
+      required: ['message'],
+    },
+  },
+  {
+    name: 'koinon_inbox',
+    description: 'Read recent messages from KoinonBus.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max messages (default: 20)' },
+        from: { type: 'string', description: 'Filter by sender' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'recall_treasure',
+    description: 'Search the treasury (LcmStore) for past insights, decisions, or knowledge.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        limit: { type: 'number', description: 'Max results (default: 5)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'sobor_ask',
+    description: 'Ask 3 LLM instances with different system prompts (sobor/council). Returns all 3 answers.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'Question to ask the council' },
+        personas: { type: 'string', description: 'Comma-separated persona names: theologian,engineer,strategist (default: all)' },
+      },
+      required: ['question'],
+    },
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
 // Tool execution
 // ═══════════════════════════════════════════════════════════════
 
-function executeTool(name, input) {
+async function executeTool(name, input) {
   try {
     switch (name) {
       case 'Read': {
@@ -389,6 +464,126 @@ function executeTool(name, input) {
         }
       }
 
+      // ── Gift-специфичные tools ──────────────────────────────
+      case 'matrix_query': {
+        const mem = loadGiftMemory();
+        const localW = loadMatrix();
+        const { query, limit = 10 } = input;
+        switch (query) {
+          case 'summary':
+            return giftMemorySummary(mem) || matrixSummary(localW);
+          case 'persons': {
+            const persons = mem?.persons() || Object.keys(localW.persons || {});
+            return Array.isArray(persons) ? persons.slice(0, limit).join('\n') : `${persons.length} persons`;
+          }
+          case 'threads': {
+            const top = mem?.topThreads?.(limit) || [];
+            if (top.length) return top.map(t => `${t.from}→${t.to}: ${t.weight}`).join('\n');
+            // Fallback: compute from local matrix
+            const threadMap = {};
+            for (const act of (localW.acts || [])) {
+              const key = `${act.from}→${act.to}`;
+              threadMap[key] = (threadMap[key] || 0) + 1;
+            }
+            return Object.entries(threadMap).sort((a, b) => b[1] - a[1]).slice(0, limit)
+              .map(([k, v]) => `${k}: ${v}`).join('\n') || '(no threads)';
+          }
+          case 'recent': {
+            const acts = mem?.acts || localW.acts || [];
+            return acts.slice(-limit).map(a => `  ${a.from}→${a.to}: ${(a.content || '').slice(0, 60)}`).join('\n') || '(no acts)';
+          }
+          default:
+            return { error: `Unknown matrix query: ${query}. Use: summary, persons, threads, recent` };
+        }
+      }
+
+      case 'matrix_record': {
+        const { from, to, content: actContent, type = 'insight' } = input;
+        const wFresh = loadMatrix();
+        const act = recordAct(wFresh, from, to, actContent, type);
+        // Also sync to full GiftMemory if available
+        const bus = loadKoinon();
+        if (bus) {
+          try { bus.publish({ from, to, topic: 'matrix_record', message: actContent }); } catch {}
+        }
+        return `Act recorded: ${act.id} | ${from}→${to} (${type})`;
+      }
+
+      case 'koinon_say': {
+        const bus = loadKoinon();
+        if (!bus) return { error: 'KoinonBus not available (running outside gift/)' };
+        const { to = '*', topic = 'chat', message } = input;
+        try {
+          const receipt = bus.publish({ from: process.env.GIFT_AGENT_ID || 'gift-agent', to, topic, message });
+          return `Published to KoinonBus: ${JSON.stringify(receipt)}`;
+        } catch (e) {
+          return { error: `KoinonBus publish failed: ${e.message}` };
+        }
+      }
+
+      case 'koinon_inbox': {
+        const bus = loadKoinon();
+        if (!bus) return { error: 'KoinonBus not available (running outside gift/)' };
+        const { limit = 20, from: filterFrom } = input;
+        try {
+          let msgs = bus.history?.({ limit }) || [];
+          if (filterFrom) msgs = msgs.filter(m => m.from === filterFrom);
+          if (!msgs.length) return '(no messages)';
+          return msgs.map(m => `[${m.from}→${m.to || '*'}] ${(m.message || '').slice(0, 120)}`).join('\n');
+        } catch (e) {
+          return { error: `KoinonBus poll failed: ${e.message}` };
+        }
+      }
+
+      case 'recall_treasure': {
+        const { query, limit = 5 } = input;
+        // Search in insights.json, proposals.json, reflection.json
+        const searchPaths = [
+          `${GIFT_ROOT}/data/insights.json`,
+          `${GIFT_ROOT}/data/proposals.json`,
+          `${GIFT_ROOT}/data/reflection.json`,
+        ];
+        const results = [];
+        for (const p of searchPaths) {
+          if (!existsSync(p)) continue;
+          try {
+            const data = JSON.parse(readFileSync(p, 'utf8'));
+            const items = Array.isArray(data) ? data : (data.entries || data.insights || []);
+            for (const item of items) {
+              const text = typeof item === 'string' ? item : (item.text || item.content || item.title || JSON.stringify(item));
+              if (text.toLowerCase().includes(query.toLowerCase())) {
+                results.push({ source: basename(p), text: text.slice(0, 200) });
+                if (results.length >= limit) break;
+              }
+            }
+          } catch {}
+          if (results.length >= limit) break;
+        }
+        if (!results.length) return `No results for: ${query}`;
+        return results.map(r => `[${r.source}] ${r.text}`).join('\n---\n');
+      }
+
+      case 'sobor_ask': {
+        const { question, personas = 'theologian,engineer,strategist' } = input;
+        const personaList = personas.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3);
+        const personaPrompts = {
+          theologian: 'You are an Orthodox theologian. Answer with theological depth, referencing Scripture and the Fathers. Be concise.',
+          engineer: 'You are a pragmatic engineer. Answer with concrete technical steps. Be concise and practical.',
+          strategist: 'You are a strategic advisor. Answer with strategic insight, considering long-term consequences. Be concise.',
+        };
+        try {
+          const answers = await Promise.all(personaList.map(async (persona) => {
+            const sysPrompt = personaPrompts[persona] || `You are a ${persona}. Answer concisely.`;
+            const resp = await apiCall([{ role: 'user', content: question }], sysPrompt, []);
+            const text = resp.content?.find(b => b.type === 'text')?.text || '(no answer)';
+            return { persona, text };
+          }));
+          return answers.map(a => `## ${a.persona}\n${a.text}`).join('\n\n---\n\n');
+        } catch (e) {
+          return { error: `Sobor failed: ${e.message}` };
+        }
+      }
+
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -448,7 +643,8 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
     tools,
   };
 
-  const resp = await safeFetch(`${PROXY_URL}/v1/messages`, {
+  // Use native fetch for streaming (proxy is localhost — resp.body is ReadableStream)
+  const resp = await fetch(`${PROXY_URL}/v1/messages`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -464,62 +660,73 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
     throw new Error(`API ${resp.status}: ${errText.slice(0, 300)}`);
   }
 
-  // Parse SSE stream
-  const text = await resp.text();
-  const lines = text.split('\n');
+  // Parse SSE stream incrementally via ReadableStream
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
   const content = [];
   let currentBlock = null;
   let stopReason = null;
   let usage = { input_tokens: 0, output_tokens: 0 };
 
-  for (const line of lines) {
-    if (!line.startsWith('data: ')) continue;
-    const data = line.slice(6).trim();
-    if (data === '[DONE]') break;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
 
-    let event;
-    try { event = JSON.parse(data); } catch { continue; }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    // Keep incomplete last line in buffer for next chunk
+    buffer = lines.pop() || '';
 
-    if (event.type === 'message_start' && event.message?.usage) {
-      usage.input_tokens = event.message.usage.input_tokens || 0;
-    }
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') break;
 
-    if (event.type === 'content_block_start') {
-      currentBlock = event.content_block || {};
-      if (currentBlock.type === 'tool_use' && onToolUse) {
-        onToolUse(currentBlock.name, currentBlock.input || {});
+      let event;
+      try { event = JSON.parse(data); } catch { continue; }
+
+      if (event.type === 'message_start' && event.message?.usage) {
+        usage.input_tokens = event.message.usage.input_tokens || 0;
       }
-    }
 
-    if (event.type === 'content_block_delta') {
-      if (event.delta?.type === 'text_delta' && event.delta.text) {
-        if (onText) onText(event.delta.text);
-        if (currentBlock?.type === 'text') {
-          currentBlock.text = (currentBlock.text || '') + event.delta.text;
+      if (event.type === 'content_block_start') {
+        currentBlock = event.content_block || {};
+        if (currentBlock.type === 'tool_use' && onToolUse) {
+          onToolUse(currentBlock.name, currentBlock.input || {});
         }
       }
-      if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
-        if (currentBlock?.type === 'tool_use') {
-          currentBlock._jsonBuf = (currentBlock._jsonBuf || '') + event.delta.partial_json;
+
+      if (event.type === 'content_block_delta') {
+        if (event.delta?.type === 'text_delta' && event.delta.text) {
+          if (onText) onText(event.delta.text);
+          if (currentBlock?.type === 'text') {
+            currentBlock.text = (currentBlock.text || '') + event.delta.text;
+          }
+        }
+        if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+          if (currentBlock?.type === 'tool_use') {
+            currentBlock._jsonBuf = (currentBlock._jsonBuf || '') + event.delta.partial_json;
+          }
         }
       }
-    }
 
-    if (event.type === 'content_block_stop') {
-      if (currentBlock) {
-        if (currentBlock.type === 'tool_use' && currentBlock._jsonBuf) {
-          try { currentBlock.input = JSON.parse(currentBlock._jsonBuf); } catch {}
-          delete currentBlock._jsonBuf;
+      if (event.type === 'content_block_stop') {
+        if (currentBlock) {
+          if (currentBlock.type === 'tool_use' && currentBlock._jsonBuf) {
+            try { currentBlock.input = JSON.parse(currentBlock._jsonBuf); } catch {}
+            delete currentBlock._jsonBuf;
+          }
+          content.push(currentBlock);
+          currentBlock = null;
         }
-        content.push(currentBlock);
-        currentBlock = null;
       }
-    }
 
-    if (event.type === 'message_delta') {
-      stopReason = event.delta?.stop_reason || stopReason;
-      if (event.usage) usage.output_tokens = event.usage.output_tokens || 0;
+      if (event.type === 'message_delta') {
+        stopReason = event.delta?.stop_reason || stopReason;
+        if (event.usage) usage.output_tokens = event.usage.output_tokens || 0;
+      }
     }
   }
 
@@ -672,6 +879,94 @@ ${koinon ? `## Recent messages from other agents (KoinonBus)\n${koinon}` : ''}
 When you complete a task, it is recorded in the matrix. Other agents will see it.`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Permission system: confirm unsafe tools
+// ═══════════════════════════════════════════════════════════════
+
+const SAFE_TOOLS = new Set(['Read', 'Grep', 'Glob']);
+
+function toolPreview(tu) {
+  switch (tu.name) {
+    case 'Edit':
+      return `${c('dim', tu.input.file_path)}\n  - ${c('red', (tu.input.old_string || '').slice(0, 60))}\n  + ${c('green', (tu.input.new_string || '').slice(0, 60))}`;
+    case 'Write':
+      return `${c('dim', tu.input.file_path)} (${tu.input.content?.length || 0} bytes)`;
+    case 'Bash':
+      return c('dim', (tu.input.command || '').slice(0, 120));
+    default:
+      return c('dim', JSON.stringify(tu.input).slice(0, 80));
+  }
+}
+
+async function confirmTools(toolUses, autoYes, ui) {
+  const approved = [];
+  for (const tu of toolUses) {
+    if (SAFE_TOOLS.has(tu.name) || autoYes) {
+      approved.push(tu);
+      continue;
+    }
+    const ok = ui
+      ? await ui.confirmAction(`  ${c('cyan', '● ' + tu.name)} ${toolPreview(tu)}\n  ${c('yellow', '[y/n]?')} `)
+      : false;
+    if (ok) {
+      approved.push(tu);
+    } else {
+      process.stderr.write(`  ${c('red', '✗ rejected')}: ${tu.name}\n`);
+    }
+  }
+  return approved;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Context compaction: auto-summarise old messages
+// ═══════════════════════════════════════════════════════════════
+
+function estimateTokens(messages) {
+  let total = 0;
+  for (const m of messages) {
+    if (typeof m.content === 'string') total += m.content.length;
+    else if (Array.isArray(m.content)) {
+      for (const b of m.content) {
+        if (b.text) total += b.text.length;
+        if (b.content) total += b.content.length;
+      }
+    }
+  }
+  return Math.ceil(total / 4);
+}
+
+async function compactMessages(messages, systemPrompt) {
+  // Keep: last 5 turns (user+assistant pairs)
+  // Summarise older messages via a small API call
+  const KEEP = 10; // last 10 messages (5 turns)
+  if (messages.length <= KEEP) return messages;
+
+  const toSummarise = messages.slice(0, -KEEP);
+  const recent = messages.slice(-KEEP);
+
+  // Build summary prompt
+  const summaryText = toSummarise.map(m => {
+    const role = m.role;
+    const text = typeof m.content === 'string' ? m.content
+      : (Array.isArray(m.content) ? m.content.map(b => b.text || b.content || '').join(' ') : '');
+    return `[${role}] ${text.slice(0, 200)}`;
+  }).join('\n');
+
+  try {
+    const resp = await apiCall([
+      { role: 'user', content: `Summarise this conversation history in 3-5 bullet points (Russian):\n\n${summaryText}` }
+    ], 'You are a summariser. Be concise. Output ONLY bullet points.', []);
+    const summary = resp.content?.find(b => b.type === 'text')?.text || '(summary failed)';
+    return [
+      { role: 'user', content: `[Session context — earlier messages summarised]:\n${summary}` },
+      ...recent,
+    ];
+  } catch {
+    // Fallback: just truncate
+    return [{ role: 'user', content: `[Earlier messages truncated for context: ${toSummarise.length} messages]` }, ...recent];
+  }
+}
+
 export async function agentLoop(prompt, opts = {}) {
   const {
     systemPrompt = DEFAULT_SYSTEM,
@@ -680,6 +975,7 @@ export async function agentLoop(prompt, opts = {}) {
     onToolUse,
     onText,
     onTurn,
+    autoYes = false,
   } = opts;
 
   const messages = [{ role: 'user', content: prompt }];
@@ -691,18 +987,34 @@ export async function agentLoop(prompt, opts = {}) {
     turns++;
     if (onTurn) onTurn(turns);
 
-    const response = await apiCall(messages, systemPrompt, tools);
+    // Auto-compact if >100K tokens
+    const estTokens = estimateTokens(messages);
+    if (estTokens > 100_000) {
+      if (onText) onText('\n[compacting context...]\n');
+      const compacted = await compactMessages(messages, systemPrompt);
+      messages.length = 0;
+      messages.push(...compacted);
+    }
+
+    const response = await apiCallStream(messages, systemPrompt, tools, {
+      onText: (chunk) => {
+        if (onText) onText(chunk);
+        else process.stdout.write(renderMarkdown(chunk));
+      },
+      onToolUse: (name, input) => {
+        if (onToolUse) onToolUse(name, input);
+        else process.stderr.write(`${c('cyan', '● ' + name)}${c('dim', ' ' + JSON.stringify(input).slice(0, 80))}\n`);
+      },
+    });
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
 
     const content = response.content || [];
-    const toolUses = content.filter(b => b.type === 'tool_use');
-    const textBlocks = content.filter(b => b.type === 'text');
+    let toolUses = content.filter(b => b.type === 'tool_use');
 
-    // Show text
-    for (const block of textBlocks) {
-      if (onText) onText(block.text);
-      else process.stdout.write(renderMarkdown(block.text));
+    // Confirm unsafe tools
+    if (toolUses.length > 0) {
+      toolUses = await confirmTools(toolUses, autoYes, null);
     }
 
     // No tool calls → done
@@ -715,16 +1027,13 @@ export async function agentLoop(prompt, opts = {}) {
 
     const toolResults = [];
     for (const tu of toolUses) {
-      if (onToolUse) onToolUse(tu.name, tu.input);
-      else process.stderr.write(`${c('cyan', '● ' + tu.name)}${c('dim', ' ' + JSON.stringify(tu.input).slice(0, 80))}\n`);
-
-      const result = executeTool(tu.name, tu.input);
+      const result = await executeTool(tu.name, tu.input);
       const resultText = typeof result === 'string' ? result : JSON.stringify(result);
 
       toolResults.push({
         type: 'tool_result',
         tool_use_id: tu.id,
-        content: resultText.slice(0, 50000), // limit tool output
+        content: resultText.slice(0, 50000),
       });
     }
 
@@ -743,6 +1052,7 @@ export async function agentLoop(prompt, opts = {}) {
 
 export async function runRepl(opts = {}) {
   const systemPrompt = opts.systemPrompt || buildSystemPrompt();
+  const autoYes = opts.autoYes || false;
   const w = loadMatrix();
 
   // Session: resume or new
@@ -785,6 +1095,7 @@ export async function runRepl(opts = {}) {
     { cmd: '/resume', desc: 'продолжить сессию', needsArg: true },
     { cmd: '/koinon', desc: 'сообщения от других агентов', needsArg: false },
     { cmd: '/clear', desc: 'очистить историю', needsArg: false },
+    { cmd: '/compact', desc: 'сжать контекст (оставить последние 5 ходов)', needsArg: false },
     { cmd: '/help', desc: 'справка', needsArg: false },
     { cmd: '/exit', desc: 'выход', needsArg: false },
   ];
@@ -830,9 +1141,15 @@ export async function runRepl(opts = {}) {
   /switch [ra|ds|or|fw]  — переключить бэкенд
   /login <backend> <key> — установить API ключ
   /status                — статус прокси
-  /cost                  — стоимость сессии
+  /matrix                — W-матрица (межсессионная память)
+  /sessions              — список сессий
+  /resume <id>           — продолжить сессию
+  /koinon                — сообщения от других агентов
   /clear                 — очистить историю
+  /compact               — сжать контекст
   /exit                  — выход
+
+  --yes, --accept-edits  — автоподтверждение Write/Edit/Bash
 `);
       if (ui) ui.resume(); return;
     }
@@ -945,6 +1262,20 @@ export async function runRepl(opts = {}) {
       if (ui) ui.resume(); return;
     }
 
+    if (input === '/compact') {
+      const est = estimateTokens(conversationMessages);
+      if (conversationMessages.length < 6) {
+        console.log(`  ${c('dim', 'Too few messages to compact (${conversationMessages.length} msgs, ~${est} tokens)')}`);
+      } else {
+        console.log(`  ${c('dim', `Compacting ${conversationMessages.length} msgs (~${est} tokens)...`)}`);
+        const compacted = await compactMessages(conversationMessages, systemPrompt);
+        conversationMessages.length = 0;
+        conversationMessages.push(...compacted);
+        console.log(`  ${c('green', 'Compacted')} → ${conversationMessages.length} msgs (~${estimateTokens(conversationMessages)} tokens)`);
+      }
+      if (ui) ui.resume(); return;
+    }
+
     if (input === '/exit' || input === '/quit') {
       session.messages = conversationMessages;
       saveSession(session);
@@ -961,25 +1292,50 @@ export async function runRepl(opts = {}) {
     if (ui) ui.release();
 
     try {
-      spinner.start();
       const messages = [...conversationMessages];
-      const response = await apiCall(messages, systemPrompt, TOOLS);
-      spinner.stop();
+      let fullText = '';
+      let streamStarted = false;
+
+      // Auto-compact if >100K tokens
+      const estTokens = estimateTokens(messages);
+      if (estTokens > 100_000) {
+        process.stderr.write(`  ${c('dim', '[compacting context...]')}\n`);
+        const compacted = await compactMessages(messages, systemPrompt);
+        messages.length = 0;
+        messages.push(...compacted);
+      }
+
+      // Helper: streaming call with spinner management
+      async function streamCall(msgs, spinLabel) {
+        spinner.start(spinLabel);
+        streamStarted = false;
+        const resp = await apiCallStream(msgs, systemPrompt, TOOLS, {
+          onText: (chunk) => {
+            if (!streamStarted) { spinner.stop(); streamStarted = true; }
+            process.stdout.write(renderMarkdown(chunk));
+            fullText += chunk;
+          },
+          onToolUse: (name, input) => {
+            if (!streamStarted) spinner.stop();
+            process.stderr.write(`  ${c('cyan', '● ' + name)} ${c('dim', JSON.stringify(input).slice(0, 80))}\n`);
+          },
+        });
+        spinner.stop();
+        return resp;
+      }
+
+      const response = await streamCall(messages);
 
       const content = response.content || [];
-      let fullText = '';
 
-      // Show text from first response immediately
-      for (const block of content) {
-        if (block.type === 'text' && block.text) {
-          process.stdout.write(renderMarkdown(block.text));
-          fullText += block.text;
-        }
+      // Confirm unsafe tools before executing
+      let toolUses = content.filter(b => b.type === 'tool_use');
+      if (toolUses.length > 0) {
+        toolUses = await confirmTools(toolUses, autoYes, ui);
       }
 
       // Agent loop for tool_use
       let loopMessages = [...messages, { role: 'assistant', content }];
-      let toolUses = content.filter(b => b.type === 'tool_use');
       let loopCount = 0;
 
       while (toolUses.length > 0 && loopCount < 20) {
@@ -989,7 +1345,7 @@ export async function runRepl(opts = {}) {
         const toolResults = [];
         for (const tu of toolUses) {
           process.stderr.write(`  ${c('cyan', '● ' + tu.name)} ${c('dim', JSON.stringify(tu.input).slice(0, 80))}\n`);
-          const result = executeTool(tu.name, tu.input);
+          const result = await executeTool(tu.name, tu.input);
           const resultText = typeof result === 'string' ? result : JSON.stringify(result);
           toolResults.push({
             type: 'tool_result',
@@ -1000,22 +1356,17 @@ export async function runRepl(opts = {}) {
 
         loopMessages.push({ role: 'user', content: toolResults });
 
-        // Next API call
-        spinner.start('продолжаю...');
-        const nextResp = await apiCall(loopMessages, systemPrompt, TOOLS);
-        spinner.stop();
+        // Next API call — streaming
+        const nextResp = await streamCall(loopMessages, 'продолжаю...');
         const nextContent = nextResp.content || [];
         loopMessages.push({ role: 'assistant', content: nextContent });
 
-        // Show text from this step immediately
-        for (const block of nextContent) {
-          if (block.type === 'text' && block.text) {
-            process.stdout.write(renderMarkdown(block.text));
-            fullText += block.text;
-          }
-        }
-
         toolUses = nextContent.filter(b => b.type === 'tool_use');
+
+        // Confirm before next iteration
+        if (toolUses.length > 0) {
+          toolUses = await confirmTools(toolUses, autoYes, ui);
+        }
 
         if (nextResp.stop_reason === 'end_turn') break;
       }
@@ -1070,6 +1421,7 @@ if (process.argv[1]?.endsWith('gift-agent.js')) {
   const args = process.argv.slice(2);
   const resumeIdx = args.indexOf('--resume');
   const resume = resumeIdx >= 0 ? (args[resumeIdx + 1] || 'last') : null;
+  const autoYes = args.includes('--yes') || args.includes('--accept-edits');
   const prompt = args.filter((a, i) => !a.startsWith('--') && i !== resumeIdx + 1).join(' ');
 
   // Read from stdin if piped
@@ -1084,7 +1436,7 @@ if (process.argv[1]?.endsWith('gift-agent.js')) {
 
   if (finalPrompt && !resume) {
     // Single-turn mode
-    const result = await agentLoop(finalPrompt, { systemPrompt: buildSystemPrompt() });
+    const result = await agentLoop(finalPrompt, { systemPrompt: buildSystemPrompt(), autoYes });
     // Record in matrix
     const w = loadMatrix();
     recordAct(w, process.env.GIFT_AGENT_ID || 'gift-agent', process.env.USER || 'user',
@@ -1092,6 +1444,6 @@ if (process.argv[1]?.endsWith('gift-agent.js')) {
     process.exit(0);
   } else {
     // REPL mode (interactive)
-    await runRepl({ resume });
+    await runRepl({ resume, autoYes });
   }
 }
