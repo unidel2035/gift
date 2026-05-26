@@ -144,12 +144,17 @@ export class TermUI {
     }
   }
 
-  // Подтверждение [y/n] — работает и в raw, и в fallback режиме
-  async confirmAction(prompt) {
+  // Подтверждение [Y]es/[N]o/[A]ll — работает и в raw, и в fallback режиме
+  // Возвращает: 'y'=да (один раз), 'n'=нет, 'all'=да для всех (больше не спрашивать)
+  async confirmAction(prompt, opts = {}) {
+    const labels = opts.labels || { y: 'Yes — approve', n: 'No — reject', all: 'All — approve & stop asking' };
     if (this._fallbackRl) {
       return new Promise((resolve) => {
         this._fallbackRl.question(prompt, (ans) => {
-          resolve(ans.toLowerCase().trim() === 'y' || ans.toLowerCase().trim() === 'yes');
+          const key = ans.toLowerCase().trim();
+          if (key === 'a' || key === 'all') resolve('all');
+          else if (key === 'y' || key === 'yes') resolve('y');
+          else resolve('n');
         });
       });
     }
@@ -158,28 +163,33 @@ export class TermUI {
       const handler = (chunk) => {
         const ch = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         const key = ch.toLowerCase().trim();
-        if (key === 'y' || key === 'yes') {
+        if (key === 'a' || key === 'all') {
           process.stdin.removeListener('data', handler);
           process.stderr.write(key + '\n');
-          resolve(true);
+          resolve('all');
+        } else if (key === 'y' || key === 'yes') {
+          process.stdin.removeListener('data', handler);
+          process.stderr.write(key + '\n');
+          resolve('y');
         } else if (key === 'n' || key === 'no' || key === '\x1b' || key === '\x03') {
           process.stdin.removeListener('data', handler);
           process.stderr.write(key + '\n');
-          resolve(false);
+          resolve('n');
         }
+        // любой другой ввод — игнорируем, ждём y/n/a
       };
       process.stdin.on('data', handler);
     });
   }
 
-  resume() {
+  async resume() {
     this.buffer = '';
     this.cursor = 0;
     this.historyIdx = -1;
     this.savedCurrent = '';
     this.released = false;
-    // Обновить prompt из getPrompt() если есть (динамический cost)
-    if (this.getPrompt) this.promptStr = this.getPrompt();
+    // Обновить prompt из getPrompt() если есть (динамический cost/статус)
+    if (this.getPrompt) this.promptStr = await this.getPrompt();
     if (this._fallbackRl) {
       process.stdout.write('\n');
       this._fallbackRl.setPrompt(this.promptStr);

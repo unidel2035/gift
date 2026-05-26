@@ -904,32 +904,43 @@ When you complete a task, it is recorded in the matrix. Other agents will see it
 const SAFE_TOOLS = new Set(['Read', 'Grep', 'Glob']);
 
 function toolPreview(tu) {
+  const file = tu.input.file_path ? c('dim', ' → ' + (tu.input.file_path || '')) : '';
   switch (tu.name) {
     case 'Edit':
-      return `${c('dim', tu.input.file_path)}\n  - ${c('red', (tu.input.old_string || '').slice(0, 60))}\n  + ${c('green', (tu.input.new_string || '').slice(0, 60))}`;
+      return `${file}\n       ${c('red', '−')} ${c('dim', (tu.input.old_string || '').slice(0, 60))}\n       ${c('green', '+')} ${c('dim', (tu.input.new_string || '').slice(0, 60))}`;
     case 'Write':
-      return `${c('dim', tu.input.file_path)} (${tu.input.content?.length || 0} bytes)`;
+      return `${file}  ${c('dim', '(' + (tu.input.content?.length || 0) + ' bytes)')}
+       ${c('dim', (tu.input.content || '').slice(0, 80).replace(/\n/g, '↵'))}`;
     case 'Bash':
-      return c('dim', (tu.input.command || '').slice(0, 120));
+      return `${c('dim', ' → ' + (tu.input.command || '').slice(0, 120))}`;
     default:
-      return c('dim', JSON.stringify(tu.input).slice(0, 80));
+      return c('dim', ' → ' + JSON.stringify(tu.input).slice(0, 80));
   }
 }
 
 async function confirmTools(toolUses, autoYes, ui) {
   const approved = [];
+  let allYes = autoYes;
   for (const tu of toolUses) {
-    if (SAFE_TOOLS.has(tu.name) || autoYes) {
+    if (SAFE_TOOLS.has(tu.name) || allYes) {
       approved.push(tu);
       continue;
     }
-    const ok = ui
-      ? await ui.confirmAction(`  ${c('cyan', '● ' + tu.name)} ${toolPreview(tu)}\n  ${c('yellow', '[y/n]?')} `)
-      : false;
-    if (ok) {
+    if (!ui) {
+      process.stderr.write(`  ${c('red', '✗ rejected (non-interactive)')}: ${tu.name}\n`);
+      continue;
+    }
+    // Информативный prompt
+    const header = `\n  ${c('bold', '▸')} ${c('cyan', tu.name)}${toolPreview(tu)}`;
+    const prompt = `${header}\n     ${c('green', '[Y]')} yes  ${c('red', '[N]')} no  ${c('gold', '[A]')} yes to all\n  ${c('yellow', '→')} `;
+    const answer = await ui.confirmAction(prompt);
+    if (answer === 'all') {
+      allYes = true;
+      approved.push(tu);
+    } else if (answer === 'y') {
       approved.push(tu);
     } else {
-      process.stderr.write(`  ${c('red', '✗ rejected')}: ${tu.name}\n`);
+      process.stderr.write(`     ${c('red', '✗ skipped')}\n`);
     }
   }
   return approved;
@@ -1123,12 +1134,34 @@ export async function runRepl(opts = {}) {
   const conversationMessages = session.messages || [];
   let uiReady;
 
+  // Dynamic двухстрочный prompt: статус-бар + строка ввода
+  let _statusCache = '...';
+  async function refreshStatus() {
+    try {
+      const r = await fetch(`${PROXY_URL}/_proxy/status`);
+      const data = await r.json();
+      _statusCache = `${data.mode || '?'}:${data.model?.slice(0, 20) || '?'}`;
+    } catch { _statusCache = 'proxy offline'; }
+  }
+
+  function buildPrompt() {
+    return `${c('dim', `  ${_statusCache}    ${session.id}    /help — команды`)}\n${c('green', '❯')} `;
+  }
+
+  await refreshStatus();
+  let _promptCache = buildPrompt();
+
   // Try TermUI (raw mode), fallback to readline
   let ui;
   try {
     const { TermUI } = await import('./term-ui.js');
     ui = new TermUI({
-      prompt: `${c('green', '❯')} `,
+      prompt: _promptCache,
+      getPrompt: () => {
+        refreshStatus(); // fire-and-forget async refresh
+        _promptCache = buildPrompt();
+        return _promptCache;
+      },
       slashCommands,
       onLine: (line) => handleInput(line),
       onClose: () => {
