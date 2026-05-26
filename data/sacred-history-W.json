@@ -34,7 +34,7 @@
   ],
   "n": 25,
   "nd": 4,
-  "actsCount": 270,
+  "actsCount": 275,
   "W": [
     [
       1.5119049549102783,
@@ -729,7 +729,7 @@
       34,
       32,
       35,
-      0,
+      34,
       34,
       26,
       26,
@@ -1009,9 +1009,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpklr966-0"
+        "giftId": "gift-mplzyy9a-0"
       },
-      "declinedAt": "2026-05-25T02:43:55.566Z"
+      "declinedAt": "2026-05-26T02:09:35.470Z"
     },
     {
       "act": {
@@ -1021,9 +1021,9 @@
         "weight": 8,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpklr966-1"
+        "giftId": "gift-mplzyy9a-1"
       },
-      "declinedAt": "2026-05-25T02:43:55.566Z"
+      "declinedAt": "2026-05-26T02:09:35.470Z"
     },
     {
       "act": {
@@ -1033,9 +1033,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpklr966-2"
+        "giftId": "gift-mplzyy9a-2"
       },
-      "declinedAt": "2026-05-25T02:43:55.566Z"
+      "declinedAt": "2026-05-26T02:09:35.470Z"
     }
   ],
   "pending": [
@@ -1047,9 +1047,9 @@
         "weight": 8,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpklr96a-0"
+        "giftId": "gift-mplzyy9d-0"
       },
-      "pendingAt": "2026-05-25T02:43:55.571Z"
+      "pendingAt": "2026-05-26T02:09:35.473Z"
     },
     {
       "act": {
@@ -1059,9 +1059,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpklr96b-1"
+        "giftId": "gift-mplzyy9d-1"
       },
-      "pendingAt": "2026-05-25T02:43:55.571Z"
+      "pendingAt": "2026-05-26T02:09:35.473Z"
     },
     {
       "act": {
@@ -1071,14 +1071,26 @@
         "weight": 7,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpklr96b-2"
+        "giftId": "gift-mplzyy9d-2"
       },
-      "pendingAt": "2026-05-25T02:43:55.571Z"
+      "pendingAt": "2026-05-26T02:09:35.473Z"
+    },
+    {
+      "act": {
+        "giverId": "Отец",
+        "receiverId": "Земля",
+        "type": "grace",
+        "weight": 8,
+        "irreversible": true,
+        "reception": "pending",
+        "giftId": "gift-mplzyyec-3"
+      },
+      "pendingAt": "2026-05-26T02:09:35.652Z"
     }
   ],
   "symphonies": [],
   "metanoiaActs": [],
-  "createdAt": "2026-05-25T02:43:55.417Z",
-  "snapshotAt": "2026-05-25T02:43:55.851Z",
+  "createdAt": "2026-05-26T02:09:35.366Z",
+  "snapshotAt": "2026-05-26T02:09:35.806Z",
   "schema": "v2-energeia"
 }
