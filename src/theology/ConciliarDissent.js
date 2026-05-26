@@ -237,6 +237,13 @@ export class Polyphony {
     for (const v of this.voices) {
       const prefix = { kata: '✗', para: '≈', hyper: '↑' }[v.logos] || '•';
       lines.push(`  ${prefix} ${v.persona.padEnd(14)} [${v.authority.toFixed(1)}]  ${v.content}`);
+      // Nested reasoning steps (если есть)
+      if (v.steps && v.steps.length > 0) {
+        for (const s of v.steps) {
+          const icon = { warning: '⚠', proposal: '→', reasoning: '∵', step: '·', point: '·', statement: '…' }[s.type] || '·';
+          lines.push(`      ${icon} ${s.content.slice(0, 100)}`);
+        }
+      }
     }
     return lines.join('\n');
   }

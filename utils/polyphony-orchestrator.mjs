@@ -31,6 +31,72 @@ import { ConciliarSilence } from '../src/theology/ConciliarSilence.js';
 import { cleanEnv } from './clean-env.mjs';
 
 // ─────────────────────────────────────────────────────
+// Nested reasoning steps — прозрачность рассуждений
+// (вдохновлено Formal AI: Vec<NestedStep>)
+// ─────────────────────────────────────────────────────
+
+/**
+ * Парсит текст ответа на шаги рассуждения.
+ * Ищет нумерованные списки, маркированные пункты, «Потому что...», «Вывод:» и т.д.
+ * @param {string} text
+ * @returns {Array<{type: string, content: string}>}
+ */
+function parseReasoningSteps(text) {
+  if (!text || text.startsWith('[молчит')) return [];
+  const steps = [];
+
+  // Нумерованные шаги: "1. ...", "2. ..."
+  const numbered = text.match(/^\s*\d+[.)]\s+.+/gm);
+  if (numbered && numbered.length >= 2) {
+    for (const line of numbered) {
+      steps.push({ type: 'step', content: line.replace(/^\s*\d+[.)]\s+/, '').trim() });
+    }
+    return steps;
+  }
+
+  // Маркированные: "- ...", "• ..."
+  const bulleted = text.match(/^\s*[-•*]\s+.+/gm);
+  if (bulleted && bulleted.length >= 2) {
+    for (const line of bulleted) {
+      steps.push({ type: 'point', content: line.replace(/^\s*[-•*]\s+/, '').trim() });
+    }
+    return steps;
+  }
+
+  // Предложения с маркерами рассуждения
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.length > 10);
+  for (const s of sentences) {
+    if (/потому|поскольку|следовательно|вывод|итого|therefore|because|conclusion/i.test(s)) {
+      steps.push({ type: 'reasoning', content: s.trim() });
+    } else if (/риск|опасн|слабое|проблем|warning|risk/i.test(s)) {
+      steps.push({ type: 'warning', content: s.trim() });
+    } else if (/предлагаю|рекомендую|нужно|следует|suggest|recommend/i.test(s)) {
+      steps.push({ type: 'proposal', content: s.trim() });
+    }
+  }
+
+  // Если ничего не нашли — один шаг = весь текст
+  if (steps.length === 0 && text.length > 0) {
+    steps.push({ type: 'statement', content: text.slice(0, 200) });
+  }
+
+  return steps;
+}
+
+/**
+ * Content-hash (FNV-1a 32-bit) для дедупликации.
+ * Вдохновлено Formal AI: content-addressed writes.
+ */
+function contentHash(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+// ─────────────────────────────────────────────────────
 // Источники голосов
 // ─────────────────────────────────────────────────────
 
@@ -62,9 +128,13 @@ export const VoiceSource = {
 
         try {
           const out = await runClaudePrint(prompt, { agentType, timeout });
-          return { persona, logos, content: out.trim() };
+          const content = out.trim();
+          // Nested reasoning steps (вдохновлено Formal AI):
+          // Парсим ответ на шаги рассуждения для прозрачности
+          const steps = parseReasoningSteps(content);
+          return { persona, logos, content, steps, timestamp: Date.now() };
         } catch (e) {
-          return { persona, logos, content: `[молчит: ${e.message}]` };
+          return { persona, logos, content: `[молчит: ${e.message}]`, steps: [], timestamp: Date.now() };
         }
       },
     };
@@ -100,9 +170,10 @@ export const VoiceSource = {
           // DeepSeek-R1 пишет рассуждения в <think>…</think> — отрезаем
           let content = (data.response || '').trim();
           content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
-          return { persona, logos, content: content || '[молчит: пустой ответ]' };
+          const steps = parseReasoningSteps(content);
+          return { persona, logos, content: content || '[молчит: пустой ответ]', steps, timestamp: Date.now() };
         } catch (e) {
-          return { persona, logos, content: `[молчит: ${e.message}]` };
+          return { persona, logos, content: `[молчит: ${e.message}]`, steps: [], timestamp: Date.now() };
         }
       },
     };

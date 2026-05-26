@@ -134,34 +134,57 @@ try {
     filesChanged.push({ file, insertions: i, deletions: d });
   }
 } catch {}
-actLog.push({
-  ts:          new Date().toISOString(),
-  from:        GIVER,
-  to:          receiver,
-  type:        'code',
-  weight:      effectiveWeight,
-  content:     description,
-  linkedIssue: linkedIssue ?? null,
-  commit:      commitHash,
-  kenosis:     kenosisFlag,
-  kenosisScore: kenosisResult.score,
-  // ── Authorship manifest: среда знает, кто что создал ──
-  files:       filesChanged.map(f => f.file),
-  filesCount:  filesChanged.length,
-  insertions,
-  deletions,
-});
-if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
+// Content-hash дедупликация (вдохновлено Formal AI: FNV-1a content-addressed writes)
+const actKey = `${GIVER}|${receiver}|${commitHash}|${description}`;
+let fnvHash = 0x811c9dc5;
+for (let i = 0; i < actKey.length; i++) {
+  fnvHash ^= actKey.charCodeAt(i);
+  fnvHash = (fnvHash * 0x01000193) >>> 0;
+}
+const contentId = fnvHash.toString(16);
+
+// Не дублировать если этот акт уже записан (перезапуск хука, повторный вызов)
+if (!actLog.some(a => a.contentId === contentId)) {
   actLog.push({
     ts:          new Date().toISOString(),
-    from:        receiver,
-    to:          GIVER,
-    type:        'reception',
-    weight:      8,
-    content:     `λήψις кода closes #${linkedIssue}`,
-    linkedIssue: linkedIssue,
+    from:        GIVER,
+    to:          receiver,
+    type:        'code',
+    weight:      effectiveWeight,
+    content:     description,
+    linkedIssue: linkedIssue ?? null,
     commit:      commitHash,
+    kenosis:     kenosisFlag,
+    kenosisScore: kenosisResult.score,
+    contentId,
+    // ── Authorship manifest: среда знает, кто что создал ──
+    files:       filesChanged.map(f => f.file),
+    filesCount:  filesChanged.length,
+    insertions,
+    deletions,
   });
+}
+if (linkedIssue && receiver !== '_koinon' && receiver !== '_abyss') {
+  const recKey = `${receiver}|${GIVER}|${commitHash}|reception|${linkedIssue}`;
+  let recHash = 0x811c9dc5;
+  for (let i = 0; i < recKey.length; i++) {
+    recHash ^= recKey.charCodeAt(i);
+    recHash = (recHash * 0x01000193) >>> 0;
+  }
+  const recId = recHash.toString(16);
+  if (!actLog.some(a => a.contentId === recId)) {
+    actLog.push({
+      ts:          new Date().toISOString(),
+      from:        receiver,
+      to:          GIVER,
+      type:        'reception',
+      weight:      8,
+      content:     `λήψις кода closes #${linkedIssue}`,
+      linkedIssue: linkedIssue,
+      commit:      commitHash,
+      contentId:   recId,
+    });
+  }
 }
 if (actLog.length > 500) actLog.splice(0, actLog.length - 500);
 writeFileSync(ACT_INDEX, JSON.stringify(actLog, null, 2));
