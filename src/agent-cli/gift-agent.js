@@ -1160,7 +1160,7 @@ export async function runRepl(opts = {}) {
   let uiReady;
 
   function buildPrompt() {
-    return `${c('green', '>')} `;
+    return `${c('dim', `  ${_statusCache}    ${session.id}    /help`)}\n${c('green', '>')} `;
   }
 
   let _promptCache = buildPrompt();

@@ -196,8 +196,14 @@ export class TermUI {
       this._fallbackRl.prompt();
       return;
     }
-    process.stdout.write('\n');
-    this._renderPrompt();
+    // Рисуем промпт напрямую (старый уже стёрт release'ом).
+    // _renderPrompt() не вызываем — она для keystroke-обновлений
+    // и предполагает что курсор на позиции промпта.
+    const lines = this.promptStr.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      process.stdout.write('\r\x1b[2K' + lines[i] + (i < lines.length - 1 ? '\n' : ''));
+    }
+    // Оставляем курсор в конце последней строки промпта
   }
 
   // ── рендер (всё батчится в один process.stdout.write) ────────────────
