@@ -1033,7 +1033,6 @@ export async function agentLoop(prompt, opts = {}) {
       },
       onToolUse: (name, input) => {
         if (onToolUse) onToolUse(name, input);
-        else process.stderr.write(`${c('cyan', '● ' + name)}${c('dim', ' ' + JSON.stringify(input).slice(0, 80))}\n`);
       },
     });
     if (md) md.flush();
@@ -1369,9 +1368,8 @@ export async function runRepl(opts = {}) {
             md.write(chunk);
             fullText += chunk;
           },
-          onToolUse: (name, input) => {
-            if (!streamStarted) spinner.stop();
-            process.stderr.write(`  ${c('cyan', '● ' + name)} ${c('dim', JSON.stringify(input).slice(0, 80))}\n`);
+          onToolUse: (name) => {
+            spinner.update(name);
           },
         });
         md.flush();
