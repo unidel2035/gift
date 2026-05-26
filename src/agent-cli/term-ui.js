@@ -55,6 +55,7 @@ export class TermUI {
     this.historyIdx    = -1;    // -1 = свежая строка; 0 = последняя в history
     this.savedCurrent  = '';    // что было набрано до ↑
     this._firstPaint   = true;  // первый рендер — не стираем предыдущий промпт
+    this._startedAt    = Date.now(); // защита от мусорного ввода при старте
     this._dataHandler  = this._onData.bind(this);
   }
 
@@ -86,6 +87,14 @@ export class TermUI {
     }
     process.stdin.setEncoding('utf8');
     process.stdin.resume();
+    // Слить оставшийся в stdin мусор от родительского процесса
+    // (gift CLI readline оставляет \n после выбора меню)
+    let drained;
+    while ((drained = process.stdin.read()) !== null) {
+      if (process.env.GIFT_DEBUG) {
+        process.stderr.write(`[term-ui] drained: ${JSON.stringify(drained)}\n`);
+      }
+    }
     process.stdin.on('data', this._dataHandler);
     this._renderPrompt();
   }
@@ -210,20 +219,27 @@ export class TermUI {
     const total = [...this.buffer].length;
 
     // 1) Подняться к первой строке промпта, стереть промпт + меню вниз
-    const upToFirst = promptLines.length - 1;
-    const totalClear = promptLines.length + this.menuRowsDrawn;
-    if (totalClear > 0) {
-      out.push(`\x1b[${upToFirst}A`);          // вверх к первой строке промпта
-      for (let i = 0; i < totalClear; i++) {
-        out.push('\r' + CLEAR_LINE);
-        if (i < totalClear - 1) out.push('\n'); // вниз, стирая строки
+    // Первый рендер — не стираем (нечего стирать, курсор в конце баннера)
+    if (this._firstPaint) {
+      this._firstPaint = false;
+      // Просто перейдём на новую строку после баннера
+      out.push('\n');
+    } else {
+      const upToFirst = promptLines.length - 1;
+      const totalClear = promptLines.length + this.menuRowsDrawn;
+      if (totalClear > 0) {
+        out.push(`\x1b[${upToFirst}A`);          // вверх к первой строке промпта
+        for (let i = 0; i < totalClear; i++) {
+          out.push('\r' + CLEAR_LINE);
+          if (i < totalClear - 1) out.push('\n'); // вниз, стирая строки
+        }
+        // После цикла курсор на последней стёртой строке.
+        // Подняться обратно к первой строке промпта.
+        const backUp = upToFirst + this.menuRowsDrawn;
+        if (backUp > 0) out.push(`\x1b[${backUp}A`);
       }
-      // После цикла курсор на последней стёртой строке.
-      // Подняться обратно к первой строке промпта.
-      const backUp = upToFirst + this.menuRowsDrawn;
-      if (backUp > 0) out.push(`\x1b[${backUp}A`);
+      this.menuRowsDrawn = 0;
     }
-    this.menuRowsDrawn = 0;
 
     // 2) Нарисовать промпт (построчно вниз)
     for (let i = 0; i < promptLines.length; i++) {
@@ -408,6 +424,10 @@ export class TermUI {
 
     // Enter
     if (ch === '\r' || ch === '\n') {
+      // Защита: игнорируем пустой Enter в первую секунду (мусор из родительского stdin)
+      if (this.buffer === '' && Date.now() - this._startedAt < 1000) {
+        return;
+      }
       // Multi-line: если буфер заканчивается '\' — заменить на newline,
       // продолжить ввод (как bash heredoc или \-continuation).
       if (this.buffer.endsWith('\\') && !this._menuActive()) {
