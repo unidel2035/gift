@@ -127,21 +127,18 @@ export class TermUI {
     this.released = true;
     if (this._fallbackRl) return;
     this._eraseMenu();
-    // Clear all prompt lines
-    const promptLines = this.promptStr.split('\n');
-    if (promptLines.length > 1) {
-      const out = [];
-      out.push(`\x1b[${promptLines.length - 1}A`);
-      for (let i = 0; i < promptLines.length; i++) {
-        out.push('\r' + CLEAR_LINE);
-        if (i < promptLines.length - 1) out.push('\n');
-      }
-      out.push(`\x1b[${promptLines.length - 1}A`);
+    // Стираем все строки промпта.
+    // После Enter курсор на строку НИЖЕ промпта — поднимаемся на N строк.
+    const lines = this.promptStr.split('\n');
+    const out = [];
+    out.push(`\x1b[${lines.length}A`);       // up to first prompt line
+    for (let i = 0; i < lines.length + 1; i++) {
       out.push('\r' + CLEAR_LINE);
-      process.stdout.write(out.join(''));
-    } else {
-      process.stdout.write('\r' + CLEAR_LINE);
+      if (i < lines.length) out.push('\n'); // \n except last iteration
     }
+    out.push(`\x1b[${lines.length}A`);       // back up to first prompt line
+    out.push('\r' + CLEAR_LINE);
+    process.stdout.write(out.join(''));
   }
 
   // Подтверждение [Y]es/[N]o/[A]ll — работает и в raw, и в fallback режиме
@@ -209,92 +206,80 @@ export class TermUI {
   // ── рендер (всё батчится в один process.stdout.write) ────────────────
   _renderPrompt() {
     const out = [];
-    // 1) erase old menu
-    if (this.menuRowsDrawn > 0) {
-      out.push(SAVE_CURSOR);
-      for (let i = 0; i < this.menuRowsDrawn; i++) {
-        out.push('\n' + CLEAR_LINE);
-      }
-      out.push(RESTORE_CURS);
-      this.menuRowsDrawn = 0;
-    }
-
-    // 2) erase old prompt (handle multi-line prompt)
     const promptLines = this.promptStr.split('\n');
-    if (promptLines.length > 1) {
-      // Move up to first line of prompt area, then clear all lines
-      out.push(`\x1b[${promptLines.length - 1}A`);
-      for (let i = 0; i < promptLines.length; i++) {
-        out.push('\r' + CLEAR_LINE);
-        if (i < promptLines.length - 1) out.push('\n');
-      }
-      // Back up to first line again for redraw
-      out.push(`\x1b[${promptLines.length - 1}A`);
-    } else {
-      out.push('\r' + CLEAR_LINE);
-    }
-
-    // 3) prompt + buffer (line by line for multi-line)
-    for (let i = 0; i < promptLines.length; i++) {
-      if (i === promptLines.length - 1) {
-        // Last line: prompt + buffer
-        out.push('\r' + CLEAR_LINE + promptLines[i] + this.buffer);
-      } else {
-        out.push('\r' + CLEAR_LINE + promptLines[i] + '\n');
-      }
-    }
-
-    // 4) cursor position
     const total = [...this.buffer].length;
+
+    // 1) Подняться к первой строке промпта, стереть промпт + меню вниз
+    const upToFirst = promptLines.length - 1;
+    const totalClear = promptLines.length + this.menuRowsDrawn;
+    if (totalClear > 0) {
+      out.push(`\x1b[${upToFirst}A`);          // вверх к первой строке промпта
+      for (let i = 0; i < totalClear; i++) {
+        out.push('\r' + CLEAR_LINE);
+        if (i < totalClear - 1) out.push('\n'); // вниз, стирая строки
+      }
+      // После цикла курсор на последней стёртой строке.
+      // Подняться обратно к первой строке промпта.
+      const backUp = upToFirst + this.menuRowsDrawn;
+      if (backUp > 0) out.push(`\x1b[${backUp}A`);
+    }
+    this.menuRowsDrawn = 0;
+
+    // 2) Нарисовать промпт (построчно вниз)
+    for (let i = 0; i < promptLines.length; i++) {
+      const isLast = i === promptLines.length - 1;
+      out.push('\r' + CLEAR_LINE + promptLines[i] + (isLast ? this.buffer : '\n'));
+    }
+
+    // 3) Позиция курсора внутри буфера
     const back = total - this.cursor;
     if (back > 0) out.push(`\x1b[${back}D`);
 
-    // 5) menu
+    // 4) Меню — рисуется вниз от курсора, потом возврат
     if (this.buffer.startsWith('/')) {
-      out.push(this._buildMenu());
-    }
-    // Один write — никакого мерцания
-    process.stdout.write(out.join(''));
-  }
-
-  _buildMenu() {
-    const matches = this._filterMenu();
-    if (this.menuSelection >= matches.length) {
-      this.menuSelection = Math.max(0, matches.length - 1);
-    }
-    const out = [SAVE_CURSOR];
-    let rows = 0;
-    if (matches.length) {
-      const widthCmd = Math.max(...this.slashCommands.map(s => s.cmd.length)) + 2;
-      for (let i = 0; i < matches.length; i++) {
-        const item = matches[i];
-        const isSel = i === this.menuSelection;
-        const arrow = isSel ? c('gold', '▸ ') : '  ';
-        const cmd   = isSel
-          ? '\x1b[1m\x1b[33m' + item.cmd.padEnd(widthCmd) + '\x1b[0m'
-          : c('cyan', item.cmd.padEnd(widthCmd));
-        const desc  = isSel
-          ? '\x1b[33m— ' + item.desc + '\x1b[0m'
-          : c('dim', '— ' + item.desc);
-        out.push('\n' + arrow + cmd + desc);
-        rows++;
+      const matches = this._filterMenu();
+      if (this.menuSelection >= matches.length) {
+        this.menuSelection = Math.max(0, matches.length - 1);
       }
-    } else {
-      out.push('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти)'));
-      rows = 1;
+      let rows = 0;
+      if (matches.length) {
+        const widthCmd = Math.max(...this.slashCommands.map(s => s.cmd.length)) + 2;
+        for (let i = 0; i < matches.length; i++) {
+          const item = matches[i];
+          const isSel = i === this.menuSelection;
+          const arrow = isSel ? c('gold', '▸ ') : '  ';
+          const cmd   = isSel
+            ? '\x1b[1m\x1b[33m' + item.cmd.padEnd(widthCmd) + '\x1b[0m'
+            : c('cyan', item.cmd.padEnd(widthCmd));
+          const desc  = isSel
+            ? '\x1b[33m— ' + item.desc + '\x1b[0m'
+            : c('dim', '— ' + item.desc);
+          out.push('\n' + arrow + cmd + desc);
+          rows++;
+        }
+      } else {
+        out.push('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти)'));
+        rows = 1;
+      }
+      this.menuRowsDrawn = rows;
+      // Вернуть курсор на строку ввода
+      if (rows > 0) out.push(`\x1b[${rows}A`);
+      const promptEnd = [...promptLines[promptLines.length - 1]].length + this.cursor;
+      // \r + вправо на promptEnd символов
+      if (promptEnd > 0) out.push(`\r\x1b[${promptEnd}C`);
     }
-    this.menuRowsDrawn = rows;
-    out.push(RESTORE_CURS);
-    return out.join('');
+
+    process.stdout.write(out.join(''));
   }
 
   _eraseMenu() {
     if (this.menuRowsDrawn === 0) return;
-    const out = [SAVE_CURSOR];
+    // Стереть строки меню вниз от курсора и вернуться
+    const out = [];
     for (let i = 0; i < this.menuRowsDrawn; i++) {
       out.push('\n' + CLEAR_LINE);
     }
-    out.push(RESTORE_CURS);
+    out.push(`\x1b[${this.menuRowsDrawn}A`);
     process.stdout.write(out.join(''));
     this.menuRowsDrawn = 0;
   }

@@ -1160,7 +1160,7 @@ export async function runRepl(opts = {}) {
   let uiReady;
 
   function buildPrompt() {
-    return `${c('dim', `  ${_statusCache}    ${session.id}    /help`)}\n${c('green', '>')} `;
+    return `${c('dim', '────────────────────────────────────────────────')}\n${c('dim', `  ${_statusCache}    ${session.id}    /help`)}\n${c('green', '>')} `;
   }
 
   let _promptCache = buildPrompt();
@@ -1476,7 +1476,7 @@ export async function runRepl(opts = {}) {
       console.error(`  ${c('red', 'Error:')} ${e.message}${cause ? ' (' + cause + ')' : ''}`);
     }
 
-    process.stdout.write(`\n${c('dim', '────────────────────────────────────────────────')}\n`);
+    process.stdout.write('\n');
     if (ui) ui.resume();
   }
 }
