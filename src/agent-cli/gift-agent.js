@@ -1125,8 +1125,7 @@ export async function runRepl(opts = {}) {
 
   ${c('bold', 'gift-agent')} ${c('dim', 'v0.1.0')}
   ${c('dim', process.cwd())}
-  ${c('dim', `matrix: ${actCount} acts, ${personCount} persons | session: ${session.id}`)}
-
+  ${c('dim', `backend: ${_statusCache}  |  matrix: ${actCount} acts, ${personCount} persons  |  ${session.id}`)}
   ${c('dim', '/switch ra|ds  /sessions  /matrix  /help  Ctrl+D — exit')}
 
 `);
@@ -1160,7 +1159,7 @@ export async function runRepl(opts = {}) {
   }
 
   function buildPrompt() {
-    return `${c('dim', _statusCache)} ${c('green', '>')} `;
+    return `${c('green', '>')} `;
   }
 
   await refreshStatus();
@@ -1477,7 +1476,7 @@ export async function runRepl(opts = {}) {
       console.error(`  ${c('red', 'Error:')} ${e.message}${cause ? ' (' + cause + ')' : ''}`);
     }
 
-    process.stdout.write(`\n${c('dim', '────────────────────────────────────────────────────────')}\n`);
+    process.stdout.write(`\n${c('dim', '────────────────────────────────────────────────')}\n`);
     if (ui) ui.resume();
   }
 }
