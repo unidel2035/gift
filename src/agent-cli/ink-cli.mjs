@@ -521,8 +521,7 @@ _app.waitUntilExit().then(() => {
   if (activeSessionId) {
     process.stdout.write(
       `\n  Продолжить эту сессию:\n` +
-      `  \x1b[36mGIFT_RESUME=${activeSessionId} gift\x1b[0m\n` +
-      `  (или: \x1b[2mgift-agent --resume ${activeSessionId}\x1b[0m)\n\n`,
+      `  \x1b[36mgift --resume ${activeSessionId}\x1b[0m\n\n`,
     );
   }
   process.exit(0);   // MCP stdio-дети держат event loop — выходим явно

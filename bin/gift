@@ -325,6 +325,11 @@ let [cmd, sub, ...rest] = process.argv.slice(2);
 if (cmd === '--version' || cmd === '-v') { console.log(readVersion()); process.exit(0); }
 if (cmd === '--help' || cmd === '-h') { help(); process.exit(0); }
 if (cmd === 'help') { help(sub); process.exit(0); }
+// gift --resume <id> / gift resume <id> → продолжить сессию агента (code-режим)
+if (cmd === '--resume' || cmd === 'resume') {
+  if (sub) process.env.GIFT_RESUME = sub;
+  cmd = 'start'; sub = undefined; rest = [];
+}
 if (cmd === 'completion') {
   if (sub === 'bash') { console.log(bashCompletion()); process.exit(0); }
   console.error('usage: gift completion bash');
@@ -339,6 +344,11 @@ if (!cmd) {
     help();
     process.exit(0);
   }
+
+  // GIFT_RESUME=<id> gift → сразу продолжить сессию в code-режиме (без меню)
+  if (process.env.GIFT_RESUME) {
+    cmd = 'start';
+  } else {
 
   // Интерактивный выбор режима
   const { createInterface } = await import('node:readline');
@@ -360,6 +370,7 @@ if (!cmd) {
     cmd = 'chat';
   } else {
     cmd = 'start';
+  }
   }
 }
 
