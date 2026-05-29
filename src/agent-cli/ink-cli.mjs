@@ -276,7 +276,12 @@ function App() {
     setBusy(true); setStream(''); setActivity('');
     let streamed = '';
     try {
-      await runTurn(messagesRef.current, buildSystemPrompt(), {
+      const mcpHint = mcpRef.current.tools.length
+        ? `\n\nТебе доступны MCP-инструменты (${mcpRef.current.tools.length}): ` +
+          mcpRef.current.tools.slice(0, 40).map(t => t.name).join(', ') +
+          `. Используй их когда уместно (браузер, телеграм, документация и т.д.).`
+        : '';
+      await runTurn(messagesRef.current, buildSystemPrompt() + mcpHint, {
         onText: (c) => { streamed += c; setStream(streamed); setActivity(''); },
         onAssistant: (t, usage) => {
           streamed = '';
@@ -312,11 +317,17 @@ function App() {
     if (key.ctrl && input === 'd') { if (!buf) exit(); return; }
 
     if (key.return) {
+      let line = buf;
       if (menuOpen && menuMatches.length && buf.indexOf(' ') === -1) {
         const pick = menuMatches[Math.min(sel, menuMatches.length - 1)];
-        if (pick && pick.cmd !== buf) { setBuf(pick.cmd + (pick.arg ? ' ' : '')); setCur(pick.cmd.length + (pick.arg ? 1 : 0)); if (pick.arg) return; }
+        if (pick) {
+          // команда требует аргумент и он ещё не введён → подставить и ждать ввода
+          if (pick.arg && pick.cmd === buf.trim()) { setBuf(pick.cmd + ' '); setCur(pick.cmd.length + 1); return; }
+          if (pick.arg && pick.cmd !== buf.trim()) { setBuf(pick.cmd + ' '); setCur(pick.cmd.length + 1); return; }
+          line = pick.cmd;   // команда без аргумента — отправляем ВЫБРАННУЮ (не устаревший buf)
+        }
       }
-      submit(buf);
+      submit(line);
       return;
     }
     if (key.upArrow) {
