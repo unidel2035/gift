@@ -1,8 +1,8 @@
 #!/bin/bash
 # gift-code — DeepSeek + КИС + хуки gift. Одна команда.
-#   gift-code              — DeepSeek (как раньше)
-#   gift-code fed          — ФЕДЕРАЦИЯ: opus→настоящий Opus 4.8, sonnet→DeepSeek Pro,
-#                            haiku→Flash (роутинг по модели в одной сессии)
+#   gift-code              — ФЕДЕРАЦИЯ (по умолчанию): opus→настоящий Opus 4.8,
+#                            sonnet→DeepSeek Pro, haiku→Flash (роутинг в одной сессии)
+#   gift-code ds           — чистый DeepSeek (опт-аут)
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROXY_SCRIPT="$HOME/deepclaude/proxy/start-proxy.js"
 # ключи — из ~/.deepclaude.env (НЕ хардкодим секрет в репозитории)
@@ -12,10 +12,11 @@ if [ -z "$DEEPSEEK_API_KEY" ]; then
   exit 1
 fi
 
-# режим бэкенда
-BACKEND="deepseek"
+# режим бэкенда — ФЕДЕРАЦИЯ по умолчанию. Опт-аут на чистый DeepSeek: `gift-code ds`.
+BACKEND="federation"
 case "$1" in
   fed|federation|--federation) BACKEND="federation"; shift ;;
+  ds|deepseek)                 BACKEND="deepseek";   shift ;;
 esac
 
 # Убить старый прокси
