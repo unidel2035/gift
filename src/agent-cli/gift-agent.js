@@ -664,7 +664,7 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
   // Use native fetch for streaming (proxy is localhost — resp.body is ReadableStream).
   // Таймаут, чтобы зависший апстрим не вешал агента навсегда.
   const _ac = new AbortController();
-  const _to = setTimeout(() => _ac.abort(new Error('stream timeout 180s')), 180000);
+  const _to = setTimeout(() => _ac.abort(new Error('stream timeout 90s')), 90000);
   let resp;
   try {
     resp = await fetch(`${PROXY_URL}/v1/messages`, {
@@ -679,7 +679,7 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
     });
   } catch (e) {
     clearTimeout(_to);
-    throw new Error(`API запрос прерван: ${e?.message || e}`);
+    throw new Error(`модель не ответила (${e?.message || e}). Попробуй /switch ds, короче запрос или меньше файлов.`);
   }
 
   if (!resp.ok) {

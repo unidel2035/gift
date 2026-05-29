@@ -66,7 +66,7 @@ async function runTurn(messages, system, cb, opts = {}) {
   while (turns++ < 30) {
     // Защита от распухания контекста (агент начитал много файлов) → зависание модели.
     try {
-      if (estimateTokens(messages) > 80000) {
+      if (estimateTokens(messages) > 50000) {
         cb.onText && cb.onText('\n[сжимаю контекст…]\n');
         const compacted = await compactMessages(messages, system);
         messages.length = 0; messages.push(...compacted);
@@ -285,10 +285,9 @@ function App() {
     setBusy(true); setStream(''); setActivity('');
     let streamed = '';
     try {
-      const mcpHint = mcpRef.current.tools.length
-        ? `\n\nТебе доступны MCP-инструменты (${mcpRef.current.tools.length}): ` +
-          mcpRef.current.tools.slice(0, 40).map(t => t.name).join(', ') +
-          `. Используй их когда уместно (браузер, телеграм, документация и т.д.).`
+      const mcpHint = (mcpRef.current.ready && mcpRef.current.ready.length)
+        ? `\n\nДоступны MCP-инструменты от серверов: ${mcpRef.current.ready.map(r => r.name).join(', ')} ` +
+          `(имена вида mcp__<сервер>__<tool>: браузер, телеграм, документация). Вызывай когда уместно.`
         : '';
       await runTurn(messagesRef.current, buildSystemPrompt() + mcpHint, {
         onText: (c) => { streamed += c; setStream(streamed); setActivity(''); },
@@ -389,7 +388,7 @@ function App() {
         ${(it) => html`<${TItem} key=${it.id} it=${it} cols=${cols} />`}
       <//>
 
-      ${stream ? html`<${Box} marginTop=${1}><${Text} color="white">${stream}<//><//>` : null}
+      ${stream ? html`<${Box} marginTop=${1}><${Text} color="white">${stream.split('\n').slice(-10).join('\n')}<//><//>` : null}
 
       ${busy ? html`<${Box}><${Text} color="yellow">${SPN[spin % SPN.length]} <//><${Text} color=${activity ? 'magenta' : undefined} dimColor=${!activity}>${activity || 'думаю…'}<//><//>` : null}
 
