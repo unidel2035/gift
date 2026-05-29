@@ -149,6 +149,7 @@ function App() {
     activeSessionId = s.id;
   }
   const mcpRef = useRef({ tools: [], call: null });
+  const queuedRef = useRef(null);   // сообщение, набранное во время генерации
   const [mcp, setMcp] = useState({ ready: [], count: 0, connecting: true });
 
   const add = useCallback((it) => setItems(prev => [...prev, item(it)]), []);
@@ -345,16 +346,17 @@ function App() {
     // сессия
     try { sessionRef.current.messages = messagesRef.current; saveSession(sessionRef.current); } catch {}
     refreshStatus();
+    // отложенное сообщение из очереди (набрано во время генерации)
+    if (queuedRef.current) { const q = queuedRef.current; queuedRef.current = null; setTimeout(() => submit(q), 30); }
   }
 
   useInput((input, key) => {
-    if (busy) { if (key.ctrl && input === 'c') exit(); return; }
     if (key.ctrl && input === 'c') { exit(); return; }
-    if (key.ctrl && input === 'd') { if (!buf) exit(); return; }
+    if (key.ctrl && input === 'd') { if (!buf && !busy) exit(); return; }
 
     if (key.return) {
       let line = buf;
-      if (menuOpen && menuMatches.length && buf.indexOf(' ') === -1) {
+      if (!busy && menuOpen && menuMatches.length && buf.indexOf(' ') === -1) {
         const pick = menuMatches[Math.min(sel, menuMatches.length - 1)];
         if (pick) {
           // команда требует аргумент и он ещё не введён → подставить и ждать ввода
@@ -362,6 +364,11 @@ function App() {
           if (pick.arg && pick.cmd !== buf.trim()) { setBuf(pick.cmd + ' '); setCur(pick.cmd.length + 1); return; }
           line = pick.cmd;   // команда без аргумента — отправляем ВЫБРАННУЮ (не устаревший buf)
         }
+      }
+      // Во время генерации — ставим в очередь (отправится после текущего ответа)
+      if (busy) {
+        if (line.trim()) { queuedRef.current = (queuedRef.current ? queuedRef.current + '\n' : '') + line; setBuf(''); setCur(0); add({ kind: 'sys', text: '⏳ в очереди: ' + line.slice(0, 60) }); }
+        return;
       }
       submit(line);
       return;
