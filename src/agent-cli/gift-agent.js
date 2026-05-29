@@ -1094,7 +1094,7 @@ export async function agentLoop(prompt, opts = {}) {
 
 // Экспорт переиспользуемой логики для Ink-CLI (ink-cli.mjs).
 export {
-  apiCallStream, executeTool, TOOLS, SAFE_TOOLS, buildSystemPrompt,
+  apiCallStream, executeTool, TOOLS, SAFE_TOOLS, buildSystemPrompt, renderMarkdown,
   immuneScan, loadMatrix, saveMatrix, recordAct, matrixSummary,
   newSessionId, saveSession, loadSession, listSessions,
   estimateTokens, compactMessages,

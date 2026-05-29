@@ -13,17 +13,35 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { render, Box, Text, Static, useApp, useInput, useStdout } from 'ink';
 import htm from 'htm';
+import fs from 'fs';
 import {
-  apiCallStream, executeTool, TOOLS, buildSystemPrompt, immuneScan,
+  apiCallStream, executeTool, TOOLS, buildSystemPrompt, renderMarkdown,
   loadMatrix, matrixSummary, newSessionId, saveSession, loadSession, listSessions,
 } from './gift-agent.js';
+import CognitiveImmuneSystem from '../proxy/CognitiveImmuneSystem.js';
 
 const html = htm.bind(React.createElement);
 const PROXY = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:3200';
+const ROOT = new URL('../..', import.meta.url).pathname;
+
+// КИС: один экземпляр на сессию, сканирует каждый ответ агента.
+let _immune;
+function immune() {
+  if (!_immune) { try { _immune = new CognitiveImmuneSystem({ acts: [] }); _immune.activatePublicRepertoire(); } catch { _immune = null; } }
+  return _immune;
+}
+function scanText(text) {
+  const im = immune();
+  if (!im || !text || text.length < 20) return null;
+  try { return im.fullDiagnostics(text, 'agent'); } catch { return null; }
+}
 
 const SLASH = [
   { cmd: '/help', desc: 'справка' },
   { cmd: '/switch', desc: 'бэкенд (ds|ra|fed|anthropic)', arg: true },
+  { cmd: '/mcp', desc: 'MCP-серверы (.mcp.json)' },
+  { cmd: '/tools', desc: 'доступные инструменты агента' },
+  { cmd: '/immune', desc: 'иммунная система (КИС) — состояние' },
   { cmd: '/sessions', desc: 'список сессий' },
   { cmd: '/matrix', desc: 'снимок W-матрицы' },
   { cmd: '/clear', desc: 'очистить диалог' },
@@ -127,6 +145,49 @@ function App() {
       refreshStatus();
       return;
     }
+    if (cmd === '/mcp') {
+      let txt = '';
+      try {
+        const cfg = JSON.parse(fs.readFileSync(ROOT + '.mcp.json', 'utf8'));
+        const servers = Object.entries(cfg.mcpServers || {});
+        if (!servers.length) txt = '  (нет MCP-серверов в .mcp.json)';
+        else {
+          const lines = [];
+          for (const [name, s] of servers) {
+            const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
+            let alive = '';
+            if (url) { const r = await fetchJSON(url.replace(/\/$/, '') + '/summary').catch(() => null); alive = r ? ' ● online' : ' ○ offline'; }
+            lines.push(`  ${name}${url ? ' → ' + url : ''}${alive}`);
+          }
+          txt = 'MCP-серверы:\n' + lines.join('\n');
+        }
+      } catch (e) { txt = 'нет .mcp.json'; }
+      add({ kind: 'sys', text: txt });
+      return;
+    }
+    if (cmd === '/tools') {
+      const txt = 'Инструменты агента:\n' + TOOLS.map(t => `  ${t.name.padEnd(16)} ${(t.description || '').split('\n')[0].slice(0, 60)}`).join('\n');
+      add({ kind: 'sys', text: txt });
+      return;
+    }
+    if (cmd === '/immune') {
+      const im = immune();
+      if (!im) { add({ kind: 'sys', text: 'КИС недоступна' }); return; }
+      const ab = (im.antibodies || []).length;
+      const rep = (im.repertoire && (im.repertoire.length || Object.keys(im.repertoire).length)) || 0;
+      const st = im.getStats ? im.getStats() : {};
+      const txt = [
+        'Когнитивная Иммунная Система (КИС):',
+        `  репертуар: ${ab} антител${rep ? ', ' + rep + ' паттернов' : ''}`,
+        `  сканов за сессию: детекций ${st.totalDetections ?? 0}, типов ${st.uniqueTypes ?? 0}, ср.опасность ${st.avgDanger ?? 0}`,
+        st.topClones && st.topClones.length ? '  топ-клоны: ' + st.topClones.map(c => `${c.id}×${c.count}`).join(', ') : '',
+        '  Как работает: каждый ответ агента сканируется — детектит манипуляции,',
+        '  солюционизм, лесть, противоречия (с историей и W-матрицей), «мёртвый» тон.',
+        '  Вердикт показывается под каждым ответом: 🛡 healthy/neutral/suspicious/attack.',
+      ].filter(Boolean).join('\n');
+      add({ kind: 'sys', text: txt });
+      return;
+    }
     if (cmd === '/sessions') {
       const list = listSessions(10).map(s => `  ${s.id}  ${s.preview || ''}`.slice(0, cols - 2)).join('\n');
       add({ kind: 'sys', text: list || '(нет сессий)' });
@@ -156,9 +217,13 @@ function App() {
         onText: (c) => { streamed += c; setStream(streamed); },
         onAssistant: (t, usage) => {
           streamed = '';
-          const diag = (() => { try { return immuneScan(t); } catch { return null; } })();
-          const flagged = diag && diag.threats && diag.threats.length > 0;
-          add({ kind: 'assistant', text: t, flag: flagged ? diag.verdict : null });
+          const d = scanText(t);
+          add({
+            kind: 'assistant', text: t,
+            verdict: d?.verdict || null,
+            health: d?.health?.label || null,
+            threats: (d?.threats || []).length,
+          });
           setStream('');
         },
         onTool: (name, input) => add({ kind: 'tool', name, input }),
@@ -259,10 +324,13 @@ function App() {
 // один элемент транскрипта
 function TItem({ it, cols }) {
   if (it.kind === 'user') return html`<${Box} marginTop=${1}><${Text} color="cyan" bold>❯ <//><${Text}>${it.text}<//><//>`;
-  if (it.kind === 'assistant') return html`<${Box} marginTop=${1} flexDirection="column">
-      <${Text}>${it.text}<//>
-      ${it.flag ? html`<${Text} color="yellow">🛡 КИС: ${it.flag}<//>` : null}
+  if (it.kind === 'assistant') {
+    const sev = it.threats > 0 ? 'red' : (it.verdict === 'suspicious' || it.verdict === 'contradictory' || it.verdict === 'attack') ? 'yellow' : 'green';
+    return html`<${Box} marginTop=${1} flexDirection="column">
+      <${Text}>${renderMarkdown(it.text)}<//>
+      ${it.verdict ? html`<${Text} color=${sev} dimColor=${sev === 'green'}>🛡 КИС: ${it.verdict}${it.health ? ' · здоровье: ' + it.health : ''}${it.threats ? ' · угроз: ' + it.threats : ''}<//>` : null}
     <//>`;
+  }
   if (it.kind === 'tool') return html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 10)}<//><//>`;
   if (it.kind === 'toolres') return html`<${Box}><${Text} dimColor>  ⎿ ${String(it.result).replace(/\n/g, ' ').slice(0, cols - 6)}<//><//>`;
   if (it.kind === 'sys') return html`<${Box} marginTop=${1}><${Text} color="gray">${it.text}<//><//>`;
