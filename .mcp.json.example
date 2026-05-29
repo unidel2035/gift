@@ -1,0 +1,51 @@
+{
+  "mcpServers": {
+    "anamnesis": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "ANAMNESIS_URL=http://173.249.2.184:8089 node /home/unidel/gift/utils/anamnesis-mcp-bridge.js"
+      ]
+    },
+    "playwright": {
+      "command": "/home/unidel/.nvm/versions/node/v20.19.5/bin/npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--isolated"
+      ]
+    },
+    "telegram": {
+      "command": "/home/unidel/.nvm/versions/node/v22.22.2/bin/node",
+      "args": [
+        "/home/unidel/mcp-telegram/server.js"
+      ],
+      "env": {
+        "TELEGRAM_API_ID": "35138704",
+        "TELEGRAM_API_HASH": "<СЕКРЕТ>"
+      }
+    },
+    "integram": {
+      "command": "/home/unidel/.nvm/versions/node/v22.22.2/bin/node",
+      "args": [
+        "/home/unidel/integram-upstream/mcp-server/index.js"
+      ],
+      "env": {
+        "INTEGRAM_URL": "https://ai2o.online",
+        "INTEGRAM_EMAIL": "unidel@yandex.ru",
+        "INTEGRAM_PASSWORD": "<СЕКРЕТ>",
+        "INTEGRAM_SKIP_HITL": "true",
+        "NODE_USE_ENV_PROXY": "1",
+        "HTTPS_PROXY": "http://127.0.0.1:12334",
+        "HTTP_PROXY": "http://127.0.0.1:12334",
+        "NO_PROXY": "localhost,127.0.0.1,::1"
+      }
+    },
+    "context7": {
+      "command": "/home/unidel/.nvm/versions/node/v20.19.5/bin/npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    }
+  }
+}

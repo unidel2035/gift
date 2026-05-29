@@ -19,6 +19,7 @@ import {
   loadMatrix, matrixSummary, newSessionId, saveSession, loadSession, listSessions,
 } from './gift-agent.js';
 import CognitiveImmuneSystem from '../proxy/CognitiveImmuneSystem.js';
+import { connectMcp } from './mcp-client.mjs';
 
 const html = htm.bind(React.createElement);
 const PROXY = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:3200';
@@ -57,10 +58,12 @@ async function fetchJSON(url, opts = {}) {
 }
 
 // ── один агентский ход: стрим + авто-tools, поддерживает историю ──
-async function runTurn(messages, system, cb) {
+async function runTurn(messages, system, cb, opts = {}) {
+  const tools = opts.tools || TOOLS;
+  const exec = opts.exec || executeTool;
   let turns = 0;
   while (turns++ < 30) {
-    const resp = await apiCallStream(messages, system, TOOLS, {
+    const resp = await apiCallStream(messages, system, tools, {
       onText: (chunk) => cb.onText(chunk),
       onToolUse: () => {},
     });
@@ -74,7 +77,7 @@ async function runTurn(messages, system, cb) {
     for (const tu of toolUses) {
       cb.onTool(tu.name, tu.input);
       let out;
-      try { out = await executeTool(tu.name, tu.input); }
+      try { out = await exec(tu.name, tu.input); }
       catch (e) { out = 'ERROR: ' + (e?.message || e); }
       const rt = typeof out === 'string' ? out : JSON.stringify(out);
       results.push({ type: 'tool_result', tool_use_id: tu.id, content: rt.slice(0, 50000) });
@@ -125,6 +128,8 @@ function App() {
   const histRef = useRef([]);                    // история ввода
   const histIdxRef = useRef(-1);
   const sessionRef = useRef({ id: newSessionId(), messages: [] });
+  const mcpRef = useRef({ tools: [], call: null });
+  const [mcp, setMcp] = useState({ ready: [], count: 0, connecting: true });
 
   const add = useCallback((it) => setItems(prev => [...prev, item(it)]), []);
 
@@ -145,6 +150,18 @@ function App() {
 
   useEffect(() => { refreshStatus(); }, [refreshStatus]);
   useEffect(() => { const t = setInterval(refreshStatus, 12000); return () => clearInterval(t); }, [refreshStatus]);
+
+  // Подключение MCP-серверов в фоне (Playwright/Telegram/Integram/Context7…)
+  useEffect(() => {
+    let alive = true;
+    connectMcp(ROOT + '.mcp.json', { onLog: () => {} }).then((m) => {
+      if (!alive) { m.close && m.close(); return; }
+      mcpRef.current = m;
+      setMcp({ ready: m.ready, count: m.tools.length, connecting: false });
+      if (m.ready.length) add({ kind: 'sys', text: 'MCP подключены: ' + m.ready.map(r => `${r.name}(${r.tools})`).join(', ') });
+    }).catch(() => setMcp({ ready: [], count: 0, connecting: false }));
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     if (!busy) return;
     const t = setInterval(() => setSpin(s => (s + 1) % 10), 80);
@@ -198,18 +215,19 @@ function App() {
           lines.push(`  ${name}${url ? ' → ' + url : ' (' + (s.command || 'cmd') + ')'}`);
         }
       }
+      // 2) живой статус подключения MCP-клиентом
+      const ready = mcpRef.current.ready || [];
+      const conn = mcp.connecting ? '  (подключаюсь…)'
+        : ready.length ? '  подключено: ' + ready.map(r => `${r.name} ● ${r.tools} tools`).join(', ')
+        : '  подключено: нет';
+      lines.push(conn);
       add({ kind: 'sys', text: lines.join('\n') });
-      // 2) фоном — проверка доступности (не блокирует вывод списка)
-      for (const [name, s] of servers) {
-        const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
-        if (!url) continue;
-        const r = await fetchJSON(url.replace(/\/$/, '') + '/summary', { timeout: 1500 });
-        add({ kind: 'sys', text: `  ${name}: ${r ? '● online' : '○ offline'}` });
-      }
       return;
     }
     if (cmd === '/tools') {
-      const txt = 'Инструменты агента:\n' + TOOLS.map(t => `  ${t.name.padEnd(16)} ${(t.description || '').split('\n')[0].slice(0, 60)}`).join('\n');
+      const all = [...TOOLS, ...mcpRef.current.tools];
+      const txt = `Инструменты агента (${all.length}, из них MCP: ${mcpRef.current.tools.length}):\n` +
+        all.map(t => `  ${t.name.padEnd(22)} ${(t.description || '').split('\n')[0].slice(0, 52)}`).join('\n');
       add({ kind: 'sys', text: txt });
       return;
     }
@@ -274,6 +292,9 @@ function App() {
         },
         onTool: (name, input) => { setActivity(`${name}: ${previewInput(name, input).slice(0, 50)}`); add({ kind: 'tool', name, input }); },
         onToolResult: (name, result) => { setActivity(''); setLastTool({ name, result: String(result).replace(/\n/g, ' ').slice(0, 80) }); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
+      }, {
+        tools: [...TOOLS, ...mcpRef.current.tools],
+        exec: (n, i) => (n.startsWith('mcp__') && mcpRef.current.call) ? mcpRef.current.call(n, i) : executeTool(n, i),
       });
     } catch (e) {
       add({ kind: 'err', text: String(e?.message || e) });
@@ -377,6 +398,7 @@ function App() {
           <${Text}>$ ${(status.cost || 0).toFixed(4)}<//>
           <${Text}>matrix: ${status.acts}<//>
           <${Text} color=${status.anamnesis ? 'green' : 'gray'}>anamnesis ${status.anamnesis ? '●' : '○'}<//>
+          <${Text} color=${mcp.count ? 'green' : 'gray'}>mcp: ${mcp.connecting ? '…' : mcp.count + ' tools'}<//>
           <${Text} color=${lastVerdict && !['healthy', 'neutral', 'smooth'].includes(lastVerdict) ? 'yellow' : 'green'}>🛡 ${lastVerdict || '—'}<//>
           ${lastTool ? html`<${Box} marginTop=${1} flexDirection="column"><${Text} color="magenta">● ${lastTool.name}<//><${Text} dimColor>${lastTool.result.slice(0, 22)}<//><//>` : null}
           <${Box} marginTop=${1}><${Text} dimColor>тема: ${themeName}<//><//>
