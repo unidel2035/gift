@@ -48,8 +48,11 @@ const SLASH = [
   { cmd: '/exit', desc: 'выход' },
 ];
 
-async function fetchJSON(url, opts) {
-  try { const r = await fetch(url, opts); return await r.json(); } catch { return null; }
+async function fetchJSON(url, opts = {}) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(opts.timeout || 3000), ...opts });
+    return await r.json();
+  } catch { return null; }
 }
 
 // ── один агентский ход: стрим + авто-tools, поддерживает историю ──
@@ -100,6 +103,7 @@ function App() {
   const [items, setItems] = useState([{ id: 0, kind: 'banner' }]);  // transcript (Static), первым — логотип
   const [stream, setStream] = useState('');      // живой стрим ответа
   const [lastVerdict, setLastVerdict] = useState(null);  // последний вердикт КИС (для панели)
+  const [activity, setActivity] = useState('');  // что агент делает сейчас (для спиннера)
   const [buf, setBuf] = useState('');            // строка ввода
   const [cur, setCur] = useState(0);             // позиция курсора
   const [busy, setBusy] = useState(false);
@@ -139,7 +143,7 @@ function App() {
     const [cmd, ...rest] = line.trim().split(' ');
     const arg = rest.join(' ');
     if (cmd === '/exit') { exit(); return; }
-    if (cmd === '/clear') { messagesRef.current = []; setItems([]); add({ kind: 'sys', text: 'диалог очищен' }); return; }
+    if (cmd === '/clear') { messagesRef.current = []; setItems([{ id: 0, kind: 'banner' }, item({ kind: 'sys', text: 'диалог очищен' })]); return; }
     if (cmd === '/help') {
       add({ kind: 'sys', text: SLASH.map(s => `  ${s.cmd.padEnd(12)} — ${s.desc}`).join('\n') });
       return;
@@ -166,7 +170,7 @@ function App() {
           for (const [name, s] of servers) {
             const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
             let alive = '';
-            if (url) { const r = await fetchJSON(url.replace(/\/$/, '') + '/summary').catch(() => null); alive = r ? ' ● online' : ' ○ offline'; }
+            if (url) { const r = await fetchJSON(url.replace(/\/$/, '') + '/summary', { timeout: 1500 }); alive = r ? ' ● online' : ' ○ offline'; }
             lines.push(`  ${name}${url ? ' → ' + url : ''}${alive}`);
           }
           txt = 'MCP-серверы:\n' + lines.join('\n');
@@ -222,11 +226,11 @@ function App() {
 
     add({ kind: 'user', text });
     messagesRef.current.push({ role: 'user', content: text });
-    setBusy(true); setStream('');
+    setBusy(true); setStream(''); setActivity('');
     let streamed = '';
     try {
       await runTurn(messagesRef.current, buildSystemPrompt(), {
-        onText: (c) => { streamed += c; setStream(streamed); },
+        onText: (c) => { streamed += c; setStream(streamed); setActivity(''); },
         onAssistant: (t, usage) => {
           streamed = '';
           const d = scanText(t);
@@ -239,14 +243,14 @@ function App() {
           });
           setStream('');
         },
-        onTool: (name, input) => add({ kind: 'tool', name, input }),
-        onToolResult: (name, result) => add({ kind: 'toolres', name, result: result.slice(0, 500) }),
+        onTool: (name, input) => { setActivity(`${name}: ${previewInput(name, input).slice(0, 50)}`); add({ kind: 'tool', name, input }); },
+        onToolResult: (name, result) => { setActivity(''); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
       });
     } catch (e) {
       add({ kind: 'err', text: String(e?.message || e) });
     }
     setStream('');
-    setBusy(false);
+    setBusy(false); setActivity('');
     // сессия
     try { sessionRef.current.messages = messagesRef.current; saveSession(sessionRef.current); } catch {}
     refreshStatus();
@@ -317,7 +321,7 @@ function App() {
 
       ${stream ? html`<${Box} marginTop=${1}><${Text} color="white">${stream}<//><//>` : null}
 
-      ${busy ? html`<${Box}><${Text} color="yellow">${SPN[spin % SPN.length]} <//><${Text} dimColor>думаю…<//><//>` : null}
+      ${busy ? html`<${Box}><${Text} color="yellow">${SPN[spin % SPN.length]} <//><${Text} color=${activity ? 'magenta' : undefined} dimColor=${!activity}>${activity || 'думаю…'}<//><//>` : null}
 
       <${Box} flexDirection="row" marginTop=${1}>
         <${Box} flexDirection="column" flexGrow=${1}>
