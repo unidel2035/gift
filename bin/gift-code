@@ -1,8 +1,22 @@
 #!/bin/bash
 # gift-code — DeepSeek + КИС + хуки gift. Одна команда.
+#   gift-code              — DeepSeek (как раньше)
+#   gift-code fed          — ФЕДЕРАЦИЯ: opus→настоящий Opus 4.8, sonnet→DeepSeek Pro,
+#                            haiku→Flash (роутинг по модели в одной сессии)
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROXY_SCRIPT="$HOME/deepclaude/proxy/start-proxy.js"
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-sk-6c45e2f605be470aa127a0ae6d74cc05}"
+# ключи — из ~/.deepclaude.env (НЕ хардкодим секрет в репозитории)
+[ -f "$HOME/.deepclaude.env" ] && source "$HOME/.deepclaude.env"
+if [ -z "$DEEPSEEK_API_KEY" ]; then
+  echo "  ⛬ gift-code: нет DEEPSEEK_API_KEY — положи в ~/.deepclaude.env (export DEEPSEEK_API_KEY=...)" >&2
+  exit 1
+fi
+
+# режим бэкенда
+BACKEND="deepseek"
+case "$1" in
+  fed|federation|--federation) BACKEND="federation"; shift ;;
+esac
 
 # Убить старый прокси
 for p in 3200 3201 3202; do
@@ -16,9 +30,10 @@ if [ -f "$PROXY_SCRIPT" ]; then
   node "$PROXY_SCRIPT" "https://api.deepseek.com/anthropic" "$DEEPSEEK_API_KEY" > /tmp/kis-proxy.log 2>&1 &
   PROXY_PID=$!
   sleep 3
-  PROXY_PORT=$(grep -oE '^[0-9]+$' /tmp/kis-proxy.log | head -1)
+  # Порт из лога: "Listening on 127.0.0.1:3200" или просто "3200"
+  PROXY_PORT=$(grep -oE '127\.0\.0\.1:([0-9]+)' /tmp/kis-proxy.log | head -1 | grep -oE '[0-9]+$')
   PROXY_PORT=${PROXY_PORT:-3200}
-  curl -sX POST "http://127.0.0.1:$PROXY_PORT/_proxy/mode" -d 'backend=deepseek' > /dev/null 2>&1
+  curl -sX POST "http://127.0.0.1:$PROXY_PORT/_proxy/mode" -d "backend=$BACKEND" > /dev/null 2>&1
 
   export ANTHROPIC_BASE_URL="http://127.0.0.1:$PROXY_PORT"
   export ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY"
@@ -26,8 +41,14 @@ if [ -f "$PROXY_SCRIPT" ]; then
   export CLAUDE_CODE_EFFORT_LEVEL=max
 
   echo ""
-  echo "  ⛬ gift code — DeepSeek + КИС + W-матрица"
-  echo "  Прокси: :$PROXY_PORT | Иммунитет: активен"
+  if [ "$BACKEND" = "federation" ]; then
+    echo "  ⛬ gift code — ФЕДЕРАЦИЯ + КИС + W-матрица"
+    echo "  opus→Opus 4.8 (Anthropic) · sonnet→DeepSeek Pro · haiku→Flash"
+    echo "  Прокси: :$PROXY_PORT | Иммунитет: активен | /model — выбрать роль"
+  else
+    echo "  ⛬ gift code — DeepSeek + КИС + W-матрица"
+    echo "  Прокси: :$PROXY_PORT | Иммунитет: активен"
+  fi
   echo ""
 
   trap "kill $PROXY_PID 2>/dev/null" EXIT

@@ -54,6 +54,23 @@ const NO_COMMIT = argv.includes('--no-commit');
 const ISSUE = argv.includes('--issue') ? parseInt(argv[argv.indexOf('--issue') + 1]) : null;
 const TASK  = argv.includes('--task')  ? argv[argv.indexOf('--task') + 1] : null;
 
+// --federation: голоса собора едут через deepclaude-прокси (кросс-провайдер).
+// opus → настоящий Opus 4.8, sonnet → DeepSeek Pro. Иначе — claude-субагенты (как было).
+const FED = argv.includes('--federation') || process.env.GIFT_SWE_FEDERATION === '1';
+const FED_MODEL = {
+  'Разведчик':  'claude-sonnet-4-6',  // разведка контекста — дёшево (DeepSeek)
+  'Критик':     'claude-opus-4-8',    // острая критика — Opus
+  'Архитектор': 'claude-opus-4-8',    // различение/план — Opus
+  'Хранитель':  'claude-sonnet-4-6',  // историческая память — дёшево
+  'Старший':    'claude-opus-4-8',    // суд о телосе — Opus
+};
+// Один голос собора: федерация (кросс-провайдер) или claude-субагент.
+function voice(agentType, opts) {
+  return FED
+    ? VoiceSource.federation(FED_MODEL[opts.persona] || 'claude-sonnet-4-6', opts)
+    : VoiceSource.claudeSubagent(agentType, opts);
+}
+
 if (!ISSUE && !TASK) {
   console.error('Использование: node utils/conciliar-swe.mjs --issue <N> | --task "текст" [--dry-run] [--no-commit]');
   process.exit(1);
@@ -106,15 +123,15 @@ function buildPlanOrchestrator({ task }) {
   }
 
   return o
-    .addSource(VoiceSource.claudeSubagent('Explore', {
+    .addSource(voice('Explore', {
       persona: 'Разведчик', logos: 'para', timeout: 90_000,
       promptWrap: t => `Ты — Разведчик в соборе. Logos para. Исследуй контекст задачи в репозитории @unidel/gift. ${t}\n\nОтвет: 3-5 предложений. Какие файлы релевантны? Какие уже решения рядом?`,
     }))
-    .addSource(VoiceSource.claudeSubagent('code-reviewer', {
+    .addSource(voice('code-reviewer', {
       persona: 'Критик', logos: 'kata', timeout: 90_000,
       promptWrap: t => `Ты — Критик в соборе. Logos kata. ${t}\n\nОспорь очевидное решение. Что может быть НЕ-задачей (структурно решается без кода)? Что упускается? 3-5 предложений.`,
     }))
-    .addSource(VoiceSource.claudeSubagent('Plan', {
+    .addSource(voice('Plan', {
       persona: 'Архитектор', logos: 'hyper', timeout: 120_000,
       promptWrap: t => `Ты — Архитектор в соборе. Logos hyper — превосходящее различение. ${t}\n\nДай архитектурный план: файлы для создания/правки, ключевые операции, богословский корень (если есть). Кратко, по сути.`,
     }));
@@ -141,15 +158,15 @@ function buildReviewOrchestrator({ task, diff }) {
   }
 
   return o
-    .addSource(VoiceSource.claudeSubagent('code-reviewer', {
+    .addSource(voice('code-reviewer', {
       persona: 'Критик', logos: 'kata', timeout: 90_000,
       promptWrap: _ => `Критик. Оспорь коммит:\n${q}\n\nЧто не так? Ищи баги, нарушения инвариантов, скрытые регрессии.`,
     }))
-    .addSource(VoiceSource.claudeSubagent('Explore', {
+    .addSource(voice('Explore', {
       persona: 'Хранитель', logos: 'hyper', timeout: 90_000,
       promptWrap: _ => `Хранитель истории. ${q}\n\nСравни с прошлыми решениями в репо. Соответствует ли стилю?`,
     }))
-    .addSource(VoiceSource.claudeSubagent('Plan', {
+    .addSource(voice('Plan', {
       persona: 'Старший', logos: 'hyper', timeout: 90_000,
       promptWrap: _ => `Старший. ${q}\n\nРазличи: выполнен ли телос? Разрешить ли коммит?`,
     }));

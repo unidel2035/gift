@@ -180,6 +180,44 @@ export const VoiceSource = {
   },
 
   /**
+   * Федерация моделей через deepclaude-прокси (режим federation): tier модели
+   * = выбор провайдера. opus → настоящий Opus 4.8 (Anthropic), sonnet → DeepSeek Pro,
+   * haiku → DeepSeek Flash. Так голоса собора едут на разных провайдерах.
+   * @param {string} model — 'claude-opus-4-8' | 'claude-sonnet-4-6' | 'claude-haiku-4-5-20251001'
+   */
+  federation(model, { persona, logos, promptWrap, timeout = 180_000,
+                      host = process.env.FEDERATION_PROXY || 'http://127.0.0.1:3200' } = {}) {
+    return {
+      persona,
+      logos,
+      async collect(question) {
+        const prompt = promptWrap
+          ? promptWrap(question)
+          : `[Голос для собора — лицо «${persona}», logos «${logos}»]\n\n${question}\n\nОтвечай кратко (1-3 предложения), в духе своего лица.`;
+        try {
+          const r = await fetch(`${host}/v1/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'x-api-key': 'gift-federation' },
+            body: JSON.stringify({
+              model, max_tokens: 1024,
+              system: [{ type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." }],
+              messages: [{ role: 'user', content: prompt }],
+            }),
+            signal: AbortSignal.timeout(timeout),
+          });
+          if (!r.ok) return { persona, logos, content: `[молчит: federation ${r.status}]`, steps: [], timestamp: Date.now() };
+          const data = await r.json();
+          const content = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+          const steps = parseReasoningSteps(content);
+          return { persona, logos, content: content || '[молчит: пустой ответ]', steps, timestamp: Date.now(), model: data.model };
+        } catch (e) {
+          return { persona, logos, content: `[молчит: ${e.message}]`, steps: [], timestamp: Date.now() };
+        }
+      },
+    };
+  },
+
+  /**
    * Внешний HTTP-оракул. endpoint получает POST {question}, возвращает {content}.
    */
   http({ persona, logos, endpoint, apiKey, timeout = 30_000 }) {

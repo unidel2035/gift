@@ -6,7 +6,9 @@
   "main": "src/index.js",
   "bin": {
     "gift": "bin/gift",
-    "gift-agent": "bin/gift-agent"
+    "gift-agent": "bin/gift-agent",
+    "gift-code": "bin/gift-code",
+    "gift-federation": "bin/gift-federation"
   },
   "exports": {
     ".": "./src/index.js",

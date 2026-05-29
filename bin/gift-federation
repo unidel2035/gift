@@ -1,0 +1,62 @@
+#!/bin/bash
+# gift-federation — федерация моделей как оркестратор.
+#   Opus 4.8 планирует/проверяет · DeepSeek Pro кодит · Flash резюмирует.
+#   Поток: PLAN → IMPLEMENT∥ → CRITICS(линзы, голосование) → [revise↻] → SUMMARY.
+#   КИС сканирует каждого агента. Память — в data/federation. Стоимость — в выводе.
+#
+# Использование:
+#   gift-federation "задача"
+#   gift-federation --rounds 3 "задача"       # до 3 раундов доработки
+#   gift-federation --critics 4 "задача"      # критики с линзами
+#   gift-federation --out ./result "задача"   # артефакты на диск
+#   gift-federation --thinker ds "задача"     # мыслитель на DeepSeek (без 429)
+#   gift-federation --gift "задача"           # записать дар в W-матрицу (анамнезис)
+#   gift-federation --history                 # прошлые запуски
+#   gift-federation --help
+#
+# Переиспользует deepclaude (общий прокси + КИС у gift и deepclaude).
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CLI="$HOME/deepclaude/federation-cli.mjs"
+
+if [ ! -f "$CLI" ]; then
+  echo "  ⛬ gift-federation: не найден $CLI (нужен проект deepclaude)" >&2
+  exit 1
+fi
+
+# ключи — из ~/.deepclaude.env (без хардкода секрета)
+[ -f "$HOME/.deepclaude.env" ] && source "$HOME/.deepclaude.env"
+if [ -z "$DEEPSEEK_API_KEY" ]; then
+  echo "  ⛬ gift-federation: нет DEEPSEEK_API_KEY — положи в ~/.deepclaude.env" >&2
+  exit 1
+fi
+
+# память федерации — в пространстве gift
+export FEDERATION_MEM_DIR="${FEDERATION_MEM_DIR:-$SCRIPT_DIR/data/federation}"
+# recall общинной памяти из Nous (если поднят: node utils/nous-server.mjs)
+export FEDERATION_NOUS_URL="${FEDERATION_NOUS_URL:-http://localhost:8089}"
+
+# --gift: записать итог в W-матрицу общины (анамнезис). Дары необратимы → opt-in.
+GIFT=0
+ARGS=()
+for a in "$@"; do
+  if [ "$a" = "--gift" ]; then GIFT=1; else ARGS+=("$a"); fi
+done
+
+if [ "$GIFT" != "1" ]; then
+  exec node "$CLI" "${ARGS[@]}"
+fi
+
+RESULT_FILE="$(mktemp)"
+export FEDERATION_RESULT_FD="$RESULT_FILE"
+node "$CLI" "${ARGS[@]}"
+CODE=$?
+
+if [ -s "$RESULT_FILE" ]; then
+  DESC=$(node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('$RESULT_FILE','utf8'));process.stdout.write('федерация: '+r.task+' → '+r.verdict+' ('+r.subtasks+' подзадач)')" 2>/dev/null)
+  if [ -n "$DESC" ]; then
+    node "$SCRIPT_DIR/utils/claude-gift.mjs" "$DESC" "_koinon" 5 >/dev/null 2>&1 \
+      && echo "  ⛬ дар записан в W-матрицу (_claude→_koinon): $DESC"
+  fi
+fi
+rm -f "$RESULT_FILE"
+exit $CODE

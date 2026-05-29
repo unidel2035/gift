@@ -59,6 +59,7 @@ lines.push('[—— конец сообщений шины ——]');
 
 const out = {
   hookSpecificOutput: {
+    hookEventName: 'UserPromptSubmit',
     additionalContext: lines.join('\n'),
   },
 };
