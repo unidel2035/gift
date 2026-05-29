@@ -107,12 +107,16 @@ export async function launchWithClaude(opts = {}) {
     // Запустить gift standalone agent (без зависимости от claude бинарника)
     const agentPath = new URL('../agent-cli/gift-agent.js', import.meta.url).pathname;
     const args = [...(opts.claudeArgs || [])];
-    // Сливаем буферизированные данные stdin от readline меню
+    // ПОЛНОСТЬЮ освобождаем stdin родителя перед спавном ребёнка с stdio:'inherit'.
+    // Иначе родительский процесс (он жив — ждёт выхода агента) продолжает читать тот
+    // же TTY, что и ребёнок, и забирает у него ввод → «строка не печатает».
     if (process.stdin.isTTY) {
-        try { process.stdin.setRawMode(true); } catch {}
-        await new Promise(r => setTimeout(r, 50));
-        while (process.stdin.read() !== null) {}
         try { process.stdin.setRawMode(false); } catch {}
+        process.stdin.pause();
+        process.stdin.removeAllListeners('data');
+        process.stdin.removeAllListeners('readable');
+        process.stdin.removeAllListeners('keypress');
+        if (process.stdin.unref) process.stdin.unref();  // не держим TTY в event loop родителя
     }
     const agent = spawn('node', [agentPath, ...args], {
         env,
