@@ -209,13 +209,15 @@ export class TermUI {
     this._renderInput();
   }
 
-  // Перерисовать ТОЛЬКО строку ввода (+ меню ниже). HR выше — не трогаем.
+  // Перерисовать строку ввода + НИЖНЮЮ линию (+ меню). Верхняя линия — выше, статична.
   _renderInput() {
     const out = [];
     out.push('\r\x1b[2K');                      // очистить строку ввода
     out.push(this.promptStr + this.buffer);     // ❯ <буфер>
-    out.push('\x1b[J');                          // очистить всё ниже (старое меню)
-    let rows = 0;
+    out.push('\x1b[J');                          // очистить всё ниже
+    out.push('\n' + fullHR());                   // нижняя линия на всю ширину
+    let below = 1;                               // строк ниже ввода (нижняя линия)
+    let menuRows = 0;
     if (this.buffer.startsWith('/')) {
       const matches = this._filterMenu();
       if (this.menuSelection >= matches.length) this.menuSelection = Math.max(0, matches.length - 1);
@@ -232,17 +234,17 @@ export class TermUI {
             ? '\x1b[33m— ' + item.desc + '\x1b[0m'
             : c('dim', '— ' + item.desc);
           out.push('\n' + arrow + cmd + desc);
-          rows++;
+          menuRows++;
         }
       } else {
         out.push('\n' + c('dim', '  (нет совпадений — Esc)'));
-        rows = 1;
+        menuRows = 1;
       }
     }
-    this.menuRowsDrawn = rows;
-    if (rows > 0) out.push(`\x1b[${rows}A`);     // вернуться на строку ввода
-    // курсор: после промпта + позиция в буфере
-    out.push('\r' + `\x1b[${visLen(this.promptStr) + this.cursor}C`);
+    below += menuRows;
+    this.menuRowsDrawn = menuRows;
+    out.push(`\x1b[${below}A`);                   // вернуться вверх на строку ввода
+    out.push('\r' + `\x1b[${visLen(this.promptStr) + this.cursor}C`);  // курсор в позицию
     process.stdout.write(out.join(''));
   }
 

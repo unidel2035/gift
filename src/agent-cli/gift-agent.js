@@ -1219,7 +1219,7 @@ export async function runRepl(opts = {}) {
   /compact               — сжать контекст
   /exit                  — выход
 
-  --yes, --accept-edits  — автоподтверждение Write/Edit/Bash
+  (по умолчанию без запросов — делает всё сразу; вернуть опрос: --ask)
 `);
       if (ui) ui.resume(); return;
     }
@@ -1492,7 +1492,8 @@ if (process.argv[1]?.endsWith('gift-agent.js')) {
   const args = process.argv.slice(2);
   const resumeIdx = args.indexOf('--resume');
   const resume = resumeIdx >= 0 ? (args[resumeIdx + 1] || 'last') : null;
-  const autoYes = args.includes('--yes') || args.includes('--accept-edits');
+  // По умолчанию БЕЗ запросов разрешений (делаем сразу всё). Вернуть опрос: --ask
+  const autoYes = !args.includes('--ask') && !args.includes('--confirm');
   const prompt = args.filter((a, i) => !a.startsWith('--') && i !== resumeIdx + 1).join(' ');
 
   // Read from stdin if piped
