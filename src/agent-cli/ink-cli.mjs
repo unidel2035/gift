@@ -26,6 +26,11 @@ const html = htm.bind(React.createElement);
 const PROXY = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:3200';
 const ROOT = new URL('../..', import.meta.url).pathname;
 
+// Resume: GIFT_RESUME=<id> или --resume <id>
+const RESUME_ID = process.env.GIFT_RESUME
+  || (process.argv.includes('--resume') ? process.argv[process.argv.indexOf('--resume') + 1] : null);
+let activeSessionId = null;   // для подсказки при выходе
+
 // КИС: один экземпляр на сессию, сканирует каждый ответ агента.
 let _immune;
 function immune() {
@@ -41,7 +46,7 @@ function scanText(text) {
 const SLASH = [
   { cmd: '/help', desc: 'справка' },
   { cmd: '/switch', desc: 'бэкенд (ds|ra|fed|anthropic)', arg: true },
-  { cmd: '/mcp', desc: 'MCP-серверы (.mcp.json)' },
+  { cmd: '/mcp', desc: 'MCP: список / on / off (off — легче payload)', arg: true },
   { cmd: '/tools', desc: 'доступные инструменты агента' },
   { cmd: '/immune', desc: 'иммунная система (КИС) — состояние' },
   { cmd: '/theme', desc: 'тема: gift|matrix|ocean|mono', arg: true },
@@ -136,7 +141,13 @@ function App() {
   const messagesRef = useRef([]);                // история для API
   const histRef = useRef([]);                    // история ввода
   const histIdxRef = useRef(-1);
-  const sessionRef = useRef({ id: newSessionId(), messages: [] });
+  const sessionRef = useRef(null);
+  if (sessionRef.current === null) {
+    const s = (RESUME_ID && loadSession(RESUME_ID)) || { id: newSessionId(), messages: [] };
+    sessionRef.current = s;
+    messagesRef.current = Array.isArray(s.messages) ? s.messages : [];
+    activeSessionId = s.id;
+  }
   const mcpRef = useRef({ tools: [], call: null });
   const [mcp, setMcp] = useState({ ready: [], count: 0, connecting: true });
 
@@ -161,15 +172,20 @@ function App() {
   useEffect(() => { const t = setInterval(refreshStatus, 12000); return () => clearInterval(t); }, [refreshStatus]);
 
   // Подключение MCP-серверов в фоне (Playwright/Telegram/Integram/Context7…)
-  useEffect(() => {
-    let alive = true;
-    connectMcp(ROOT + '.mcp.json', { onLog: () => {} }).then((m) => {
-      if (!alive) { m.close && m.close(); return; }
+  const doConnectMcp = useCallback(async () => {
+    setMcp({ ready: [], count: 0, connecting: true });
+    try {
+      const m = await connectMcp(ROOT + '.mcp.json', { onLog: () => {} });
       mcpRef.current = m;
       setMcp({ ready: m.ready, count: m.tools.length, connecting: false });
       if (m.ready.length) add({ kind: 'sys', text: 'MCP подключены: ' + m.ready.map(r => `${r.name}(${r.tools})`).join(', ') });
-    }).catch(() => setMcp({ ready: [], count: 0, connecting: false }));
-    return () => { alive = false; };
+    } catch { setMcp({ ready: [], count: 0, connecting: false }); }
+  }, [add]);
+  useEffect(() => { doConnectMcp(); }, [doConnectMcp]);
+  useEffect(() => {
+    if (RESUME_ID && messagesRef.current.length) {
+      add({ kind: 'sys', text: `↻ продолжена сессия ${sessionRef.current.id} (${messagesRef.current.length} сообщений в контексте)` });
+    }
   }, []);
   useEffect(() => {
     if (!busy) return;
@@ -204,6 +220,18 @@ function App() {
       const t = THEMES[arg];
       if (t) { setTheme(t); setThemeName(arg); add({ kind: 'sys', text: `тема → ${arg}` }); }
       else add({ kind: 'sys', text: `темы: ${Object.keys(THEMES).join(', ')} (текущая: ${themeName})` });
+      return;
+    }
+    if (cmd === '/mcp' && (arg === 'off' || arg === 'on')) {
+      if (arg === 'off') {
+        try { mcpRef.current.close && mcpRef.current.close(); } catch {}
+        mcpRef.current = { tools: [], call: null, ready: [] };
+        setMcp({ ready: [], count: 0, connecting: false });
+        add({ kind: 'sys', text: 'MCP отключены — payload легче, модель быстрее. /mcp on — вернуть.' });
+      } else {
+        add({ kind: 'sys', text: 'MCP подключаются…' });
+        doConnectMcp();
+      }
       return;
     }
     if (cmd === '/mcp') {
@@ -481,4 +509,14 @@ function previewInput(name, input) {
   return JSON.stringify(input);
 }
 
-render(html`<${App} />`);
+const _app = render(html`<${App} />`);
+_app.waitUntilExit().then(() => {
+  if (activeSessionId) {
+    process.stdout.write(
+      `\n  Продолжить эту сессию:\n` +
+      `  \x1b[36mGIFT_RESUME=${activeSessionId} gift\x1b[0m\n` +
+      `  (или: \x1b[2mgift-agent --resume ${activeSessionId}\x1b[0m)\n\n`,
+    );
+  }
+  process.exit(0);   // MCP stdio-дети держат event loop — выходим явно
+}).catch(() => process.exit(0));
