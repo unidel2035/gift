@@ -661,16 +661,26 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
     tools,
   };
 
-  // Use native fetch for streaming (proxy is localhost — resp.body is ReadableStream)
-  const resp = await fetch(`${PROXY_URL}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
+  // Use native fetch for streaming (proxy is localhost — resp.body is ReadableStream).
+  // Таймаут, чтобы зависший апстрим не вешал агента навсегда.
+  const _ac = new AbortController();
+  const _to = setTimeout(() => _ac.abort(new Error('stream timeout 180s')), 180000);
+  let resp;
+  try {
+    resp = await fetch(`${PROXY_URL}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+      signal: _ac.signal,
+    });
+  } catch (e) {
+    clearTimeout(_to);
+    throw new Error(`API запрос прерван: ${e?.message || e}`);
+  }
 
   if (!resp.ok) {
     let errText;
@@ -688,6 +698,7 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
   let stopReason = null;
   let usage = { input_tokens: 0, output_tokens: 0 };
 
+  try {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -747,6 +758,7 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
       }
     }
   }
+  } finally { clearTimeout(_to); }
 
   return { content, stop_reason: stopReason, usage };
 }

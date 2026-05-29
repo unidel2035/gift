@@ -17,6 +17,7 @@ import fs from 'fs';
 import {
   apiCallStream, executeTool, TOOLS, buildSystemPrompt, renderMarkdown,
   loadMatrix, matrixSummary, newSessionId, saveSession, loadSession, listSessions,
+  estimateTokens, compactMessages,
 } from './gift-agent.js';
 import CognitiveImmuneSystem from '../proxy/CognitiveImmuneSystem.js';
 import { connectMcp } from './mcp-client.mjs';
@@ -63,6 +64,14 @@ async function runTurn(messages, system, cb, opts = {}) {
   const exec = opts.exec || executeTool;
   let turns = 0;
   while (turns++ < 30) {
+    // Защита от распухания контекста (агент начитал много файлов) → зависание модели.
+    try {
+      if (estimateTokens(messages) > 80000) {
+        cb.onText && cb.onText('\n[сжимаю контекст…]\n');
+        const compacted = await compactMessages(messages, system);
+        messages.length = 0; messages.push(...compacted);
+      }
+    } catch { /* компакт не вышел — продолжаем как есть */ }
     const resp = await apiCallStream(messages, system, tools, {
       onText: (chunk) => cb.onText(chunk),
       onToolUse: () => {},
@@ -80,7 +89,7 @@ async function runTurn(messages, system, cb, opts = {}) {
       try { out = await exec(tu.name, tu.input); }
       catch (e) { out = 'ERROR: ' + (e?.message || e); }
       const rt = typeof out === 'string' ? out : JSON.stringify(out);
-      results.push({ type: 'tool_result', tool_use_id: tu.id, content: rt.slice(0, 50000) });
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: rt.slice(0, 12000) });
       cb.onToolResult(tu.name, rt);
     }
     messages.push({ role: 'user', content: results });
@@ -429,7 +438,7 @@ function TItem({ it, cols }) {
     const sev = it.threats > 0 ? 'red' : (it.verdict === 'suspicious' || it.verdict === 'contradictory' || it.verdict === 'attack') ? 'yellow' : 'green';
     return html`<${Box} marginTop=${1} flexDirection="column">
       <${Text}>${renderMarkdown(it.text)}<//>
-      ${it.verdict ? html`<${Text} color=${sev} dimColor=${sev === 'green'}>🛡 КИС: ${it.verdict}${it.health ? ' · здоровье: ' + it.health : ''}${it.threats ? ' · угроз: ' + it.threats : ''}<//>` : null}
+      ${it.verdict ? html`<${Text} color=${sev} dimColor=${sev === 'green'}>🛡 ${it.verdict}${it.threats ? ' · угроз: ' + it.threats : ''}<//>` : null}
     <//>`;
   }
   if (it.kind === 'tool') return html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 10)}<//><//>`;
