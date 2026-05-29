@@ -42,7 +42,7 @@ const SLASH = [
   { cmd: '/mcp', desc: 'MCP-серверы (.mcp.json)' },
   { cmd: '/tools', desc: 'доступные инструменты агента' },
   { cmd: '/immune', desc: 'иммунная система (КИС) — состояние' },
-  { cmd: '/sessions', desc: 'список сессий' },
+  { cmd: '/sessions', desc: 'сессии (можно фильтр: /sessions слово)', arg: true },
   { cmd: '/matrix', desc: 'снимок W-матрицы' },
   { cmd: '/clear', desc: 'очистить диалог' },
   { cmd: '/exit', desc: 'выход' },
@@ -80,6 +80,15 @@ async function runTurn(messages, system, cb) {
   }
 }
 
+const LOGO = [
+  '  ██████╗ ██╗███████╗████████╗',
+  ' ██╔════╝ ██║██╔════╝╚══██╔══╝',
+  ' ██║  ███╗██║█████╗     ██║',
+  ' ██║   ██║██║██╔══╝     ██║',
+  ' ╚██████╔╝██║██║        ██║',
+  '  ╚═════╝ ╚═╝╚═╝        ╚═╝',
+].join('\n');
+
 let _itemId = 0;
 const item = (o) => ({ id: ++_itemId, ...o });
 
@@ -88,8 +97,9 @@ function App() {
   const { stdout } = useStdout();
   const cols = (stdout && stdout.columns) || 80;
 
-  const [items, setItems] = useState([]);       // transcript (Static)
+  const [items, setItems] = useState([{ id: 0, kind: 'banner' }]);  // transcript (Static), первым — логотип
   const [stream, setStream] = useState('');      // живой стрим ответа
+  const [lastVerdict, setLastVerdict] = useState(null);  // последний вердикт КИС (для панели)
   const [buf, setBuf] = useState('');            // строка ввода
   const [cur, setCur] = useState(0);             // позиция курсора
   const [busy, setBusy] = useState(false);
@@ -189,8 +199,10 @@ function App() {
       return;
     }
     if (cmd === '/sessions') {
-      const list = listSessions(10).map(s => `  ${s.id}  ${s.preview || ''}`.slice(0, cols - 2)).join('\n');
-      add({ kind: 'sys', text: list || '(нет сессий)' });
+      let ss = listSessions(50);
+      if (arg) { const q = arg.toLowerCase(); ss = ss.filter(s => (s.id + ' ' + (s.preview || '')).toLowerCase().includes(q)); }
+      const list = ss.slice(0, 12).map(s => `  ${s.id}  ${s.preview || ''}`.slice(0, cols - 2)).join('\n');
+      add({ kind: 'sys', text: (arg ? `сессии «${arg}»:\n` : '') + (list || '(нет сессий)') });
       return;
     }
     if (cmd === '/matrix') {
@@ -218,6 +230,7 @@ function App() {
         onAssistant: (t, usage) => {
           streamed = '';
           const d = scanText(t);
+          setLastVerdict(d?.verdict || null);
           add({
             kind: 'assistant', text: t,
             verdict: d?.verdict || null,
@@ -273,6 +286,12 @@ function App() {
       if (menuOpen && menuMatches.length) { const p = menuMatches[Math.min(sel, menuMatches.length - 1)]; setBuf(p.cmd + (p.arg ? ' ' : '')); setCur(p.cmd.length + (p.arg ? 1 : 0)); }
       return;
     }
+    if (key.ctrl && input === 'r') {   // обратный поиск по истории
+      const q = buf.toLowerCase();
+      const matches = histRef.current.filter(x => x !== buf && (!q || x.toLowerCase().includes(q)));
+      if (matches.length) { const v = matches[matches.length - 1]; setBuf(v); setCur(v.length); }
+      return;
+    }
     if (key.backspace || key.delete) {
       if (cur > 0) { setBuf(b => b.slice(0, cur - 1) + b.slice(cur)); setCur(c => c - 1); setSel(0); }
       return;
@@ -300,29 +319,42 @@ function App() {
 
       ${busy ? html`<${Box}><${Text} color="yellow">${SPN[spin % SPN.length]} <//><${Text} dimColor>думаю…<//><//>` : null}
 
-      <${Box} marginTop=${1}>
-        <${Text} dimColor>${status.label}${status.model ? ' · ' + status.model : ''} · $${(status.cost || 0).toFixed(4)} · matrix ${status.acts}<//>
-      <//>
+      <${Box} flexDirection="row" marginTop=${1}>
+        <${Box} flexDirection="column" flexGrow=${1}>
+          <${Box} borderStyle="round" borderColor=${busy ? 'gray' : 'cyan'} paddingX=${1}>
+            <${Text}>${'❯ '}<//>
+            <${Text}>${beforeCur}<//>
+            <${Text} inverse>${atCur}<//>
+            <${Text}>${afterCur}<//>
+          <//>
+          ${menuOpen && menuMatches.length ? html`
+            <${Box} flexDirection="column">
+              ${menuMatches.map((m, i) => html`
+                <${Text} key=${m.cmd} color=${i === sel ? 'yellow' : 'cyan'} bold=${i === sel}>
+                  ${i === sel ? '▸ ' : '  '}${m.cmd.padEnd(12)}<${Text} dimColor> — ${m.desc}<//>
+                <//>`)}
+            <//>`
+        : html`<${Text} dimColor>  ↑↓ история · / меню · Tab дополнить · ^R поиск · ^C выход<//>`}
+        <//>
 
-      <${Box} borderStyle="round" borderColor=${busy ? 'gray' : 'cyan'} paddingX=${1}>
-        <${Text}>${'❯ '}<//>
-        <${Text}>${beforeCur}<//>
-        <${Text} inverse>${atCur}<//>
-        <${Text}>${afterCur}<//>
+        <${Box} flexDirection="column" width=${24} borderStyle="round" borderColor="gray" paddingX=${1} marginLeft=${1}>
+          <${Text} bold color="yellow">⛬ gift<//>
+          <${Text} dimColor>${(status.label || '').slice(0, 20)}<//>
+          ${status.model ? html`<${Text} color="blue">${status.model.slice(0, 20)}<//>` : null}
+          <${Text}>$ ${(status.cost || 0).toFixed(4)}<//>
+          <${Text}>matrix: ${status.acts}<//>
+          <${Text} color=${lastVerdict && !['healthy', 'neutral', 'smooth'].includes(lastVerdict) ? 'yellow' : 'green'}>🛡 ${lastVerdict || '—'}<//>
+        <//>
       <//>
-
-      ${menuOpen && menuMatches.length ? html`
-        <${Box} flexDirection="column">
-          ${menuMatches.map((m, i) => html`
-            <${Text} key=${m.cmd} color=${i === sel ? 'yellow' : 'cyan'} bold=${i === sel}>
-              ${i === sel ? '▸ ' : '  '}${m.cmd.padEnd(12)}<${Text} dimColor> — ${m.desc}<//>
-            <//>`)}
-        <//>` : null}
     <//>`;
 }
 
 // один элемент транскрипта
 function TItem({ it, cols }) {
+  if (it.kind === 'banner') return html`<${Box} flexDirection="column" marginBottom=${1}>
+      <${Text} color="yellow">${LOGO}<//>
+      <${Text} dimColor>  gift-agent · Ink · федерация · /help — команды · /immune — иммунка<//>
+    <//>`;
   if (it.kind === 'user') return html`<${Box} marginTop=${1}><${Text} color="cyan" bold>❯ <//><${Text}>${it.text}<//><//>`;
   if (it.kind === 'assistant') {
     const sev = it.threats > 0 ? 'red' : (it.verdict === 'suspicious' || it.verdict === 'contradictory' || it.verdict === 'attack') ? 'yellow' : 'green';
