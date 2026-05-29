@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+// ══════════════════════════════════════════════════════════════════════════
+// ink-cli.mjs — современный TUI для gift-агента на Ink (React в терминале).
+// Та же технология, что у Claude Code / Gemini CLI. Логика (модель, tools,
+// федерация, КИС, матрица) переиспользуется из gift-agent.js.
+//
+//   • рамка ввода на всю ширину (как у Claude Code), курсор, история ↑↓
+//   • /-меню команд с фильтрацией и выбором стрелками
+//   • стриминг ответа, авто-выполнение tools (без запросов)
+//   • статус-бар: backend · модель · стоимость · матрица
+//   • КИС сканирует ответы; сессии сохраняются
+// ══════════════════════════════════════════════════════════════════════════
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { render, Box, Text, Static, useApp, useInput, useStdout } from 'ink';
+import htm from 'htm';
+import {
+  apiCallStream, executeTool, TOOLS, buildSystemPrompt, immuneScan,
+  loadMatrix, matrixSummary, newSessionId, saveSession, loadSession, listSessions,
+} from './gift-agent.js';
+
+const html = htm.bind(React.createElement);
+const PROXY = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:3200';
+
+const SLASH = [
+  { cmd: '/help', desc: 'справка' },
+  { cmd: '/switch', desc: 'бэкенд (ds|ra|fed|anthropic)', arg: true },
+  { cmd: '/sessions', desc: 'список сессий' },
+  { cmd: '/matrix', desc: 'снимок W-матрицы' },
+  { cmd: '/clear', desc: 'очистить диалог' },
+  { cmd: '/exit', desc: 'выход' },
+];
+
+async function fetchJSON(url, opts) {
+  try { const r = await fetch(url, opts); return await r.json(); } catch { return null; }
+}
+
+// ── один агентский ход: стрим + авто-tools, поддерживает историю ──
+async function runTurn(messages, system, cb) {
+  let turns = 0;
+  while (turns++ < 30) {
+    const resp = await apiCallStream(messages, system, TOOLS, {
+      onText: (chunk) => cb.onText(chunk),
+      onToolUse: () => {},
+    });
+    const content = resp.content || [];
+    messages.push({ role: 'assistant', content });
+    const text = content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (text) cb.onAssistant(text, resp.usage);
+    const toolUses = content.filter(b => b.type === 'tool_use');
+    if (!toolUses.length) break;
+    const results = [];
+    for (const tu of toolUses) {
+      cb.onTool(tu.name, tu.input);
+      let out;
+      try { out = await executeTool(tu.name, tu.input); }
+      catch (e) { out = 'ERROR: ' + (e?.message || e); }
+      const rt = typeof out === 'string' ? out : JSON.stringify(out);
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: rt.slice(0, 50000) });
+      cb.onToolResult(tu.name, rt);
+    }
+    messages.push({ role: 'user', content: results });
+  }
+}
+
+let _itemId = 0;
+const item = (o) => ({ id: ++_itemId, ...o });
+
+function App() {
+  const { exit } = useApp();
+  const { stdout } = useStdout();
+  const cols = (stdout && stdout.columns) || 80;
+
+  const [items, setItems] = useState([]);       // transcript (Static)
+  const [stream, setStream] = useState('');      // живой стрим ответа
+  const [buf, setBuf] = useState('');            // строка ввода
+  const [cur, setCur] = useState(0);             // позиция курсора
+  const [busy, setBusy] = useState(false);
+  const [spin, setSpin] = useState(0);
+  const [sel, setSel] = useState(0);             // выбор в /-меню
+  const [status, setStatus] = useState({ label: '…', model: '', cost: 0, acts: 0 });
+  const messagesRef = useRef([]);                // история для API
+  const histRef = useRef([]);                    // история ввода
+  const histIdxRef = useRef(-1);
+  const sessionRef = useRef({ id: newSessionId(), messages: [] });
+
+  const add = useCallback((it) => setItems(prev => [...prev, item(it)]), []);
+
+  const refreshStatus = useCallback(async () => {
+    const st = await fetchJSON(`${PROXY}/_proxy/status`);
+    const cost = await fetchJSON(`${PROXY}/_proxy/cost`);
+    let acts = 0; try { acts = (loadMatrix().acts || []).length; } catch {}
+    setStatus({
+      label: st?.label || st?.mode || 'local',
+      model: st?.model || '',
+      cost: cost?.total_cost ?? 0,
+      acts,
+    });
+  }, []);
+
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setSpin(s => (s + 1) % 10), 80);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  const menuOpen = buf.startsWith('/') && !busy;
+  const menuMatches = menuOpen ? SLASH.filter(s => s.cmd.startsWith(buf.split(' ')[0])) : [];
+
+  async function handleSlash(line) {
+    const [cmd, ...rest] = line.trim().split(' ');
+    const arg = rest.join(' ');
+    if (cmd === '/exit') { exit(); return; }
+    if (cmd === '/clear') { messagesRef.current = []; setItems([]); add({ kind: 'sys', text: 'диалог очищен' }); return; }
+    if (cmd === '/help') {
+      add({ kind: 'sys', text: SLASH.map(s => `  ${s.cmd.padEnd(12)} — ${s.desc}`).join('\n') });
+      return;
+    }
+    if (cmd === '/switch') {
+      const map = { ds: 'deepseek', ra: 'routerai', or: 'openrouter', fw: 'fireworks', fed: 'federation', an: 'anthropic' };
+      const backend = map[arg] || arg || 'federation';
+      const r = await fetchJSON(`${PROXY}/_proxy/mode`, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'http://127.0.0.1' },
+        body: `backend=${backend}`,
+      });
+      add({ kind: 'sys', text: r?.error ? `ошибка: ${r.error}` : `бэкенд → ${r?.label || backend}` });
+      refreshStatus();
+      return;
+    }
+    if (cmd === '/sessions') {
+      const list = listSessions(10).map(s => `  ${s.id}  ${s.preview || ''}`.slice(0, cols - 2)).join('\n');
+      add({ kind: 'sys', text: list || '(нет сессий)' });
+      return;
+    }
+    if (cmd === '/matrix') {
+      let txt = ''; try { txt = matrixSummary(loadMatrix()); } catch (e) { txt = 'матрица недоступна'; }
+      add({ kind: 'sys', text: String(txt).slice(0, 2000) });
+      return;
+    }
+    add({ kind: 'sys', text: `неизвестная команда: ${cmd}` });
+  }
+
+  async function submit(line) {
+    const text = line.trim();
+    if (!text) return;
+    histRef.current.push(line); histIdxRef.current = -1;
+    setBuf(''); setCur(0); setSel(0);
+    if (text.startsWith('/')) { await handleSlash(text); return; }
+
+    add({ kind: 'user', text });
+    messagesRef.current.push({ role: 'user', content: text });
+    setBusy(true); setStream('');
+    let streamed = '';
+    try {
+      await runTurn(messagesRef.current, buildSystemPrompt(), {
+        onText: (c) => { streamed += c; setStream(streamed); },
+        onAssistant: (t, usage) => {
+          streamed = '';
+          const diag = (() => { try { return immuneScan(t); } catch { return null; } })();
+          const flagged = diag && diag.threats && diag.threats.length > 0;
+          add({ kind: 'assistant', text: t, flag: flagged ? diag.verdict : null });
+          setStream('');
+        },
+        onTool: (name, input) => add({ kind: 'tool', name, input }),
+        onToolResult: (name, result) => add({ kind: 'toolres', name, result: result.slice(0, 500) }),
+      });
+    } catch (e) {
+      add({ kind: 'err', text: String(e?.message || e) });
+    }
+    setStream('');
+    setBusy(false);
+    // сессия
+    try { sessionRef.current.messages = messagesRef.current; saveSession(sessionRef.current); } catch {}
+    refreshStatus();
+  }
+
+  useInput((input, key) => {
+    if (busy) { if (key.ctrl && input === 'c') exit(); return; }
+    if (key.ctrl && input === 'c') { exit(); return; }
+    if (key.ctrl && input === 'd') { if (!buf) exit(); return; }
+
+    if (key.return) {
+      if (menuOpen && menuMatches.length && buf.indexOf(' ') === -1) {
+        const pick = menuMatches[Math.min(sel, menuMatches.length - 1)];
+        if (pick && pick.cmd !== buf) { setBuf(pick.cmd + (pick.arg ? ' ' : '')); setCur(pick.cmd.length + (pick.arg ? 1 : 0)); if (pick.arg) return; }
+      }
+      submit(buf);
+      return;
+    }
+    if (key.upArrow) {
+      if (menuOpen) { setSel(s => Math.max(0, s - 1)); return; }
+      const h = histRef.current;
+      if (h.length && histIdxRef.current < h.length - 1) {
+        histIdxRef.current++; const v = h[h.length - 1 - histIdxRef.current]; setBuf(v); setCur(v.length);
+      }
+      return;
+    }
+    if (key.downArrow) {
+      if (menuOpen) { setSel(s => Math.min(menuMatches.length - 1, s + 1)); return; }
+      if (histIdxRef.current > 0) { histIdxRef.current--; const v = histRef.current[histRef.current.length - 1 - histIdxRef.current]; setBuf(v); setCur(v.length); }
+      else if (histIdxRef.current === 0) { histIdxRef.current = -1; setBuf(''); setCur(0); }
+      return;
+    }
+    if (key.leftArrow) { setCur(c => Math.max(0, c - 1)); return; }
+    if (key.rightArrow) { setCur(c => Math.min(buf.length, c + 1)); return; }
+    if (key.escape) { setBuf(''); setCur(0); setSel(0); return; }
+    if (key.tab) {
+      if (menuOpen && menuMatches.length) { const p = menuMatches[Math.min(sel, menuMatches.length - 1)]; setBuf(p.cmd + (p.arg ? ' ' : '')); setCur(p.cmd.length + (p.arg ? 1 : 0)); }
+      return;
+    }
+    if (key.backspace || key.delete) {
+      if (cur > 0) { setBuf(b => b.slice(0, cur - 1) + b.slice(cur)); setCur(c => c - 1); setSel(0); }
+      return;
+    }
+    if (input && !key.ctrl && !key.meta) {
+      setBuf(b => b.slice(0, cur) + input + b.slice(cur));
+      setCur(c => c + input.length);
+      setSel(0);
+    }
+  });
+
+  // ── render ──
+  const SPN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+  const beforeCur = buf.slice(0, cur);
+  const atCur = buf[cur] || ' ';
+  const afterCur = buf.slice(cur + 1);
+
+  return html`
+    <${Box} flexDirection="column">
+      <${Static} items=${items}>
+        ${(it) => html`<${TItem} key=${it.id} it=${it} cols=${cols} />`}
+      <//>
+
+      ${stream ? html`<${Box} marginTop=${1}><${Text} color="white">${stream}<//><//>` : null}
+
+      ${busy ? html`<${Box}><${Text} color="yellow">${SPN[spin % SPN.length]} <//><${Text} dimColor>думаю…<//><//>` : null}
+
+      <${Box} marginTop=${1}>
+        <${Text} dimColor>${status.label}${status.model ? ' · ' + status.model : ''} · $${(status.cost || 0).toFixed(4)} · matrix ${status.acts}<//>
+      <//>
+
+      <${Box} borderStyle="round" borderColor=${busy ? 'gray' : 'cyan'} paddingX=${1}>
+        <${Text}>${'❯ '}<//>
+        <${Text}>${beforeCur}<//>
+        <${Text} inverse>${atCur}<//>
+        <${Text}>${afterCur}<//>
+      <//>
+
+      ${menuOpen && menuMatches.length ? html`
+        <${Box} flexDirection="column">
+          ${menuMatches.map((m, i) => html`
+            <${Text} key=${m.cmd} color=${i === sel ? 'yellow' : 'cyan'} bold=${i === sel}>
+              ${i === sel ? '▸ ' : '  '}${m.cmd.padEnd(12)}<${Text} dimColor> — ${m.desc}<//>
+            <//>`)}
+        <//>` : null}
+    <//>`;
+}
+
+// один элемент транскрипта
+function TItem({ it, cols }) {
+  if (it.kind === 'user') return html`<${Box} marginTop=${1}><${Text} color="cyan" bold>❯ <//><${Text}>${it.text}<//><//>`;
+  if (it.kind === 'assistant') return html`<${Box} marginTop=${1} flexDirection="column">
+      <${Text}>${it.text}<//>
+      ${it.flag ? html`<${Text} color="yellow">🛡 КИС: ${it.flag}<//>` : null}
+    <//>`;
+  if (it.kind === 'tool') return html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 10)}<//><//>`;
+  if (it.kind === 'toolres') return html`<${Box}><${Text} dimColor>  ⎿ ${String(it.result).replace(/\n/g, ' ').slice(0, cols - 6)}<//><//>`;
+  if (it.kind === 'sys') return html`<${Box} marginTop=${1}><${Text} color="gray">${it.text}<//><//>`;
+  if (it.kind === 'err') return html`<${Box} marginTop=${1}><${Text} color="red">✗ ${it.text}<//><//>`;
+  return null;
+}
+function previewInput(name, input) {
+  if (!input) return '';
+  if (name === 'Bash') return input.command || '';
+  if (input.file_path) return input.file_path;
+  if (input.pattern) return input.pattern;
+  return JSON.stringify(input);
+}
+
+render(html`<${App} />`);

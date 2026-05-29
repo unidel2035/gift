@@ -104,8 +104,10 @@ export async function launchWithClaude(opts = {}) {
         CLAUDE_CODE_EFFORT_LEVEL: 'max',
     };
 
-    // Запустить gift standalone agent (без зависимости от claude бинарника)
-    const agentPath = new URL('../agent-cli/gift-agent.js', import.meta.url).pathname;
+    // Запустить gift standalone agent (без зависимости от claude бинарника).
+    // По умолчанию — современный Ink-UI (как Claude Code). Классический term-ui: GIFT_CLASSIC_UI=1
+    const uiFile = process.env.GIFT_CLASSIC_UI ? 'gift-agent.js' : 'ink-cli.mjs';
+    const agentPath = new URL('../agent-cli/' + uiFile, import.meta.url).pathname;
     const args = [...(opts.claudeArgs || [])];
     // Родитель (gift) остаётся жив, ожидая ребёнка, и делит с ним TTY (stdio:inherit).
     // Если он продолжает читать stdin — ввод расщепляется «через один символ», а при

@@ -1092,6 +1092,15 @@ export async function agentLoop(prompt, opts = {}) {
   return { turns, totalInputTokens, totalOutputTokens };
 }
 
+// Экспорт переиспользуемой логики для Ink-CLI (ink-cli.mjs).
+export {
+  apiCallStream, executeTool, TOOLS, SAFE_TOOLS, buildSystemPrompt,
+  immuneScan, loadMatrix, saveMatrix, recordAct, matrixSummary,
+  newSessionId, saveSession, loadSession, listSessions,
+  estimateTokens, compactMessages,
+  loadGiftMemory, loadKoinon, koinonRecent, giftMemorySummary,
+};
+
 // ═══════════════════════════════════════════════════════════════
 // Interactive REPL
 // ═══════════════════════════════════════════════════════════════
