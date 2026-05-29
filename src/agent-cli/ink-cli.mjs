@@ -42,6 +42,7 @@ const SLASH = [
   { cmd: '/mcp', desc: 'MCP-серверы (.mcp.json)' },
   { cmd: '/tools', desc: 'доступные инструменты агента' },
   { cmd: '/immune', desc: 'иммунная система (КИС) — состояние' },
+  { cmd: '/theme', desc: 'тема: gift|matrix|ocean|mono', arg: true },
   { cmd: '/sessions', desc: 'сессии (можно фильтр: /sessions слово)', arg: true },
   { cmd: '/matrix', desc: 'снимок W-матрицы' },
   { cmd: '/clear', desc: 'очистить диалог' },
@@ -83,6 +84,13 @@ async function runTurn(messages, system, cb) {
   }
 }
 
+const THEMES = {
+  gift:   { accent: 'yellow', border: 'cyan' },
+  matrix: { accent: 'green', border: 'green' },
+  ocean:  { accent: 'cyan', border: 'blue' },
+  mono:   { accent: 'white', border: 'gray' },
+};
+
 const LOGO = [
   '  ██████╗ ██╗███████╗████████╗',
   ' ██╔════╝ ██║██╔════╝╚══██╔══╝',
@@ -104,6 +112,9 @@ function App() {
   const [stream, setStream] = useState('');      // живой стрим ответа
   const [lastVerdict, setLastVerdict] = useState(null);  // последний вердикт КИС (для панели)
   const [activity, setActivity] = useState('');  // что агент делает сейчас (для спиннера)
+  const [lastTool, setLastTool] = useState(null);  // последний tool+результат (для панели)
+  const [theme, setTheme] = useState(THEMES.gift);
+  const [themeName, setThemeName] = useState('gift');
   const [buf, setBuf] = useState('');            // строка ввода
   const [cur, setCur] = useState(0);             // позиция курсора
   const [busy, setBusy] = useState(false);
@@ -120,16 +131,20 @@ function App() {
   const refreshStatus = useCallback(async () => {
     const st = await fetchJSON(`${PROXY}/_proxy/status`);
     const cost = await fetchJSON(`${PROXY}/_proxy/cost`);
+    const nousUrl = process.env.ANAMNESIS_URL || 'http://localhost:8089';
+    const nous = await fetchJSON(`${nousUrl.replace(/\/$/, '')}/summary`, { timeout: 1200 });
     let acts = 0; try { acts = (loadMatrix().acts || []).length; } catch {}
     setStatus({
       label: st?.label || st?.mode || 'local',
       model: st?.model || '',
       cost: cost?.total_cost ?? 0,
       acts,
+      anamnesis: !!nous,
     });
   }, []);
 
   useEffect(() => { refreshStatus(); }, [refreshStatus]);
+  useEffect(() => { const t = setInterval(refreshStatus, 12000); return () => clearInterval(t); }, [refreshStatus]);
   useEffect(() => {
     if (!busy) return;
     const t = setInterval(() => setSpin(s => (s + 1) % 10), 80);
@@ -159,24 +174,38 @@ function App() {
       refreshStatus();
       return;
     }
+    if (cmd === '/theme') {
+      const t = THEMES[arg];
+      if (t) { setTheme(t); setThemeName(arg); add({ kind: 'sys', text: `тема → ${arg}` }); }
+      else add({ kind: 'sys', text: `темы: ${Object.keys(THEMES).join(', ')} (текущая: ${themeName})` });
+      return;
+    }
     if (cmd === '/mcp') {
-      let txt = '';
-      try {
-        const cfg = JSON.parse(fs.readFileSync(ROOT + '.mcp.json', 'utf8'));
-        const servers = Object.entries(cfg.mcpServers || {});
-        if (!servers.length) txt = '  (нет MCP-серверов в .mcp.json)';
-        else {
-          const lines = [];
-          for (const [name, s] of servers) {
-            const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
-            let alive = '';
-            if (url) { const r = await fetchJSON(url.replace(/\/$/, '') + '/summary', { timeout: 1500 }); alive = r ? ' ● online' : ' ○ offline'; }
-            lines.push(`  ${name}${url ? ' → ' + url : ''}${alive}`);
-          }
-          txt = 'MCP-серверы:\n' + lines.join('\n');
+      // 1) мгновенно — список серверов из .mcp.json (синхронно, никогда не пусто)
+      let servers = [];
+      let lines = [];
+      const paths = [ROOT + '.mcp.json', process.cwd() + '/.mcp.json'];
+      let cfgFound = false;
+      for (const p of paths) {
+        try { const cfg = JSON.parse(fs.readFileSync(p, 'utf8')); servers = Object.entries(cfg.mcpServers || {}); cfgFound = true; break; } catch {}
+      }
+      if (!cfgFound) lines = [`нет .mcp.json (искал: ${paths.join(', ')})`];
+      else if (!servers.length) lines = ['(нет MCP-серверов в .mcp.json)'];
+      else {
+        lines = ['MCP-серверы:'];
+        for (const [name, s] of servers) {
+          const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
+          lines.push(`  ${name}${url ? ' → ' + url : ' (' + (s.command || 'cmd') + ')'}`);
         }
-      } catch (e) { txt = 'нет .mcp.json'; }
-      add({ kind: 'sys', text: txt });
+      }
+      add({ kind: 'sys', text: lines.join('\n') });
+      // 2) фоном — проверка доступности (не блокирует вывод списка)
+      for (const [name, s] of servers) {
+        const url = (s.args || []).join(' ').match(/https?:\/\/[^\s'"]+/)?.[0];
+        if (!url) continue;
+        const r = await fetchJSON(url.replace(/\/$/, '') + '/summary', { timeout: 1500 });
+        add({ kind: 'sys', text: `  ${name}: ${r ? '● online' : '○ offline'}` });
+      }
       return;
     }
     if (cmd === '/tools') {
@@ -244,7 +273,7 @@ function App() {
           setStream('');
         },
         onTool: (name, input) => { setActivity(`${name}: ${previewInput(name, input).slice(0, 50)}`); add({ kind: 'tool', name, input }); },
-        onToolResult: (name, result) => { setActivity(''); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
+        onToolResult: (name, result) => { setActivity(''); setLastTool({ name, result: String(result).replace(/\n/g, ' ').slice(0, 80) }); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
       });
     } catch (e) {
       add({ kind: 'err', text: String(e?.message || e) });
@@ -325,8 +354,8 @@ function App() {
 
       <${Box} flexDirection="row" marginTop=${1}>
         <${Box} flexDirection="column" flexGrow=${1}>
-          <${Box} borderStyle="round" borderColor=${busy ? 'gray' : 'cyan'} paddingX=${1}>
-            <${Text}>${'❯ '}<//>
+          <${Box} borderStyle="round" borderColor=${busy ? 'gray' : theme.border} paddingX=${1}>
+            <${Text} color=${theme.accent}>${'❯ '}<//>
             <${Text}>${beforeCur}<//>
             <${Text} inverse>${atCur}<//>
             <${Text}>${afterCur}<//>
@@ -341,13 +370,16 @@ function App() {
         : html`<${Text} dimColor>  ↑↓ история · / меню · Tab дополнить · ^R поиск · ^C выход<//>`}
         <//>
 
-        <${Box} flexDirection="column" width=${24} borderStyle="round" borderColor="gray" paddingX=${1} marginLeft=${1}>
-          <${Text} bold color="yellow">⛬ gift<//>
-          <${Text} dimColor>${(status.label || '').slice(0, 20)}<//>
-          ${status.model ? html`<${Text} color="blue">${status.model.slice(0, 20)}<//>` : null}
+        <${Box} flexDirection="column" width=${26} borderStyle="round" borderColor=${theme.border} paddingX=${1} marginLeft=${1}>
+          <${Text} bold color=${theme.accent}>⛬ gift<//>
+          <${Text} dimColor>${(status.label || '').slice(0, 22)}<//>
+          ${status.model ? html`<${Text} color="blue">${status.model.slice(0, 22)}<//>` : null}
           <${Text}>$ ${(status.cost || 0).toFixed(4)}<//>
           <${Text}>matrix: ${status.acts}<//>
+          <${Text} color=${status.anamnesis ? 'green' : 'gray'}>anamnesis ${status.anamnesis ? '●' : '○'}<//>
           <${Text} color=${lastVerdict && !['healthy', 'neutral', 'smooth'].includes(lastVerdict) ? 'yellow' : 'green'}>🛡 ${lastVerdict || '—'}<//>
+          ${lastTool ? html`<${Box} marginTop=${1} flexDirection="column"><${Text} color="magenta">● ${lastTool.name}<//><${Text} dimColor>${lastTool.result.slice(0, 22)}<//><//>` : null}
+          <${Box} marginTop=${1}><${Text} dimColor>тема: ${themeName}<//><//>
         <//>
       <//>
     <//>`;

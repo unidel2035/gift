@@ -3,6 +3,10 @@
     "anamnesis": {
       "command": "bash",
       "args": ["-c", "ANAMNESIS_URL=http://173.249.2.184:8089 node /home/unidel/gift/utils/anamnesis-mcp-bridge.js"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
