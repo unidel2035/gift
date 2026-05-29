@@ -441,7 +441,34 @@ function TItem({ it, cols }) {
       ${it.verdict ? html`<${Text} color=${sev} dimColor=${sev === 'green'}>🛡 ${it.verdict}${it.threats ? ' · угроз: ' + it.threats : ''}<//>` : null}
     <//>`;
   }
-  if (it.kind === 'tool') return html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 10)}<//><//>`;
+  if (it.kind === 'tool') {
+    const head = html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 12)}<//><//>`;
+    const W = Math.max(20, cols - 6);
+    // Edit → дифф (красные старые / зелёные новые строки)
+    if (it.name === 'Edit' && it.input && it.input.old_string != null) {
+      const oldL = String(it.input.old_string).split('\n').slice(0, 14);
+      const newL = String(it.input.new_string || '').split('\n').slice(0, 14);
+      return html`<${Box} flexDirection="column">
+        ${head}
+        <${Box} flexDirection="column" marginLeft=${2}>
+          ${oldL.map((l, i) => html`<${Text} key=${'o' + i} color="red">- ${l.slice(0, W)}<//>`)}
+          ${newL.map((l, i) => html`<${Text} key=${'n' + i} color="green">+ ${l.slice(0, W)}<//>`)}
+        <//>
+      <//>`;
+    }
+    // Write → содержимое нового файла (зелёным)
+    if (it.name === 'Write' && it.input && it.input.content != null) {
+      const lines = String(it.input.content).split('\n');
+      return html`<${Box} flexDirection="column">
+        ${head}
+        <${Box} flexDirection="column" marginLeft=${2}>
+          ${lines.slice(0, 16).map((l, i) => html`<${Text} key=${i} color="green">+ ${l.slice(0, W)}<//>`)}
+          ${lines.length > 16 ? html`<${Text} dimColor>  … +${lines.length - 16} строк<//>` : null}
+        <//>
+      <//>`;
+    }
+    return head;
+  }
   if (it.kind === 'toolres') return html`<${Box}><${Text} dimColor>  ⎿ ${String(it.result).replace(/\n/g, ' ').slice(0, cols - 6)}<//><//>`;
   if (it.kind === 'sys') return html`<${Box} marginTop=${1}><${Text} color="gray">${it.text}<//><//>`;
   if (it.kind === 'err') return html`<${Box} marginTop=${1}><${Text} color="red">✗ ${it.text}<//><//>`;
