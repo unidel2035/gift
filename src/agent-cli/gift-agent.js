@@ -1160,8 +1160,9 @@ export async function runRepl(opts = {}) {
   let uiReady;
 
   const HR = '────────────────────────────────────────────────────────────────';
+  // Однострочный промпт (как ввод Claude Code). Многострочные рамки ломали рендер.
   function buildPrompt() {
-    return `${c('dim', HR)}\n${c('green', '❯')} \n${c('dim', HR)}`;
+    return `${c('green', '❯')} `;
   }
 
   let _promptCache = buildPrompt();

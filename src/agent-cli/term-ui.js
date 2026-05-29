@@ -24,6 +24,8 @@ const C = {
   cyan:  '\x1b[36m', gold: '\x1b[33m',
 };
 const c = (col, s) => `${C[col]}${s}${C.reset}`;
+const visLen = (s) => [...s.replace(/\x1b\[[0-9;]*m/g, '')].length;   // видимая длина (без ANSI)
+const fullHR = () => c('dim', '─'.repeat(Math.max(8, process.stdout.columns || 64)));  // линия на всю ширину
 
 const CLEAR_LINE   = '\x1b[2K';
 const CLEAR_BELOW  = '\x1b[J';
@@ -135,20 +137,8 @@ export class TermUI {
   release() {
     this.released = true;
     if (this._fallbackRl) return;
-    this._eraseMenu();
-    // Стираем все строки промпта.
-    // После Enter курсор на ПОСЛЕДНЕЙ строке промпта (нижняя рамка),
-    // т.к. \r\n сдвинул с input-строки вниз на 1.
-    const lines = this.promptStr.split('\n');
-    const out = [];
-    out.push(`\x1b[${lines.length - 1}A`);   // up to first prompt line (top border)
-    for (let i = 0; i < lines.length + 1; i++) {
-      out.push('\r' + CLEAR_LINE);
-      if (i < lines.length) out.push('\n');
-    }
-    out.push(`\x1b[${lines.length}A`);       // back up to first prompt line
-    out.push('\r' + CLEAR_LINE);
-    process.stdout.write(out.join(''));
+    // Однострочный ввод: стереть строку ввода и всё ниже (меню). Линия HR выше — остаётся.
+    process.stdout.write('\r\x1b[2K\x1b[J');
   }
 
   // Подтверждение [Y]es/[N]o/[A]ll — работает и в raw, и в fallback режиме
@@ -203,109 +193,62 @@ export class TermUI {
       this._fallbackRl.prompt();
       return;
     }
-    // Рисуем промпт напрямую (старый уже стёрт release'ом).
-    // Буфер на предпоследней строке, последняя — нижняя рамка.
-    const lines = this.promptStr.split('\n');
-    const inputIdx = lines.length - 2;
-    for (let i = 0; i < lines.length; i++) {
-      const isInput = i === inputIdx;
-      process.stdout.write('\r\x1b[2K' + lines[i] + (isInput ? '' : ''));
-      if (i < lines.length - 1) process.stdout.write('\n');
-    }
-    // Вернуться на строку ввода
-    process.stdout.write('\x1b[1A');
+    // Полноширинная линия над вводом + строка ввода (как у Claude Code).
+    process.stdout.write('\n' + fullHR() + '\n');
+    this._renderInput();
   }
 
-  // ── рендер (всё батчится в один process.stdout.write) ────────────────
+  // ── рендер ────────────────────────────────────────────────────────────
+  // Однострочный ввод. Линия HR (на всю ширину) рисуется один раз при первой
+  // отрисовке / в resume() и НЕ перерисовывается на каждую клавишу.
   _renderPrompt() {
-    const out = [];
-    const promptLines = this.promptStr.split('\n');
-    const total = [...this.buffer].length;
-
-    // 1) Подняться к первой строке промпта, стереть промпт + меню вниз
-    // Первый рендер — не стираем (нечего стирать, курсор в конце баннера)
     if (this._firstPaint) {
       this._firstPaint = false;
-      // Просто перейдём на новую строку после баннера
-      out.push('\n');
-    } else {
-      const upToFirst = promptLines.length - 1;
-      const totalClear = promptLines.length + this.menuRowsDrawn;
-      if (totalClear > 0) {
-        out.push(`\x1b[${upToFirst}A`);          // вверх к первой строке промпта
-        for (let i = 0; i < totalClear; i++) {
-          out.push('\r' + CLEAR_LINE);
-          if (i < totalClear - 1) out.push('\n'); // вниз, стирая строки
-        }
-        // После цикла курсор на последней стёртой строке.
-        // Подняться обратно к первой строке промпта.
-        const backUp = upToFirst + this.menuRowsDrawn;
-        if (backUp > 0) out.push(`\x1b[${backUp}A`);
-      }
-      this.menuRowsDrawn = 0;
+      process.stdout.write('\n' + fullHR() + '\n');
     }
+    this._renderInput();
+  }
 
-    // 2) Нарисовать промпт (построчно вниз).
-    // Буфер — на ПРЕДпоследней строке (последняя — нижняя рамка)
-    const inputLineIdx = promptLines.length - 2;  // e.g. 1 for 3-line prompt
-    for (let i = 0; i < promptLines.length; i++) {
-      const isInput = i === inputLineIdx;
-      out.push('\r' + CLEAR_LINE + promptLines[i] + (isInput ? this.buffer : ''));
-      if (i < promptLines.length - 1) out.push('\n');
-    }
-
-    // 3) Вернуться на строку ввода (над нижней рамкой)
-    out.push('\x1b[1A');
-    // Позиция курсора внутри буфера
-    const back = total - this.cursor;
-    if (back > 0) out.push(`\x1b[${back}D`);
-
-    // 4) Меню — рисуется вниз от курсора, потом возврат
+  // Перерисовать ТОЛЬКО строку ввода (+ меню ниже). HR выше — не трогаем.
+  _renderInput() {
+    const out = [];
+    out.push('\r\x1b[2K');                      // очистить строку ввода
+    out.push(this.promptStr + this.buffer);     // ❯ <буфер>
+    out.push('\x1b[J');                          // очистить всё ниже (старое меню)
+    let rows = 0;
     if (this.buffer.startsWith('/')) {
       const matches = this._filterMenu();
-      if (this.menuSelection >= matches.length) {
-        this.menuSelection = Math.max(0, matches.length - 1);
-      }
-      let rows = 0;
+      if (this.menuSelection >= matches.length) this.menuSelection = Math.max(0, matches.length - 1);
       if (matches.length) {
         const widthCmd = Math.max(...this.slashCommands.map(s => s.cmd.length)) + 2;
         for (let i = 0; i < matches.length; i++) {
           const item = matches[i];
           const isSel = i === this.menuSelection;
           const arrow = isSel ? c('gold', '▸ ') : '  ';
-          const cmd   = isSel
+          const cmd = isSel
             ? '\x1b[1m\x1b[33m' + item.cmd.padEnd(widthCmd) + '\x1b[0m'
             : c('cyan', item.cmd.padEnd(widthCmd));
-          const desc  = isSel
+          const desc = isSel
             ? '\x1b[33m— ' + item.desc + '\x1b[0m'
             : c('dim', '— ' + item.desc);
           out.push('\n' + arrow + cmd + desc);
           rows++;
         }
       } else {
-        out.push('\n' + c('dim', '  (нет совпадений — Esc чтобы выйти)'));
+        out.push('\n' + c('dim', '  (нет совпадений — Esc)'));
         rows = 1;
       }
-      this.menuRowsDrawn = rows;
-      // Вернуть курсор на строку ввода
-      if (rows > 0) out.push(`\x1b[${rows}A`);
-      const promptEnd = [...promptLines[promptLines.length - 1]].length + this.cursor;
-      // \r + вправо на promptEnd символов
-      if (promptEnd > 0) out.push(`\r\x1b[${promptEnd}C`);
     }
-
+    this.menuRowsDrawn = rows;
+    if (rows > 0) out.push(`\x1b[${rows}A`);     // вернуться на строку ввода
+    // курсор: после промпта + позиция в буфере
+    out.push('\r' + `\x1b[${visLen(this.promptStr) + this.cursor}C`);
     process.stdout.write(out.join(''));
   }
 
   _eraseMenu() {
     if (this.menuRowsDrawn === 0) return;
-    // Стереть строки меню вниз от курсора и вернуться
-    const out = [];
-    for (let i = 0; i < this.menuRowsDrawn; i++) {
-      out.push('\n' + CLEAR_LINE);
-    }
-    out.push(`\x1b[${this.menuRowsDrawn}A`);
-    process.stdout.write(out.join(''));
+    process.stdout.write('\x1b[J');   // курсор на строке ввода → очистить всё ниже
     this.menuRowsDrawn = 0;
   }
 

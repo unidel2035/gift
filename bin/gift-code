@@ -12,8 +12,10 @@ if [ -z "$DEEPSEEK_API_KEY" ]; then
   exit 1
 fi
 
-# режим бэкенда — ФЕДЕРАЦИЯ по умолчанию. Опт-аут на чистый DeepSeek: `gift-code ds`.
-BACKEND="federation"
+# Бэкенд по умолчанию — СТАБИЛЬНЫЙ одиночный (routerai/deepseek). Федерация для
+# ЖИВОЙ сессии нестабильна (Anthropic-OAuth отдаёт 400/429 на агентский payload
+# Claude Code → падение). Федерация только явно: `gift-code fed` (на свой риск).
+BACKEND="${FEDERATION_CHEAP_BACKEND:-deepseek}"
 case "$1" in
   fed|federation|--federation) BACKEND="federation"; shift ;;
   ds|deepseek)                 BACKEND="deepseek";   shift ;;
