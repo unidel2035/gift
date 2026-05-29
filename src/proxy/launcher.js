@@ -107,22 +107,28 @@ export async function launchWithClaude(opts = {}) {
     // Запустить gift standalone agent (без зависимости от claude бинарника)
     const agentPath = new URL('../agent-cli/gift-agent.js', import.meta.url).pathname;
     const args = [...(opts.claudeArgs || [])];
-    // ПОЛНОСТЬЮ освобождаем stdin родителя перед спавном ребёнка с stdio:'inherit'.
-    // Иначе родительский процесс (он жив — ждёт выхода агента) продолжает читать тот
-    // же TTY, что и ребёнок, и забирает у него ввод → «строка не печатает».
-    if (process.stdin.isTTY) {
+    // Родитель (gift) остаётся жив, ожидая ребёнка, и делит с ним TTY (stdio:inherit).
+    // Если он продолжает читать stdin — ввод расщепляется «через один символ», а при
+    // смене ребёнком raw-режима родитель ловит EIO и падает (роняя терминал в raw).
+    // Поэтому: снимаем listeners, глушим EIO, ставим на паузу, а ПОСЛЕ spawn —
+    // уничтожаем поток stdin родителя (ребёнок уже владеет своим fd0).
+    const isTTY = process.stdin.isTTY;
+    if (isTTY) {
         try { process.stdin.setRawMode(false); } catch {}
-        process.stdin.pause();
         process.stdin.removeAllListeners('data');
         process.stdin.removeAllListeners('readable');
         process.stdin.removeAllListeners('keypress');
-        if (process.stdin.unref) process.stdin.unref();  // не держим TTY в event loop родителя
+        process.stdin.on('error', () => {});   // глушим EIO — не падаем, не роняем терминал
+        process.stdin.pause();
     }
     const agent = spawn('node', [agentPath, ...args], {
         env,
         stdio: 'inherit',
         cwd: process.cwd(),
     });
+    // Ребёнок получил собственный fd0 при spawn → можно убрать stdin родителя совсем,
+    // чтобы он гарантированно не конкурировал за ввод.
+    if (isTTY) { try { process.stdin.destroy(); } catch {} }
 
     agent.on('exit', (code) => {
         proxy.close();
