@@ -693,6 +693,13 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
   const decoder = new TextDecoder();
   let buffer = '';
 
+  // Чтение чанка с idle-таймаутом: если модель молчит >60с — рвём (надёжнее
+  // AbortController, который не всегда прерывает зависшее чтение тела).
+  const readChunk = () => new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('модель молчит >60с')), 60000);
+    reader.read().then(r => { clearTimeout(t); res(r); }, e => { clearTimeout(t); rej(e); });
+  });
+
   const content = [];
   let currentBlock = null;
   let stopReason = null;
@@ -700,7 +707,7 @@ async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse 
 
   try {
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readChunk();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -900,6 +907,13 @@ function buildSystemPrompt() {
 Tools: Read, Write, Edit, Bash, Grep, Glob.
 Be concise. Execute, don't explain.
 Working directory: ${process.cwd()}
+
+## Communication style (MANDATORY)
+- Language: Russian.
+- Tone: professional, neutral, business-like. No slang, no colloquialisms, no informal expressions.
+- Address the user as "вы" (capitalised where appropriate).
+- Be precise and restrained. No exclamation marks, no emojis, no familiarity.
+- Do not use words like "чё", "мутить", "давить", "ровно", "чисто" or any street/slang vernacular.
 
 ## Inter-session memory
 ${giftSummary ? `Gift Matrix (full):\n${giftSummary}` : `Local matrix:\n${wSummary}`}
