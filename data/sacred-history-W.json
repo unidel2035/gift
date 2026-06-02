@@ -39,7 +39,7 @@
   ],
   "n": 30,
   "nd": 4,
-  "actsCount": 383,
+  "actsCount": 389,
   "W": [
     [
       1.5119049549102783,
@@ -1166,7 +1166,7 @@
     [
       10,
       8,
-      0,
+      55,
       42
     ],
     [
@@ -1349,9 +1349,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpw0hq8s-0"
+        "giftId": "gift-mpw0n7g9-0"
       },
-      "declinedAt": "2026-06-02T02:21:53.309Z"
+      "declinedAt": "2026-06-02T02:26:08.889Z"
     },
     {
       "act": {
@@ -1361,9 +1361,9 @@
         "weight": 8,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpw0hq8t-1"
+        "giftId": "gift-mpw0n7g9-1"
       },
-      "declinedAt": "2026-06-02T02:21:53.309Z"
+      "declinedAt": "2026-06-02T02:26:08.889Z"
     },
     {
       "act": {
@@ -1373,9 +1373,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "declined",
-        "giftId": "gift-mpw0hq8t-2"
+        "giftId": "gift-mpw0n7g9-2"
       },
-      "declinedAt": "2026-06-02T02:21:53.309Z"
+      "declinedAt": "2026-06-02T02:26:08.889Z"
     }
   ],
   "pending": [
@@ -1387,9 +1387,9 @@
         "weight": 8,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpw0hq8x-0"
+        "giftId": "gift-mpw0n7gi-0"
       },
-      "pendingAt": "2026-06-02T02:21:53.313Z"
+      "pendingAt": "2026-06-02T02:26:08.899Z"
     },
     {
       "act": {
@@ -1399,9 +1399,9 @@
         "weight": 9,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpw0hq8x-1"
+        "giftId": "gift-mpw0n7gj-1"
       },
-      "pendingAt": "2026-06-02T02:21:53.314Z"
+      "pendingAt": "2026-06-02T02:26:08.899Z"
     },
     {
       "act": {
@@ -1411,9 +1411,9 @@
         "weight": 7,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpw0hq8y-2"
+        "giftId": "gift-mpw0n7gj-2"
       },
-      "pendingAt": "2026-06-02T02:21:53.314Z"
+      "pendingAt": "2026-06-02T02:26:08.899Z"
     },
     {
       "act": {
@@ -1423,9 +1423,9 @@
         "weight": 8,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpw0hqdz-3"
+        "giftId": "gift-mpw0n7nk-3"
       },
-      "pendingAt": "2026-06-02T02:21:53.495Z"
+      "pendingAt": "2026-06-02T02:26:09.152Z"
     },
     {
       "act": {
@@ -1435,14 +1435,14 @@
         "weight": 8,
         "irreversible": true,
         "reception": "pending",
-        "giftId": "gift-mpw0hqgq-4"
+        "giftId": "gift-mpw0n7rn-4"
       },
-      "pendingAt": "2026-06-02T02:21:53.594Z"
+      "pendingAt": "2026-06-02T02:26:09.299Z"
     }
   ],
   "symphonies": [],
   "metanoiaActs": [],
-  "createdAt": "2026-06-02T02:21:53.146Z",
-  "snapshotAt": "2026-06-02T02:21:53.676Z",
+  "createdAt": "2026-06-02T02:26:08.656Z",
+  "snapshotAt": "2026-06-02T02:26:09.388Z",
   "schema": "v2-energeia"
 }
