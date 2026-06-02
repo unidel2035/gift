@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Помним — память даров</title>
+<meta name="description" content="Тебя любили. Мы помним. Приложение, которое хранит необратимую память о тех, кто тебя нёс.">
+<meta property="og:title" content="Помним">
+<meta property="og:description" content="Всё забывается. Дар — нет.">
+<style>
+  :root{
+    --bg:#0c0b10; --ink:#ece9f2; --muted:#9a93ad; --line:#221f2b;
+    --accent:#c9a86a; --accent-soft:#1a1622; --card:#131119;
+    --serif:"Georgia","Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.55}
+  a{color:inherit}
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+
+  header{padding:110px 0 60px;text-align:center}
+  .kicker{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:28px}
+  h1{font-family:var(--serif);font-weight:400;font-size:clamp(38px,7vw,68px);line-height:1.08;margin:0 0 22px}
+  h1 .vs{color:var(--accent)}
+  .lede{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:540px;margin:0 auto 40px}
+
+  .cta{display:inline-flex;gap:0;align-items:stretch;max-width:440px;width:100%;margin:0 auto}
+  .cta input{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-right:none;
+    color:var(--ink);padding:15px 16px;font-size:15px;border-radius:10px 0 0 10px;outline:none}
+  .cta input:focus{border-color:var(--accent)}
+  .cta button{background:var(--accent);color:#1a1206;border:none;font-weight:600;font-size:15px;
+    padding:0 22px;border-radius:0 10px 10px 0;cursor:pointer;white-space:nowrap}
+  .cta button:hover{filter:brightness(1.08)}
+  .note{font-size:13px;color:var(--muted);margin-top:14px}
+  .ok{display:none;margin-top:20px;font-size:16px;color:var(--accent);font-family:var(--serif)}
+
+  section{padding:54px 0;border-top:1px solid var(--line)}
+  h2{font-family:var(--serif);font-weight:400;font-size:clamp(24px,4vw,32px);margin:0 0 28px}
+  .sub{color:var(--muted);font-size:15px;margin:-18px 0 30px}
+
+  .contrast{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .contrast div{background:var(--card);padding:24px}
+  .contrast .t{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  .contrast .b{font-family:var(--serif);font-size:20px}
+  .contrast .them .b{color:var(--muted)}
+  .contrast .us .b{color:var(--accent)}
+
+  .cards{display:grid;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px}
+  .card h3{font-family:var(--serif);font-weight:400;font-size:21px;margin:0 0 8px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  .card .tag{display:inline-block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);border:1px solid var(--line);border-radius:99px;padding:3px 11px;margin-bottom:14px}
+
+  .wrapped{background:linear-gradient(160deg,#16121d,#0e0c14);border:1px solid var(--line);
+    border-radius:16px;padding:30px;font-family:var(--serif)}
+  .wrapped .yr{font-size:13px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:var(--sans)}
+  .wrapped .big{font-size:26px;margin:6px 0 18px}
+  .wrapped ul{list-style:none;padding:0;margin:0}
+  .wrapped li{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:16px}
+  .wrapped li:last-child{border:none}
+  .wrapped li span:last-child{color:var(--accent)}
+
+  blockquote{font-family:var(--serif);font-size:clamp(22px,4vw,30px);line-height:1.3;
+    text-align:center;margin:0;color:var(--ink)}
+  blockquote .a{color:var(--accent)}
+
+  footer{padding:60px 0 90px;text-align:center;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+  footer .m{font-family:var(--serif);font-size:15px;color:var(--ink);margin-bottom:14px}
+
+  @media(max-width:560px){
+    .contrast{grid-template-columns:1fr}
+    header{padding:80px 0 40px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">скоро</div>
+    <h1>Тебя любили.<br><span class="vs">Мы&nbsp;помним.</span></h1>
+    <p class="lede">Приложение, которое хранит память о тех, кто тебя нёс. Не подбор будущего — а то, что уже случилось и осталось навсегда.</p>
+
+    <form class="cta" id="f" onsubmit="return join(event)">
+      <input id="email" type="email" required placeholder="почта — позовём первым">
+      <button type="submit">Хочу первым</button>
+    </form>
+    <div class="note">Без спама. Одно письмо, когда откроем.</div>
+    <div class="ok" id="ok">Записали. Ты в списке — позовём, когда откроется дверь.</div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Всё стало обменом. А дар — нет.</h2>
+    <div class="contrast">
+      <div class="them">
+        <div class="t">Сервисы знакомств и матчинга</div>
+        <div class="b">оптимизируют будущее — кто тебе подходит</div>
+      </div>
+      <div class="us">
+        <div class="t">Помним</div>
+        <div class="b">хранит прошлое — кто тебя любил на самом деле</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Что внутри</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="tag">раз в год</span>
+        <h3>Твой год в дарах</h3>
+        <p>Кто отдал тебе время. Кому отдал ты. Какие дары остались невозвращёнными. Одна картинка, которой хочется поделиться.</p>
+      </div>
+      <div class="card">
+        <span class="tag">память</span>
+        <h3>Те, кого больше нет</h3>
+        <p>Бабушка, отец, друг. То, что они тебе дали, не стирается — оно остаётся с тобой и возвращается, когда нужно.</p>
+      </div>
+      <div class="card">
+        <span class="tag">семья</span>
+        <h3>Чтобы дети знали</h3>
+        <p>Общая память семьи. Дети растут с записью о том, кто их нёс. Наследство не денег — смысла.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Как это выглядит</h2>
+    <p class="sub">Конец года. Не лайки и не цифры тщеславия — те, кто был рядом.</p>
+    <div class="wrapped">
+      <div class="yr">Твой год · 2026</div>
+      <div class="big">Тебя несли</div>
+      <ul>
+        <li><span>Мама</span><span>214 часов</span></li>
+        <li><span>Олег</span><span>67 часов</span></li>
+        <li><span>Сестра</span><span>41 час</span></li>
+        <li><span>Невозвращённых даров</span><span>3</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <blockquote>Время дороже подарка.<br>А то, что отдано <span class="a">с любовью</span> — уже не отнять.</blockquote>
+  </div>
+</section>
+
+<section>
+  <div class="wrap" style="text-align:center">
+    <h2>Позвать тебя, когда откроем?</h2>
+    <form class="cta" onsubmit="return join(event)" style="margin-top:10px">
+      <input type="email" required placeholder="почта" onfocus="this.dataset.t=1">
+      <button type="submit">В список</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="m">Помним</div>
+    <div>Память даров · ранний доступ · 2026</div>
+  </div>
+</footer>
+
+<script>
+// Waitlist: пока локально (localStorage) + POST на endpoint, когда подключим nous-сервер.
+// TODO: заменить ENDPOINT на боевой (nous /waitlist или TG-бот).
+const ENDPOINT = ""; // напр. "https://nti.drondoc.ru/waitlist"
+function join(e){
+  e.preventDefault();
+  const form = e.target;
+  const input = form.querySelector('input[type=email]');
+  const email = (input.value||'').trim();
+  if(!email) return false;
+  try{
+    const list = JSON.parse(localStorage.getItem('pomnim_waitlist')||'[]');
+    if(!list.includes(email)){ list.push(email); localStorage.setItem('pomnim_waitlist', JSON.stringify(list)); }
+  }catch(_){}
+  if(ENDPOINT){
+    fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email, source:'pomnim-landing', ts:new Date().toISOString()})}).catch(()=>{});
+  }
+  const ok = document.getElementById('ok');
+  if(ok && form.id==='f'){ form.style.display='none'; document.querySelector('.note').style.display='none'; ok.style.display='block'; }
+  else { input.value=''; input.placeholder='Записали ✓'; }
+  return false;
+}
+</script>
+</body>
+</html>
