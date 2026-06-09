@@ -116,8 +116,8 @@ const GEN_SYSTEM = `Ты — Адам собора. Рождаешь вопро�
 ВОПРОШАНИЕ: <текст>
 Грани должны различаться (риск, отношение, предел, дар, время). Без нумерации, без пояснений.`;
 
-export function generateCandidates(telos, n, llm = callLLM) {
-  const out = llm(GEN_SYSTEM.replace('N', String(n)), `Телос/тема: ${telos}\nПороди ${n} вопрошаний.`, { timeout: 50000 });
+export function generateCandidates(telos, n, llm = callLLM, genSystem = GEN_SYSTEM) {
+  const out = llm(genSystem.replace('N', String(n)), `Телос/тема: ${telos}\nПороди ${n} вопрошаний.`, { timeout: 50000 });
   let lines = [];
   if (out) lines = out.split('\n').map(l => l.replace(/^.*?ВОПРОШАНИЕ:\s*/i, '').trim()).filter(l => l.length > 8 && /\?|как|что|где|зачем|чем|откуда/i.test(l));
   // добор/фолбэк, чтобы всегда было n кандидатов
@@ -137,14 +137,20 @@ export function evolve(a, b, llm = callLLM) {
 }
 
 // ── Полный конвейер ─────────────────────────────────────────────────
-export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false } = {}) {
+// Инженерный генератор — без философской/доменной лексики (для мета-КБ).
+export const GEN_SYSTEM_ENGINEERING = `Ты генерируешь технические вопросы и гипотезы для базы знаний инженерной команды.
+Дано: тема. Породи РОВНО N разных по аспекту вопросов (риск, масштабирование, интерфейс/API, данные, надёжность, тестируемость).
+Строго инженерный язык, без философии, метафор и доменной лексики. Каждый — на отдельной строке, формат:
+ВОПРОШАНИЕ: <текст>`;
+
+export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false, genSystem } = {}) {
   let J = judge || (llm === callLLM ? makeLLMJudge() : heuristicJudge);
   if (ground) {
     // заземление на корпус (то, что есть у Co-Scientist): фантазия/эхо проигрывают
     const { loadCorpus, makeGroundedJudge } = await import('./sobor-ground-judge.mjs');
     J = makeGroundedJudge(loadCorpus(), J);
   }
-  let pool = generateCandidates(telos, n, llm);
+  let pool = generateCandidates(telos, n, llm, genSystem || GEN_SYSTEM);
   let ranked = runTournament(pool, J);
 
   const lineage = [];

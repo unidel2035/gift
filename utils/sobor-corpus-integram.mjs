@@ -51,6 +51,21 @@ export function fetchCorpus({ token = login() } = {}) {
   })).filter(c => c.text);
 }
 
+/** Записать новое решение обратно в мета-КБ (замыкание смыслового контура). */
+export function postDecision(decision, { token = login() } = {}) {
+  if (!URL_ || !DB || !token) return { ok: false, error: 'нет URL/DB/token' };
+  const body = {
+    title: String(decision.title).slice(0, 500),
+    domain: decision.domain || 'Смыслотворение',
+    verdict: decision.verdict || 'proposed',
+    description: decision.description || '',
+    weight: decision.weight ?? 0,
+    metadata: { ...(decision.metadata || {}), source: 'coscientist' },
+  };
+  const d = curlJSON('POST', `/api/v2/${DB}/decisions`, { token, body });
+  return d && d.ok ? { ok: true, id: d.id ?? d.data?.id, data: d } : { ok: false, error: JSON.stringify(d).slice(0, 200) };
+}
+
 export const available = () => !!(URL_ && DB && (process.env.INTEGRAM_TOKEN || (process.env.INTEGRAM_EMAIL && process.env.INTEGRAM_PASSWORD)));
 
 if (import.meta.url === `file://${process.argv[1]}`) {
