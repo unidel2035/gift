@@ -137,8 +137,13 @@ export function evolve(a, b, llm = callLLM) {
 }
 
 // ── Полный конвейер ─────────────────────────────────────────────────
-export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge } = {}) {
-  const J = judge || (llm === callLLM ? makeLLMJudge() : heuristicJudge);
+export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false } = {}) {
+  let J = judge || (llm === callLLM ? makeLLMJudge() : heuristicJudge);
+  if (ground) {
+    // заземление на корпус (то, что есть у Co-Scientist): фантазия/эхо проигрывают
+    const { loadCorpus, makeGroundedJudge } = await import('./sobor-ground-judge.mjs');
+    J = makeGroundedJudge(loadCorpus(), J);
+  }
   let pool = generateCandidates(telos, n, llm);
   let ranked = runTournament(pool, J);
 
@@ -164,8 +169,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const evolveRounds = parseInt(arg('--evolve', '1'), 10);
 
   const jsonMode = process.argv.includes('--json');
-  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»\n`);
-  const res = await coscientist(telos, { n, evolveRounds });
+  const ground = process.argv.includes('--ground');
+  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»${ground ? ' · заземление: вкл' : ''}\n`);
+  const res = await coscientist(telos, { n, evolveRounds, ground });
 
   if (jsonMode) {
     // машинный выход для мета-КБ (integram): победитель + родословная + Elo
