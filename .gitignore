@@ -16,3 +16,5 @@ colab/gift-colab-package.zip
 data/koinon-bus.jsonl
 data/.koinon-pos.json
 .mcp.json
+.env.metakb
+data/metakb-loop.log
