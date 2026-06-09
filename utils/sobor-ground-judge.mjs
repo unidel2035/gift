@@ -25,6 +25,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { fetchCorpus as integramFetchCorpus, available as integramAvailable } from './sobor-corpus-integram.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OLLAMA = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -93,6 +94,13 @@ export function similarity(a, b) {
 // ── Корпус ──────────────────────────────────────────────────────────
 export function loadCorpus() {
   const chunks = [];
+  // Живая мета-КБ integram как корпус (приоритет): заземление на реальные знания компании.
+  if (integramAvailable()) {
+    try {
+      const fromKb = integramFetchCorpus();
+      if (fromKb.length) return fromKb;
+    } catch { /* fallthrough к локальному корпусу */ }
+  }
   if (process.env.CORPUS_FILE && existsSync(process.env.CORPUS_FILE)) {
     for (const line of readFileSync(process.env.CORPUS_FILE, 'utf8').split('\n').filter(Boolean)) {
       try { const o = JSON.parse(line); if (o.text) chunks.push({ id: o.id || `c${chunks.length}`, text: o.text, source: 'corpus' }); }
