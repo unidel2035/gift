@@ -51,6 +51,20 @@ export function fetchCorpus({ token = login() } = {}) {
   })).filter(c => c.text);
 }
 
+/** Полные объекты решений (id, verdict, title, description, ...). */
+export function fetchDecisions({ token = login() } = {}) {
+  if (!URL_ || !DB || !token) return [];
+  const d = curlJSON('GET', `/api/v2/${DB}/decisions?limit=200`, { token });
+  return d?.data || d?.decisions || (Array.isArray(d) ? d : []);
+}
+
+/** Изменить поля решения (напр. verdict). */
+export function patchDecision(id, fields, { token = login() } = {}) {
+  if (!URL_ || !DB || !token) return { ok: false, error: 'нет URL/DB/token' };
+  const d = curlJSON('PATCH', `/api/v2/${DB}/decisions/${id}`, { token, body: fields });
+  return d && d.ok ? { ok: true } : { ok: false, error: JSON.stringify(d).slice(0, 160) };
+}
+
 /** Записать новое решение обратно в мета-КБ (замыкание смыслового контура). */
 export function postDecision(decision, { token = login() } = {}) {
   if (!URL_ || !DB || !token) return { ok: false, error: 'нет URL/DB/token' };

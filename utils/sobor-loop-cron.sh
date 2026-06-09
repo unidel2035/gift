@@ -17,5 +17,9 @@ LINE=$(( (10#$DAY % N) + 1 ))
 THEME=$(sed -n "${LINE}p" "$THEMES")
 
 echo "===== $(date -Iseconds) · тема: $THEME ====="
+# 1) генератор (Адам): новое заземлённое решение
 node utils/sobor-loop-metakb.mjs "$THEME" --n 3 --domain "Совместная разработка" --write
+echo
+# 2) критик (Ева): чистит дубли/мусор (reject применяется; accept — команде)
+node utils/sobor-critic-metakb.mjs --apply
 echo
