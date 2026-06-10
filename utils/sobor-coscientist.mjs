@@ -143,22 +143,31 @@ export const GEN_SYSTEM_ENGINEERING = `Ты генерируешь технич�
 Строго инженерный язык, без философии, метафор и доменной лексики. Каждый — на отдельной строке, формат:
 ВОПРОШАНИЕ: <текст>`;
 
-export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false, trial = false, candidates, genSystem } = {}) {
+export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false, trial = false, meta = false, candidates, genSystem } = {}) {
   let J = judge || (llm === callLLM ? makeLLMJudge() : heuristicJudge);
   if (ground) {
     // заземление на корпус (то, что есть у Co-Scientist): фантазия/эхо проигрывают
     const { loadCorpus, makeGroundedJudge } = await import('./sobor-ground-judge.mjs');
     J = makeGroundedJudge(loadCorpus(), J);
   }
+  let trialRunner = null;
   if (trial) {
     // испытание реальностью (такт 4): прогон тестбэда решает первым — чего нет у Co-Scientist
     const { makeTrialJudge, makeTrialRunner } = await import('./sobor-trial-judge.mjs');
-    J = makeTrialJudge(J, makeTrialRunner({ log: true }));
+    trialRunner = makeTrialRunner({ log: true });
+    J = makeTrialJudge(J, trialRunner);
+  }
+  // Meta-review: затравить генерацию памятью прошлых прогонов (подтверждено/опровергнуто)
+  let baseGen = genSystem || GEN_SYSTEM;
+  if (meta) {
+    const { metaContext } = await import('./coscientist-meta.mjs');
+    const ctx = metaContext(telos);
+    if (ctx) baseGen = baseGen + ctx;
   }
   // кандидаты: готовые (с испытаниями trial) приоритетнее сгенерированных
   let pool = (candidates && candidates.length)
     ? candidates.map((c, i) => ({ id: c.id || `cand-${i + 1}`, text: c.text, trial: c.trial }))
-    : generateCandidates(telos, n, llm, genSystem || GEN_SYSTEM);
+    : generateCandidates(telos, n, llm, baseGen);
   let ranked = runTournament(pool, J);
 
   const lineage = [];
@@ -170,7 +179,18 @@ export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLL
   }
 
   const winner = ranked[0];
-  return { telos, winner, ranked, lineage, candidates: pool };
+  const res = { telos, winner, ranked, lineage, candidates: pool };
+
+  // Meta-review: записать прогон в журнал (подтверждено/опровергнуто по испытаниям, кеш runner'а — без повторных прогонов)
+  if (meta) {
+    const { recordRun } = await import('./coscientist-meta.mjs');
+    let trials;
+    if (trialRunner) {
+      trials = ranked.filter(c => c.trial).map(c => { const t = trialRunner(c); return { text: c.text, ran: t.ran, passed: t.passed }; });
+    }
+    res.meta = recordRun(res, { trials });
+  }
+  return res;
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────
@@ -185,6 +205,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const jsonMode = process.argv.includes('--json');
   const ground = process.argv.includes('--ground');
   const trial = process.argv.includes('--trial');
+  const meta = process.argv.includes('--meta');
   // --candidates file.json: массив [{id,text,trial:{cmd,dir,result,metric,lowerBetter}}]
   let candidates;
   const candFile = arg('--candidates', null);
@@ -192,8 +213,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const { readFileSync } = await import('node:fs');
     candidates = JSON.parse(readFileSync(candFile, 'utf8'));
   }
-  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»${ground ? ' · заземление: вкл' : ''}${trial ? ' · испытание: вкл' : ''}\n`);
-  const res = await coscientist(telos, { n, evolveRounds, ground, trial, candidates });
+  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»${ground ? ' · заземление: вкл' : ''}${trial ? ' · испытание: вкл' : ''}${meta ? ' · память: вкл' : ''}\n`);
+  const res = await coscientist(telos, { n, evolveRounds, ground, trial, meta, candidates });
 
   if (jsonMode) {
     // машинный выход для мета-КБ (integram): победитель + родословная + Elo
