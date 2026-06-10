@@ -143,7 +143,7 @@ export const GEN_SYSTEM_ENGINEERING = `Ты генерируешь технич�
 Строго инженерный язык, без философии, метафор и доменной лексики. Каждый — на отдельной строке, формат:
 ВОПРОШАНИЕ: <текст>`;
 
-export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false, trial = false, meta = false, candidates, genSystem } = {}) {
+export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLLM, judge, ground = false, trial = false, meta = false, proximity = false, candidates, genSystem } = {}) {
   let J = judge || (llm === callLLM ? makeLLMJudge() : heuristicJudge);
   if (ground) {
     // заземление на корпус (то, что есть у Co-Scientist): фантазия/эхо проигрывают
@@ -168,6 +168,16 @@ export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLL
   let pool = (candidates && candidates.length)
     ? candidates.map((c, i) => ({ id: c.id || `cand-${i + 1}`, text: c.text, trial: c.trial }))
     : generateCandidates(telos, n, llm, baseGen);
+  // Proximity: схлопнуть почти-дубликаты, чтобы турнир сравнивал разное (не оттенки одного)
+  let proximityInfo = null;
+  if (proximity && pool.length > 2) {
+    const { diversify } = await import('./sobor-proximity.mjs');
+    const { diverse } = diversify(pool);
+    if (diverse.length < pool.length) {
+      proximityInfo = { before: pool.length, after: diverse.length };
+      pool = diverse;
+    }
+  }
   let ranked = runTournament(pool, J);
 
   const lineage = [];
@@ -179,7 +189,7 @@ export async function coscientist(telos, { n = 4, evolveRounds = 1, llm = callLL
   }
 
   const winner = ranked[0];
-  const res = { telos, winner, ranked, lineage, candidates: pool };
+  const res = { telos, winner, ranked, lineage, candidates: pool, proximity: proximityInfo };
 
   // Meta-review: записать прогон в журнал (подтверждено/опровергнуто по испытаниям, кеш runner'а — без повторных прогонов)
   if (meta) {
@@ -206,6 +216,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const ground = process.argv.includes('--ground');
   const trial = process.argv.includes('--trial');
   const meta = process.argv.includes('--meta');
+  const proximity = process.argv.includes('--proximity');
   // --candidates file.json: массив [{id,text,trial:{cmd,dir,result,metric,lowerBetter}}]
   let candidates;
   const candFile = arg('--candidates', null);
@@ -213,8 +224,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const { readFileSync } = await import('node:fs');
     candidates = JSON.parse(readFileSync(candFile, 'utf8'));
   }
-  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»${ground ? ' · заземление: вкл' : ''}${trial ? ' · испытание: вкл' : ''}${meta ? ' · память: вкл' : ''}\n`);
-  const res = await coscientist(telos, { n, evolveRounds, ground, trial, meta, candidates });
+  if (!jsonMode) console.log(`\n🔬 Co-Scientist-собор · телос: «${telos}»${ground ? ' · заземление: вкл' : ''}${trial ? ' · испытание: вкл' : ''}${meta ? ' · память: вкл' : ''}${proximity ? ' · proximity: вкл' : ''}\n`);
+  const res = await coscientist(telos, { n, evolveRounds, ground, trial, meta, proximity, candidates });
+  if (!jsonMode && res.proximity) console.log(`  ⊟ proximity: ${res.proximity.before} → ${res.proximity.after} кандидатов (почти-дубли схлопнуты)\n`);
 
   if (jsonMode) {
     // машинный выход для мета-КБ (integram): победитель + родословная + Elo
