@@ -1,0 +1,24 @@
+[
+  {
+    "id": "H-flight-baseline",
+    "text": "Базовый контур управления пригоден: аппарат выполняет взлёт, выход в точку и посадку в пределах допусков",
+    "trial": {
+      "cmd": "./run.sh",
+      "dir": "/home/unidel/integram/testbed/flight",
+      "result": "/home/unidel/integram/testbed/flight/result.json",
+      "metric": "waypoint_miss_m",
+      "lowerBetter": true
+    }
+  },
+  {
+    "id": "H-flight-aggressive",
+    "text": "Агрессивный профиль скорости снимает риск срыва сроков миссии без потери точности",
+    "trial": {
+      "cmd": "SITL_SPEEDUP=4 ./run.sh",
+      "dir": "/home/unidel/integram/testbed/flight",
+      "result": "/home/unidel/integram/testbed/flight/result.json",
+      "metric": "waypoint_miss_m",
+      "lowerBetter": true
+    }
+  }
+]
