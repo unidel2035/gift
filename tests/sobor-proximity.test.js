@@ -5,6 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cluster, diversify } from '../utils/sobor-proximity.mjs';
+import { lexicalSim } from '../utils/sobor-ground-judge.mjs';
+
+// Детерминизм: форсируем лексическую меру, чтобы тест не зависел от доступности
+// Ollama-эмбеддингов (с ними порог 0.6 калиброван иначе). simFn → {sim, mode}.
+const LEX = (a, b) => ({ sim: lexicalSim(a, b), mode: 'lex' });
 
 test('proximity собор · кластеризация', async (t) => {
 
@@ -15,7 +20,7 @@ test('proximity собор · кластеризация', async (t) => {
       { id: 'b1', text: 'рой из пятидесяти аппаратов самоорганизуется без центрального управления' },
       { id: 'c1', text: 'предиктивная модель ветра снимает остаточный риск срыва миссии' },
     ];
-    const { diverse, clusters } = diversify(cands, { threshold: 0.6 });
+    const { diverse, clusters } = diversify(cands, { threshold: 0.6, simFn: LEX });
     assert.equal(clusters.length, 3, 'a1≈a2 → один кластер, b1 и c1 отдельны');
     assert.equal(diverse.length, 3, 'в турнир идут 3 представителя');
     const merged = diverse.find(d => d.mergedCount === 1);
@@ -28,7 +33,7 @@ test('proximity собор · кластеризация', async (t) => {
       { id: 'plain', text: 'контур управления держит точку при возмущениях стабильно надёжно' },
       { id: 'tried', text: 'контур управления держит точку при возмущениях', trial: { cmd: 'exit 0' } },
     ];
-    const clusters = cluster(cands, { threshold: 0.5 });
+    const clusters = cluster(cands, { threshold: 0.5, simFn: LEX });
     assert.equal(clusters.length, 1, 'оба в одном кластере');
     assert.equal(clusters[0].rep.id, 'tried', 'представитель — с испытанием, а не более длинный');
   });
@@ -39,7 +44,7 @@ test('proximity собор · кластеризация', async (t) => {
       { id: 'y', text: 'защищённость канала связи от подавления' },
       { id: 'z', text: 'дешёвое массовое производство планера' },
     ];
-    const { diverse } = diversify(cands, { threshold: 0.6 });
+    const { diverse } = diversify(cands, { threshold: 0.6, simFn: LEX });
     assert.equal(diverse.length, 3, 'разные гипотезы все доходят до турнира');
   });
 });

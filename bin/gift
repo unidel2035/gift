@@ -914,6 +914,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'team': {
+      // Командное кодирование как организм: присутствие + намерения + органы +
+      // ревю-ворота (слепой ревьюер + испытание) + спекулятивный турнир.
+      await runRaw('utils/gift-team.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'status': {
       console.log(`\n${C.b('Статус онтологии дара')} ${C.dim('v' + readVersion())}`);
       console.log(`${C.dim('─'.repeat(46))}`);
