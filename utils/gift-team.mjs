@@ -36,14 +36,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ZONES_PATH = resolve(ROOT, 'ZONES.md');
 const C = { dim: '\x1b[2m', b: '\x1b[1m', y: '\x1b[33m', g: '\x1b[32m', c: '\x1b[36m', m: '\x1b[35m', r: '\x1b[31m', x: '\x1b[0m' };
 
-// Федерация органов-репозиториев: живое настоящее всего тела, не одной консоли.
-// Переопределяется data/team-federation.json (массив {label, repo}).
-const FEDERATION = (() => {
-  const f = resolve(ROOT, 'data/team-federation.json');
-  if (existsSync(f)) { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { /* дефолт */ } }
-  return [{ label: 'integram', repo: 'judas-priest/integram' }];
-})();
-
 function actor() { return process.env.GIFT_AGENT_ID || process.env.ORGANISM_ACTOR || process.env.USER || 'аноним'; }
 
 // ── Органы (ZONES.md) ────────────────────────────────────────────────
@@ -187,58 +179,16 @@ async function cmdSpeculate(args) {
   console.log(`${C.g}🏆 Реальность выбрала:${C.x} ${C.b}${res.winner.id}${C.x} ${res.winner.label || ''}`);
 }
 
-// ── Живое настоящее федерации (через gh напрямую к GitHub, не локальный снимок) ──
-export function relTimeFrom(iso, now) {
-  const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  if (s < 90) return `${s}с`;
-  const m = Math.round(s / 60); if (m < 90) return `${m}м`;
-  const h = Math.round(m / 60); if (h < 36) return `${h}ч`;
-  return `${Math.round(h / 24)}д`;
-}
-const relTime = iso => relTimeFrom(iso, Date.now());
-
-/** Чистый форматтер живого настоящего репо → строки. Тестируемо без сети. */
-export function summarizePresent({ label, prs = [], commits = [], ok = true }, now = Date.now()) {
-  const lines = [];
-  if (!ok) { lines.push(`  ${C.dim}— gh недоступен${C.x}`); return lines; }
-  const open = prs.filter(p => p.state === 'OPEN');
-  if (open.length) {
-    lines.push(`  ${C.b}Открытые PR (${open.length}):${C.x}`);
-    for (const p of open.slice(0, 6)) lines.push(`    ${C.c}#${p.number}${C.x} ${p.title} ${C.dim}${relTimeFrom(p.updatedAt, now)} назад${C.x}`);
+// Живое настоящее тела — единый орган presence-feed (Ева #106): один сборщик,
+// два притока (W+локально / федерация), одно устье (консоль / Telegram).
+async function cmdPresent(args) {
+  const { collectPresent, formatFeed, sendToTelegram } = await import('./presence-feed.mjs');
+  const feed = formatFeed(collectPresent());
+  console.log('\n' + feed.replace(/^═══.*═══$/m, `${C.b}${C.y}$&${C.x}`).replace(/^▸ .*/gm, `${C.m}$&${C.x}`) + '\n');
+  if (args.includes('--send')) {
+    const res = await sendToTelegram(feed);
+    console.log(res.sent ? `${C.g}✓ отправлено в Telegram${C.x}` : `${C.dim}(в Telegram не отправлено: ${res.reason})${C.x}`);
   }
-  if (commits.length) {
-    lines.push(`  ${C.b}Свежие коммиты:${C.x}`);
-    for (const cmt of commits.slice(0, 4)) lines.push(`    ${C.dim}${cmt.sha?.slice(0, 7)} ${relTimeFrom(cmt.date, now)} назад${C.x} ${cmt.msg?.split('\n')[0].slice(0, 64)}`);
-  }
-  if (!open.length && !commits.length) lines.push(`  ${C.dim}— тихо${C.x}`);
-  return lines;
-}
-
-function gh(args, timeout = 12000) {
-  try {
-    const r = spawnSync('gh', args, { encoding: 'utf8', timeout, maxBuffer: 8e6 });
-    if (r.status !== 0) return null;
-    return JSON.parse(r.stdout);
-  } catch { return null; }
-}
-
-function fetchRepoPresent(repo) {
-  const prs = gh(['pr', 'list', '-R', repo, '--state', 'open', '--limit', '10', '--json', 'number,title,state,updatedAt']);
-  const commitsRaw = gh(['api', `repos/${repo}/commits?per_page=4`, '--jq', '[.[]|{sha:.sha,msg:.commit.message,date:.commit.committer.date}]']);
-  return { prs: prs || [], commits: commitsRaw || [], ok: prs !== null || commitsRaw !== null };
-}
-
-function cmdPresent() {
-  // локальное присутствие — как в status, кратко
-  const sessions = listActiveSessions().filter(s => !s.stale);
-  console.log(`\n${C.b}${C.y}═══ Живое настоящее тела ═══${C.x}`);
-  console.log(`\n${C.b}Здесь (эта консоль), сейчас:${C.x} ${sessions.length ? sessions.map(s => s.agent).join(', ') : C.dim + 'пусто' + C.x}`);
-  // федерация — живое состояние других органов-репозиториев
-  for (const org of FEDERATION) {
-    console.log(`\n${C.b}${C.m}▸ ${org.label}${C.x} ${C.dim}(${org.repo})${C.x}`);
-    for (const line of summarizePresent({ label: org.label, ...fetchRepoPresent(org.repo) })) console.log(line);
-  }
-  console.log('');
 }
 
 // ── утиль + диспетчер ────────────────────────────────────────────────
@@ -257,7 +207,7 @@ export async function run(argv) {
     case 'zone': return cmdZone(args);
     case 'review': return cmdReview(args);
     case 'speculate': return cmdSpeculate(args);
-    case 'present': return cmdPresent();
+    case 'present': return cmdPresent(args);
     case 'heartbeat': return heartbeat(actor());
     default:
       console.log(`gift team — командное кодирование как организм
