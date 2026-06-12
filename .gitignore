@@ -18,3 +18,8 @@ data/.koinon-pos.json
 .mcp.json
 .env.metakb
 data/metakb-loop.log
+
+# gift team runtime presence (не версионируется)
+data/.swarm/sessions/
+data/.swarm/intentions/
+data/.swarm/locks/

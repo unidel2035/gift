@@ -85,19 +85,23 @@ function cmdLeave() {
 }
 
 function cmdStatus() {
-  const sessions = listActiveSessions();
+  const all = listActiveSessions();
+  const sessions = all.filter(s => !s.stale);   // присутствие не лжёт: протухших не показываем как «здесь»
+  const stale = all.filter(s => s.stale);
   const intents = allIntentions();
   const conflicts = detectConflicts();
   const zones = loadZones();
 
   console.log(`\n${C.b}${C.y}═══ Общее настоящее · gift team ═══${C.x}`);
-  // присутствие
+  // присутствие (только живые: heartbeat свежее 120с)
   console.log(`\n${C.b}Кто здесь сейчас (${sessions.length}):${C.x}`);
   if (!sessions.length) console.log(`  ${C.dim}— пусто (никто не вошёл: gift team join)${C.x}`);
   for (const s of sessions) {
-    const ago = Math.round((Date.now() - new Date(s.lastSeen || s.startedAt || Date.now()).getTime()) / 1000);
-    console.log(`  ${C.g}●${C.x} ${C.b}${s.agent}${C.x}${s.organ ? ` ${C.m}[${s.organ}]${C.x}` : ''} ${C.dim}${ago}с назад${C.x}`);
+    const ago = Math.round((Date.now() - s.heartbeat) / 1000);
+    const organ = s.metadata?.organ;
+    console.log(`  ${C.g}●${C.x} ${C.b}${s.agent}${C.x}${organ ? ` ${C.m}[${organ}]${C.x}` : ''} ${C.dim}${ago}с назад${C.x}`);
   }
+  if (stale.length) console.log(`  ${C.dim}(${stale.length} протухших — молчат >120с, не считаются присутствующими)${C.x}`);
   // намерения
   console.log(`\n${C.b}Открытые намерения:${C.x}`);
   if (!intents.length) console.log(`  ${C.dim}— нет${C.x}`);
@@ -180,6 +184,9 @@ function argOf(args, name) { const i = args.indexOf(name); return i >= 0 ? args[
 
 export async function run(argv) {
   const [sub, ...args] = argv;
+  // Любое касание team-CLI обновляет присутствие (no-op, если не вошёл) — чтобы
+  // активный кентавр не «протухал», пока работает. join/leave управляют сами.
+  if (sub && !['join', 'leave', 'heartbeat'].includes(sub)) { try { heartbeat(actor()); } catch { /* не вошёл */ } }
   switch (sub) {
     case 'join': return cmdJoin(args);
     case 'leave': return cmdLeave();

@@ -1,105 +1,117 @@
 {
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/claude-anamnesis.mjs 2>/dev/null || true",
-            "timeout": 30,
-            "statusMessage": "Ἀνάμνησις — три слоя памяти..."
-          },
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/gift-plan.mjs --pending 2>/dev/null || true",
-            "timeout": 10,
-            "statusMessage": "Проверяю планы..."
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "GITHUB_TOKEN=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 node \"$(git rev-parse --show-toplevel)/utils/voroshaniye-hook.mjs\" 2>/dev/null || true",
-            "timeout": 15,
-            "statusMessage": "Фиксирую вопрошание..."
-          },
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/utils/matrix-context-hook.mjs\" 2>/dev/null || true",
-            "timeout": 15,
-            "statusMessage": "Анамнезис матрицы W + сервера..."
-          },
-          {
-            "type": "command",
-            "command": "GIFT_CLAUDE_ID=gift-claude node \"$(git rev-parse --show-toplevel)/utils/koinon-pump.mjs\" 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Свежие сообщения шины Κοινόν..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/utils/session-stop-hook.mjs\" 2>/dev/null || true",
-            "timeout": 15,
-            "statusMessage": "Фиксирую присутствие..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'git commit' && node \"$(git rev-parse --show-toplevel)/utils/git-gift-sync.mjs\" 2>/dev/null || true",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue create' && node \"$(git rev-parse --show-toplevel)/utils/gh-issue-sync.mjs\" 2>/dev/null || true",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh pr create' && node \"$(git rev-parse --show-toplevel)/utils/gh-pr-sync.mjs\" 2>/dev/null || true",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue edit' && node \"$(git rev-parse --show-toplevel)/utils/gh-label-sync.mjs\" 2>/dev/null || true",
-            "timeout": 20
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
-            "timeout": 15
-          }
-        ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
-            "timeout": 15
-          }
-        ]
-      }
+ "hooks": {
+  "SessionStart": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/claude-anamnesis.mjs 2>/dev/null || true",
+      "timeout": 30,
+      "statusMessage": "Ἀνάμνησις — три слоя памяти..."
+     },
+     {
+      "type": "command",
+      "command": "cd \"$(git rev-parse --show-toplevel)\" && node utils/gift-plan.mjs --pending 2>/dev/null || true",
+      "timeout": 10,
+      "statusMessage": "Проверяю планы..."
+     }
     ]
-  }
+   }
+  ],
+  "UserPromptSubmit": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "GITHUB_TOKEN=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 node \"$(git rev-parse --show-toplevel)/utils/voroshaniye-hook.mjs\" 2>/dev/null || true",
+      "timeout": 15,
+      "statusMessage": "Фиксирую вопрошание..."
+     },
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/matrix-context-hook.mjs\" 2>/dev/null || true",
+      "timeout": 15,
+      "statusMessage": "Анамнезис матрицы W + сервера..."
+     },
+     {
+      "type": "command",
+      "command": "GIFT_CLAUDE_ID=gift-claude node \"$(git rev-parse --show-toplevel)/utils/koinon-pump.mjs\" 2>/dev/null || true",
+      "timeout": 5,
+      "statusMessage": "Свежие сообщения шины Κοινόν..."
+     },
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-team-heartbeat.mjs\" 2>/dev/null || true",
+      "timeout": 5,
+      "statusMessage": "Пульс присутствия gift team..."
+     }
+    ]
+   }
+  ],
+  "Stop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/session-stop-hook.mjs\" 2>/dev/null || true",
+      "timeout": 15,
+      "statusMessage": "Фиксирую присутствие..."
+     },
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-team-heartbeat.mjs\" 2>/dev/null || true",
+      "timeout": 5,
+      "statusMessage": "Пульс присутствия gift team..."
+     }
+    ]
+   }
+  ],
+  "PostToolUse": [
+   {
+    "matcher": "Bash",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "jq -r '.tool_input.command // \"\"' | grep -q 'git commit' && node \"$(git rev-parse --show-toplevel)/utils/git-gift-sync.mjs\" 2>/dev/null || true",
+      "timeout": 20
+     },
+     {
+      "type": "command",
+      "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue create' && node \"$(git rev-parse --show-toplevel)/utils/gh-issue-sync.mjs\" 2>/dev/null || true",
+      "timeout": 20
+     },
+     {
+      "type": "command",
+      "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh pr create' && node \"$(git rev-parse --show-toplevel)/utils/gh-pr-sync.mjs\" 2>/dev/null || true",
+      "timeout": 20
+     },
+     {
+      "type": "command",
+      "command": "jq -r '.tool_input.command // \"\"' | grep -q 'gh issue edit' && node \"$(git rev-parse --show-toplevel)/utils/gh-label-sync.mjs\" 2>/dev/null || true",
+      "timeout": 20
+     }
+    ]
+   },
+   {
+    "matcher": "Write",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
+      "timeout": 15
+     }
+    ]
+   },
+   {
+    "matcher": "Edit",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "node \"$(git rev-parse --show-toplevel)/utils/gift-file-hook.mjs\" 2>/dev/null || true",
+      "timeout": 15
+     }
+    ]
+   }
+  ]
+ }
 }
