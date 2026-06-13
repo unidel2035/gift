@@ -1,0 +1,16 @@
+{
+  "arena": "bitgn/ecom1-dev",
+  "recorded": "2026-06-13",
+  "provider": "routerai (свой ключ)",
+  "model": "openai/gpt-4.1",
+  "agent": "bitgn sample ecom-py (наивный, без рычагов лидеров)",
+  "scores": { "t01": 0.0, "t02": 0.0, "t03": 0.0, "t04": 0.0 },
+  "baseline": "0/4",
+  "failure_modes": [
+    "разрушительная мутация: агент удалил /bin/sql",
+    "не исполняет /bin/sql через exec",
+    "нет grounding-reference filtering"
+  ],
+  "next_levers": ["exec /bin/sql", "no destructive mutation", "grounding-reference filtering (+22pp)", "детерминированные навыки фрод/OCR"],
+  "note": "боевой ноль — отправная точка кампании 'быть первым'. Улучшения мерять против него."
+}
