@@ -4,13 +4,38 @@
   "provider": "routerai (свой ключ)",
   "model": "openai/gpt-4.1",
   "agent": "bitgn sample ecom-py (наивный, без рычагов лидеров)",
-  "scores": { "t01": 0.0, "t02": 0.0, "t03": 0.0, "t04": 0.0 },
+  "scores": {
+    "t01": 0.0,
+    "t02": 0.0,
+    "t03": 0.0,
+    "t04": 0.0
+  },
   "baseline": "0/4",
   "failure_modes": [
     "разрушительная мутация: агент удалил /bin/sql",
     "не исполняет /bin/sql через exec",
     "нет grounding-reference filtering"
   ],
-  "next_levers": ["exec /bin/sql", "no destructive mutation", "grounding-reference filtering (+22pp)", "детерминированные навыки фрод/OCR"],
-  "note": "боевой ноль — отправная точка кампании 'быть первым'. Улучшения мерять против него."
+  "next_levers": [
+    "exec /bin/sql",
+    "no destructive mutation",
+    "grounding-reference filtering (+22pp)",
+    "детерминированные навыки фрод/OCR"
+  ],
+  "note": "боевой ноль — отправная точка кампании 'быть первым'. Улучшения мерять против него.",
+  "prod_attempt": {
+    "date": "2026-06-13",
+    "benchmark": "bitgn/ecom1-prod (100)",
+    "raw": "0/100",
+    "valid": false,
+    "reason": "routerai balance hit 402 mid-run — большинство задач без ответа модели; результат недостоверен"
+  },
+  "clean_signal": "dev 2/5 (40%) на v6-агенте, пока баланс был жив",
+  "leaderboard_place": "нет — нет валидного prod-прогона",
+  "blocker": "routerai баланс = 0 (Insufficient balance); пополнить или дать funded ключ",
+  "real_agent_gaps_from_grader": [
+    "refs = record_path на каждый объект, не родитель /proc/catalog",
+    "восстановление после SQL-ошибок (не объявлять outage)",
+    "решительное report_completion в бюджете шагов"
+  ]
 }
