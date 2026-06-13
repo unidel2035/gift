@@ -58,5 +58,20 @@
       ],
       "pattern": "FINAL SCORE|wait.*shard|агрегат|ded[12]\\.log"
     }
+  },
+  {
+    "id": "cyrillic-word-boundary",
+    "trigger": "regex со \\b вокруг кириллицы (JS/node)",
+    "avoid": "\\b — ASCII-граница слова, НЕ срабатывает на кириллице (молчаливый промах)",
+    "do": "убрать \\b; substring, либо (^|[^а-яё]) ... ([^а-яё]|$)",
+    "why": "ловило дважды 13.06: verdict() собора и looksDeterministic моста",
+    "weight": 7,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash"
+      ],
+      "pattern": "\\\\\\\\b.*[а-яё]|[а-яё].*\\\\\\\\b"
+    }
   }
 ]

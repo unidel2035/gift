@@ -260,7 +260,11 @@ const HELP_SECTIONS = {
   gift lesson list                — все правила-рефлексы
   gift lesson add --id X --trigger "..." --tools Bash --pattern "rx" --avoid "..." --do "..." ${C.dim('[--enforce block]')}
   gift lesson match --tool Bash --input "<cmd>"   — что сработает на действии
-  ${C.dim('Срабатывает САМО через PreToolUse-хук lesson-guard перед каждым действием.')}`,
+  ${C.dim('Срабатывает САМО через PreToolUse-хук lesson-guard перед каждым действием.')}
+
+  ${C.b('Нейросимвольный мост (formal-ai Кости):')}
+  gift formal "<вопрос>"          — детерминированный ответ (счёт/процент/валюта) без LLM
+  ${C.dim('Воспроизводимо и бесплатно; семантику оставляем LLM. Нужен собранный formal-ai.')}`,
 
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
@@ -952,6 +956,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
       // Память-рефлекс кентавра (7-й слой): захват выученных РЕШЕНИЙ как правил,
       // которые PreToolUse-хук lesson-guard впрыскивает/блокирует в точке действия.
       await runRaw('utils/lessons.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'formal': {
+      // Нейросимвольный мост к formal-ai (Костя): детерминированные подзадачи
+      // (счёт/процент/валюта/арифметика) — символическому движку, не LLM.
+      await runRaw('utils/formal-ai.mjs', [sub, ...rest].filter(Boolean));
       break;
     }
 
