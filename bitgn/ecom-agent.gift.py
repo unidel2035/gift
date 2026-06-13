@@ -153,7 +153,7 @@ START OF WORK:
 - Policies live in `/docs` (checkout, discounts, payments, returns, security). Apply them.
 
 ANSWER FORMAT (these determine the score — obey exactly):
-- YES/NO questions: include the literal token `<YES>` or `<NO>` in your final message.
+- ANSWER FORMAT: obey EXACTLY the answer-format rules stated in the live /AGENTS.MD of THIS session. The required yes/no token differs per environment (e.g. `<YES>`/`<NO>` OR `TRUE(1)`/`FALSE(0)`). Read /AGENTS.MD and use ITS exact format/tokens.
 - Availability questions: reference ONLY products/stores that ARE available; never reference unavailable ones.
 - Ambiguous request: ask for clarification AND reference every concrete candidate object that makes it ambiguous (full paths).
 - Every reference = FULL path to the object in the repo.
@@ -165,7 +165,8 @@ GROUNDING (rule #1):
 - When you found an item via SQL, LOCATE its concrete repo path with `find` (by sku or name under the relevant /proc/... root) and cite THAT exact path. NEVER cite a parent directory like `/proc/catalog`. Cite the qualifying object(s) themselves; for count/list questions cite each qualifying object. Fewer, exact, object-level refs win.
 
 SQL ERROR RECOVERY:
-- If a `sql` query errors, the server is NOT down — your SQL is wrong. Re-check table/column names and retry a corrected query. Never claim an outage for a SQL error.
+- If a `sql` query returns a SYNTAX/column error → your SQL is wrong, fix it and retry.
+- If a tool reports a TRANSIENT outage ("cluster is down", "wait N seconds and retry", "timeout") → it is a recoverable incident: WAIT and RETRY the SAME call (the runtime auto-retries up to 4x). Do NOT report OUTCOME_ERR_INTERNAL for a transient outage — retry until it succeeds.
 - DECISIVENESS (budget = 30 steps, aim < 10): the moment your data answers the question, IMMEDIATELY call report_completion with the answer and record_path refs. Do NOT keep querying once you can answer. Better to answer with what you have than to loop. Never finish without calling report_completion.
 
 STATE & SECURITY:
@@ -333,6 +334,20 @@ def _format_result(cmd: BaseModel, result) -> str:
     return json.dumps(MessageToDict(result), indent=2)
 
 
+
+import time as _time
+_TRANSIENT = ("cluster is down","wait 8 seconds","login timeout","timed out","try again","temporarily","retry")
+def _exec_retry(vm, req, tries=4):
+    last=None
+    for k in range(tries):
+        r=vm.exec(req); last=r
+        blob=(getattr(r,"stdout","") or "")+(getattr(r,"stderr","") or "")
+        ec=getattr(r,"exit_code",0)
+        if ec==0 or not any(t in blob.lower() for t in _TRANSIENT):
+            return r
+        _time.sleep(min(8, 2*(k+1)))   # подождать и повторить (сбой временный)
+    return last
+
 def dispatch(vm: EcomRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Tree):
         return vm.tree(TreeRequest(root=cmd.root, level=cmd.level))
@@ -371,9 +386,9 @@ def dispatch(vm: EcomRuntimeClientSync, cmd: BaseModel):
     if isinstance(cmd, Req_Stat):
         return vm.stat(StatRequest(path=cmd.path))
     if isinstance(cmd, Req_Exec):
-        return vm.exec(ExecRequest(path=cmd.path, args=cmd.args, stdin=cmd.stdin))
+        return _exec_retry(vm, ExecRequest(path=cmd.path, args=cmd.args, stdin=cmd.stdin))
     if isinstance(cmd, Req_Sql):
-        return vm.exec(ExecRequest(path="/bin/sql", args=[], stdin=cmd.query))
+        return _exec_retry(vm, ExecRequest(path="/bin/sql", args=[], stdin=cmd.query))
     if isinstance(cmd, ReportTaskCompletion):
         return vm.answer(
             AnswerRequest(
