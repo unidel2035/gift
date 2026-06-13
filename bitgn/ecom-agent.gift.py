@@ -134,9 +134,11 @@ class NextStep(BaseModel):
 system_prompt = f"""
 You are a careful ecommerce operations agent on the PowerTools agentic OS (ECOM v2/PROD). The workspace is a file-shaped runtime with runtime tools. All paths are /-rooted; always give FULL paths.
 
+MANDATORY EVIDENCE: For ANY question about catalogue/products/inventory/availability/counts you MUST run at least one `sql` query that returns the relevant rows (with record_path) BEFORE calling report_completion. NEVER answer such a question from memory or from the schema alone — no SQL rows = no answer. If you have not run a successful data query yet, your next action must be a `sql` query, not report_completion.
+
 CATALOGUE & INVENTORY = SQL ONLY (critical):
 - To run SQL choose the `sql` function (tool="sql", query="<SQLite>"). PRIMARY way to read catalogue/inventory. Start with query="select name, sql from sqlite_schema where sql is not null order by type, name;" to learn the schema, then query real tables.
-- IMPORTANT: tables expose a `record_path` column = the object's exact full repo path. ALWAYS SELECT record_path for the objects in your answer, and use those record_path values as your grounding_refs (that is the exact path the grader expects).
+- CRITICAL GROUNDING: tables expose a `record_path` column = the object's EXACT file path (e.g. /proc/catalog/Bosch Professional/PT-BIT-BOS-CYL9-10.json). ALWAYS `SELECT record_path` for every qualifying object. Put EACH qualifying object's record_path as a SEPARATE entry in grounding_refs — ONE ref per object. NEVER cite a parent directory like /proc/catalog. For count/list/availability questions, list the record_path of EVERY qualifying item.
 - Product/catalogue/inventory data is NOT readable as files. Inventory lives ONLY in SQL projections.
 - Use the `exec` tool on `/bin/sql` with a SQLite query in `stdin`. FIRST discover the schema:
   exec path="/bin/sql" stdin="select name, sql from sqlite_schema where sql is not null order by type, name;"
@@ -161,6 +163,10 @@ GROUNDING (rule #1):
 - When you apply a policy from `/docs`, include that policy document path as a grounding reference.
 - In `report_completion.grounding_refs`, cite the EXACT FULL PATH of each specific object that supports the answer — e.g. the product's own path, the specific basket/payment/return object, the applied /docs policy file. 
 - When you found an item via SQL, LOCATE its concrete repo path with `find` (by sku or name under the relevant /proc/... root) and cite THAT exact path. NEVER cite a parent directory like `/proc/catalog`. Cite the qualifying object(s) themselves; for count/list questions cite each qualifying object. Fewer, exact, object-level refs win.
+
+SQL ERROR RECOVERY:
+- If a `sql` query errors, the server is NOT down — your SQL is wrong. Re-check table/column names and retry a corrected query. Never claim an outage for a SQL error.
+- DECISIVENESS (budget = 30 steps, aim < 10): the moment your data answers the question, IMMEDIATELY call report_completion with the answer and record_path refs. Do NOT keep querying once you can answer. Better to answer with what you have than to loop. Never finish without calling report_completion.
 
 STATE & SECURITY:
 - Read-and-decide. Mutate (write/delete/discount/payments/checkout) ONLY when the task explicitly requires it, and only after verifying authorization via `/bin/id` and the relevant policy. Re-read/verify success after a mutation before claiming OUTCOME_OK.
@@ -379,11 +385,51 @@ def dispatch(vm: EcomRuntimeClientSync, cmd: BaseModel):
     raise ValueError(f"Unknown command: {cmd}")
 
 
+
+import subprocess, json as _json, re as _rejson
+_CLAUDE_BIN = next((p for p in ["/home/unidel/.local/bin/claude","claude"]), "claude")
+
+def _extract_json(text):
+    s = _rejson.sub(r"```json|```", "", text or "").strip()
+    i = s.find("{")
+    if i < 0: return None
+    depth=0; instr=False; esc=False
+    for j in range(i, len(s)):
+        c=s[j]
+        if esc: esc=False; continue
+        if c=="\\": esc=True; continue
+        if c=='"': instr=not instr
+        elif not instr and c=="{": depth+=1
+        elif not instr and c=="}":
+            depth-=1
+            if depth==0: return s[i:j+1]
+    return None
+
+def claude_parse(messages, schema_model):
+    sysmsg="\n\n".join(m["content"] if isinstance(m["content"],str) else str(m["content"]) for m in messages if m["role"]=="system")
+    convo=[m for m in messages if m["role"]!="system"]
+    lines=[]
+    for m in convo:
+        role="Assistant" if m["role"]=="assistant" else "User"
+        c=m["content"] if isinstance(m["content"],str) else str(m["content"])
+        lines.append(f"{role}: {c}")
+    schema=_json.dumps(schema_model.model_json_schema())
+    sysmsg += "\n\nCRITICAL: Respond with ONE JSON object strictly conforming to this JSON Schema. No prose, no markdown, only JSON.\nSchema:\n"+schema
+    p=subprocess.run([_CLAUDE_BIN,"--print","--append-system-prompt",sysmsg], input="\n\n".join(lines), capture_output=True, text=True, timeout=180)
+    js=_extract_json(p.stdout)
+    if not js: raise RuntimeError("claude: no JSON in output: "+(p.stdout or p.stderr)[:200])
+    return schema_model.model_validate_json(js)
+
+USE_CLAUDE_SUB = os.environ.get("USE_CLAUDE_SUB")=="1"
+
+
 def run_agent(model: str, harness_url: str, task_text: str) -> None:
     client = OpenAI()
     vm = EcomRuntimeClientSync(harness_url)
     log = [{"role": "system", "content": system_prompt}]
     touched_reads = set()  # рычаг заземления: только реально прочитанные пути
+    sql_paths = []           # record_path, реально вернувшиеся из SQL (порядок сохранён)
+    import re as _re
 
     must = [
         Req_Tree(level=2, tool="tree", root="/"),
@@ -401,17 +447,26 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
     touched_reads.add("/AGENTS.MD")
     log.append({"role": "user", "content": task_text})
 
-    for i in range(30):
+    HEAD_LEN = len(log)
+    tok_in = tok_out = 0
+    for i in range(10):
         step = f"step_{i + 1}"
         started = time.time()
-        resp = client.beta.chat.completions.parse(
-            model=model,
-            response_format=NextStep,
-            messages=log,
-            max_completion_tokens=16384,
-        )
+        messages = log[:HEAD_LEN] + log[HEAD_LEN:][-8:]
+        if USE_CLAUDE_SUB:
+            job = claude_parse(messages, NextStep)
+        else:
+            resp = client.beta.chat.completions.parse(
+                model=model, response_format=NextStep, messages=messages, max_completion_tokens=16384,
+            )
+            try:
+                tok_in += resp.usage.prompt_tokens; tok_out += resp.usage.completion_tokens
+            except Exception: pass
+            job = resp.choices[0].message.parsed
         elapsed_ms = int((time.time() - started) * 1000)
-        job = resp.choices[0].message.parsed
+        try:
+            tok_in += resp.usage.prompt_tokens; tok_out += resp.usage.completion_tokens
+        except Exception: pass
 
         print(
             f"Next {step}... {job.plan_remaining_steps_brief[0]} ({elapsed_ms} ms)\n"
@@ -435,6 +490,14 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
             }
         )
 
+        # ДЕТЕРМИНИРОВАННЫЙ СТРАЖ REFS: подменяем родительские/пустые refs на точные record_path из SQL
+        if isinstance(job.function, ReportTaskCompletion) and sql_paths:
+            refs = list(job.function.grounding_refs or [])
+            bad = (not refs) or any(r.rstrip("/") in ("/proc/catalog", "/proc", "/proc/stores") for r in refs)
+            specific = [r for r in refs if r.endswith(".json")]
+            if bad or not specific:
+                job.function.grounding_refs[:] = sql_paths
+
         # ДЕТЕРМИНИРОВАННЫЙ ГЕЙТ: /bin/* — исполняемые. Любая не-exec операция на них
         # бесполезна (stat/read/delete зацикливают модель). Перехватываем и редиректим в exec.
         _p = getattr(job.function, "path", "") or ""
@@ -445,19 +508,25 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
                    f"stdin=\"select name, sql from sqlite_schema where sql is not null order by type, name;\". "
                    f"Emit the exec call now.")
             print(f"{CLI_YELLOW}GUARD{CLI_CLR}: {_p} -> redirect to exec")
-            log.append({"role": "tool", "content": txt, "tool_call_id": step})
+            log.append({"role": "tool", "content": txt[:1500], "tool_call_id": step})
             continue
 
         try:
             result = dispatch(vm, job.function)
             if isinstance(job.function, Req_Read):
                 touched_reads.add(job.function.path)
+            if isinstance(job.function, Req_Sql):
+                _body = getattr(result, "stdout", "") or str(result)
+                for _m in _re.findall(r"/proc/[A-Za-z0-9 _./\\-]+?\.json", _body):
+                    if _m not in sql_paths:
+                        sql_paths.append(_m)
             txt = _format_result(job.function, result)
             print(f"{CLI_GREEN}OUT{CLI_CLR}: {txt}")
         except ConnectError as exc:
             txt = str(exc.message)
             print(f"{CLI_RED}ERR {exc.code}: {exc.message}{CLI_CLR}")
 
+            print(f"[TOKENS] in={tok_in} out={tok_out}")
         if isinstance(job.function, ReportTaskCompletion):
             status = CLI_GREEN if job.function.outcome == "OUTCOME_OK" else CLI_YELLOW
             print(f"{status}agent {job.function.outcome}{CLI_CLR}. Summary:")
@@ -469,4 +538,4 @@ def run_agent(model: str, harness_url: str, task_text: str) -> None:
                     print(f"- {CLI_BLUE}{ref}{CLI_CLR}")
             break
 
-        log.append({"role": "tool", "content": txt, "tool_call_id": step})
+        log.append({"role": "tool", "content": txt[:1500], "tool_call_id": step})
