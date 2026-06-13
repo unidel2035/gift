@@ -147,12 +147,33 @@ async function cmdReview(args) {
   const file = args.find(a => !a.startsWith('--'));
   if (!file || !existsSync(file)) { console.log('Использование: gift team review <файл> [--trial "cmd"]'); return; }
   const code = readFileSync(file, 'utf8');
-  const { blindReview } = await import('./sobor-blind-review.mjs');
+  const { blindReview, heuristicScan } = await import('./sobor-blind-review.mjs');
+  const { groundedVerdict } = await import('./sobor-grounding.mjs');
   console.log(`${C.b}Слепой ревьюер (рассуждает назад, не зная замысла):${C.x}`);
   const blind = await blindReview(code);
   if (blind.inferredIntent) console.log(`  ${C.dim}интент:${C.x} ${blind.inferredIntent}`);
-  for (const f of blind.findings) console.log(`  ${C.r}✗${C.x} ${f.why}`);
-  if (!blind.findings.length) console.log(`  ${C.g}изъянов не найдено${C.x}`);
+
+  // Заземление (рычаг №1 арены): находка считается, только если у неё точная ссылка
+  // файл:строка. Поэтому ВСЕГДА гоним детерминированный скан (у него есть line) и сливаем
+  // с находками слепого ревьюера — иначе в LLM-режиме проза без строки отбросилась бы вся,
+  // и реальные изъяны (пустой catch, always-true) ускользнули бы. LLM «звучит плохо» без
+  // строки остаётся виден, но НЕ влияет на вердикт. Reviewer открыл `file` (touched).
+  const HIGH = new Set(['empty-catch', 'swallowed-error', 'hardcoded-secret', 'always-true', 'unconditional-success']);
+  const seen = new Set();
+  const merged = [...heuristicScan(code), ...blind.findings].filter(f => {
+    const k = `${f.rule}:${f.line || ''}:${(f.why || '').slice(0, 24)}`;
+    if (seen.has(k)) return false; seen.add(k); return true;
+  });
+  const enriched = merged.map(f => ({
+    ...f,
+    ref: f.ref || (f.line ? `${file}:${f.line}` : null),
+    severity: f.severity || (HIGH.has(f.rule) ? 'high' : 'med'),
+  }));
+  const g = groundedVerdict(enriched, { touched: [file] });
+
+  for (const f of g.grounded) console.log(`  ${C.r}✗${C.x} ${f.why} ${C.dim}${f.ref}${C.x}`);
+  for (const f of g.dropped) console.log(`  ${C.dim}∅ ${f.why} — не заземлено, не в счёт${C.x}`);
+  if (!enriched.length) console.log(`  ${C.g}изъянов не найдено${C.x}`);
 
   const trialCmd = argOf(args, '--trial');
   let trial = null;
@@ -161,12 +182,10 @@ async function cmdReview(args) {
     trial = makeTrialRunner()({ id: file, trial: { cmd: trialCmd, dir: dirname(resolve(file)) } });
     console.log(`${C.b}Испытание реальностью:${C.x} ${trial.passed ? C.g + 'прошло' : C.r + 'провалено'}${C.x} (exit ${trial.exit})`);
   }
-  // вердикт
-  const verdict = trial && !trial.passed ? 'reject'
-    : blind.findings.some(f => f.rule === 'unconditional-success') ? 'reject'
-      : blind.findings.length ? 'open' : 'affirm';
+  // вердикт: провал испытания → reject; иначе заземлённый вердикт собора
+  const verdict = trial && !trial.passed ? 'reject' : g.verdict;
   const col = verdict === 'affirm' ? C.g : verdict === 'reject' ? C.r : C.y;
-  console.log(`\n${C.b}Вердикт ворот:${C.x} ${col}${verdict}${C.x} ${C.dim}(находок: ${blind.findings.length}, by: opponent-blind)${C.x}`);
+  console.log(`\n${C.b}Вердикт ворот:${C.x} ${col}${verdict}${C.x} ${C.dim}(заземлено: ${g.grounded_count}, отброшено: ${g.dropped_count}, by: opponent-blind+grounding)${C.x}`);
 }
 
 async function cmdSpeculate(args) {

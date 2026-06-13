@@ -243,6 +243,17 @@ const HELP_SECTIONS = {
   gift goal pause|cancel|clear <id>
   ${C.dim('Цикл: plan → act → test → review → μετάνοια. State в data/goals/.')}`,
 
+  space: () => `${C.b('Пространство кентавров (команда как организм):')}
+  gift space                      — войти в живое поле всего тела (один кадр)
+  gift space --watch ${C.dim('[--every N]')}   — живое поле, дышит (перерисовка раз в N с)
+  gift space --json               — структура поля (для интеграций)
+  ${C.b('Руки в поле:')}
+  gift team join --as Имя --organ зона   — войти в общее настоящее
+  gift team intent <файлы...>            — объявить намерение до записи
+  gift team review <файл> ${C.dim('[--trial "cmd"]')}  — заземлённое ревью + испытание → вердикт
+  gift team bench ${C.dim('[--self-check|--best-of]')}  — испытание агента (ECOM-арена)
+  gift team present ${C.dim('[--send]')}             — настоящее тела (PR/коммиты федерации)`,
+
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — состояние онтологии (6 слоёв)
@@ -918,6 +929,14 @@ ${C.b('gift login')} <бэкенд> <api-key>
       // Командное кодирование как организм: присутствие + намерения + органы +
       // ревю-ворота (слепой ревьюер + испытание) + спекулятивный турнир.
       await runRaw('utils/gift-team.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'space': {
+      // Пространство кентавров: единое живое поле всего тела на одном экране
+      // (присутствие+органы+намерения+конфликты+память+федерация+иммунитет).
+      // --watch — живое поле (дышит). Это устье, gift team — руки.
+      await runRaw('utils/gift-space.mjs', [sub, ...rest].filter(Boolean));
       break;
     }
 

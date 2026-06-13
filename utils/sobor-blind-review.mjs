@@ -47,7 +47,7 @@ const RED_FLAGS = [
   { rule: 'unreachable-after-return', re: /return[^\n]*\n\s*[^\s}][^\n]*\n/, why: 'возможный код после return' },
 ];
 
-function heuristicScan(artifact) {
+export function heuristicScan(artifact) {
   const findings = [];
   const lines = String(artifact || '').split('\n');
   for (const f of RED_FLAGS) {
