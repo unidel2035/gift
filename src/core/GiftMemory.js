@@ -78,6 +78,12 @@ export class GiftMemory {
     // Метанойя (repent()) переводит акт из declined/pending → accepted → W.
     this._declined = []; // { act, declinedAt } — reception:declined
 
+    // Помехоустойчивость = анти-фиктивность структурой (Петухов/Стахов): акт входит в W,
+    // только если это настоящий ПЕРЕНОС (есть и даритель, и получатель — трит сохраняется Σ=0).
+    // Фиктивный (claim без акта: приём без дарителя / дар без получателя) отвергается СЮДА,
+    // не касаясь W. Видимо, как _declined, — не молча. Ересь не записывается в тело.
+    this._rejected = []; // { act, reason, rejectedAt }
+
     // Ожидание λήψις — эсхатологическая надежда.
     // reception:pending = δόσις совершена, ответ ещё не дан.
     // «Се, стою у двери и стучу» (Откр 3:20) — Бог ждёт, не взламывает.
@@ -180,10 +186,37 @@ export class GiftMemory {
 
   // ── Принять акт дара ──────────────────────────────────────────────────
 
+  /**
+   * Закон сохранения переноса (помехоустойчивость по Петухову): настоящий акт имеет
+   * И дарителя, И получателя (трит-вектор Σ=0). Фикция — приём без дарителя (claim без
+   * акта) или дар без получателя (выброс в пустоту). Чистая, без состояния.
+   */
+  static conserves(act) {
+    const g = act?.giverId, r = act?.receiverId;
+    const has = (x) => x !== undefined && x !== null && String(x).length > 0;
+    if (!has(g) && !has(r)) return { ok: false, reason: 'пустой акт — ни дарителя, ни получателя' };
+    if (!has(g)) return { ok: false, reason: 'приём без дарителя (claim без акта)' };
+    if (!has(r)) return { ok: false, reason: 'дар без получателя (выброс в пустоту)' };
+    return { ok: true };
+  }
+
+  /** Отвергнутые как фиктивные акты (видимы, не молча). */
+  rejectedActs() { return (this._rejected ?? []).map(d => ({ ...d })); }
+
   receive(act) {
     // δόσις необратима: замораживаем акт при входе в систему.
     // После этой точки ни один код не может модифицировать акт.
     if (!Object.isFrozen(act)) act = Object.freeze({ ...act });
+
+    // ── Помехоустойчивость: акт должен быть настоящим ПЕРЕНОСОМ ───────────
+    // Σ трит = 0 ⇔ есть и даритель, и получатель. Фикция (claim без акта)
+    // отвергается в _rejected, не касаясь W. Структурная анти-фиктивность.
+    const cons = GiftMemory.conserves(act);
+    if (!cons.ok) {
+      this._rejected.push({ act, reason: cons.reason, rejectedAt: new Date().toISOString() });
+      this.actsCount++;
+      return new Float32Array(this.n);
+    }
 
     const w        = act.weight ?? 1;
     const isDivineG = DIVINE_PERSONS.has(act.giverId);
@@ -1014,6 +1047,7 @@ export class GiftMemory {
       theophaneia:  this._theophaneia.map(row => Array.from(row)),
       // λήψις: история отвергнутых и ожидающих даров
       declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
+      rejected:     (this._rejected ?? []).map(d => ({ act: { ...d.act }, reason: d.reason, rejectedAt: d.rejectedAt })),
       pending:      this._pending.map(d => ({ act: { ...d.act }, pendingAt: d.pendingAt })),
       symphonies:   (this._symphonies ?? []).map(s => ({ actId: s.actId, act: { ...s.act }, recordedAt: s.recordedAt })),
       metanoiaActs: (this._metanoiaActs ?? []).map(a => ({ ...a })),
@@ -1050,6 +1084,11 @@ export class GiftMemory {
     if (snap.declined)    m._declined    = snap.declined.map(d => ({
       act: Object.freeze({ ...d.act }),
       declinedAt: d.declinedAt,
+    }));
+    if (snap.rejected)    m._rejected    = snap.rejected.map(d => ({
+      act: Object.freeze({ ...d.act }),
+      reason: d.reason,
+      rejectedAt: d.rejectedAt,
     }));
     if (snap.symphonies) m._symphonies = snap.symphonies.map(s => ({
       actId: s.actId,
