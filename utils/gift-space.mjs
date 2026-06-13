@@ -29,6 +29,7 @@ import { listActiveSessions, detectConflicts } from './gift-swarm.mjs';
 import { allIntentions } from './gift-swarm-intent.mjs';
 import { parseZones, zoneOf } from './gift-team.mjs';
 import { recentActs, federationPresent, relTimeFrom } from './presence-feed.mjs';
+import { coopEnabled, fetchRemote, mergePresence } from './coop-presence.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ZONES_PATH = resolve(ROOT, 'ZONES.md');
@@ -36,14 +37,23 @@ const C = { dim: '\x1b[2m', b: '\x1b[1m', y: '\x1b[33m', g: '\x1b[32m', c: '\x1b
 
 function loadZones() { return existsSync(ZONES_PATH) ? parseZones(readFileSync(ZONES_PATH, 'utf8')) : []; }
 
-// ── Сборщик поля (чистый, кроме федерации/сети) ──────────────────────
-export function collectSpace({ withFederation = true, now = Date.now() } = {}) {
+// ── Сборщик поля ─────────────────────────────────────────────────────
+// Асинхронный: при включённом COOP_SYNC_URL сливает локальное присутствие (.swarm)
+// с удалёнными машинами (relay) — тело видит себя целиком. Без URL — только локально.
+export async function collectSpace({ withFederation = true, withCoop = true, now = Date.now() } = {}) {
   const all = listActiveSessions();
   const zones = loadZones();
   const acts = recentActs(5);
+
+  const coopOn = withCoop && coopEnabled();
+  const remote = coopOn ? await fetchRemote() : [];
+  const machine = process.env.COOP_MACHINE || process.env.HOSTNAME || 'local';
+  const merged = mergePresence(all, remote, { machine });
+
   return {
     now,
-    present: all.filter(s => !s.stale).map(s => ({ agent: s.agent, organ: s.metadata?.organ, heartbeat: s.heartbeat })),
+    coop: coopOn,
+    present: merged.filter(p => !p.stale),
     stale: all.filter(s => s.stale).length,
     intents: allIntentions().map(it => ({ agent: it.agent, files: it.files || [] })),
     conflicts: (detectConflicts() || []).map(cf => ({ file: cf.file || cf.path, agents: cf.agents || [] })),
@@ -64,14 +74,16 @@ export function renderSpace(space, { color = true } = {}) {
   const c = color ? C : new Proxy({}, { get: () => '' });
   const now = space.now;
   const L = [];
-  L.push(`${c.b}${c.y}╔═══ Пространство кентавров · gift space ═══╗${c.x}`);
+  const fieldTag = space.coop ? ` ${c.g}⇄ общее поле${c.x}` : '';
+  L.push(`${c.b}${c.y}╔═══ Пространство кентавров · gift space ═══╗${c.x}${fieldTag}`);
 
-  // ПРИСУТСТВИЕ
+  // ПРИСУТСТВИЕ (своя машина + удалённые, если поле общее)
   L.push('', `${c.b}● Здесь сейчас (${space.present.length}):${c.x}`);
   if (!space.present.length) L.push(`  ${c.dim}— пусто. Войти: gift team join --as Имя --organ зона${c.x}`);
   for (const s of space.present) {
     const ago = Math.round((now - s.heartbeat) / 1000);
-    L.push(`  ${c.g}${breath(s.heartbeat, now)}${c.x} ${c.b}${s.agent}${c.x}${s.organ ? ` ${c.m}[${s.organ}]${c.x}` : ''} ${c.dim}${ago}с${c.x}`);
+    const where = s.local === false && s.machine ? ` ${c.c}@${s.machine}${c.x}` : '';
+    L.push(`  ${c.g}${breath(s.heartbeat, now)}${c.x} ${c.b}${s.agent}${c.x}${s.organ ? ` ${c.m}[${s.organ}]${c.x}` : ''}${where} ${c.dim}${ago}с${c.x}`);
   }
   if (space.stale) L.push(`  ${c.dim}(${space.stale} протухших — молчат >120с)${c.x}`);
 
@@ -127,28 +139,36 @@ function argOf(args, name, def) { const i = args.indexOf(name); return i >= 0 ? 
 
 export async function run(argv = []) {
   const noFed = argv.includes('--no-fed');
+  // gift space serve — поднять общее поле присутствия между машинами (relay)
+  if (argv[0] === 'serve') {
+    const { createCoopServer } = await import('./coop-sync-server.mjs');
+    const port = Number(process.env.COOP_SYNC_PORT) || 8090;
+    const server = createCoopServer();
+    server.listen(port, () => console.log(`${C.g}⇄${C.x} поле присутствия открыто · http://localhost:${port} · кентаврам: COOP_SYNC_URL=http://<этот-host>:${port}`));
+    return new Promise(() => {});
+  }
   if (argv.includes('--json')) {
-    console.log(JSON.stringify(collectSpace({ withFederation: !noFed }), null, 2));
+    console.log(JSON.stringify(await collectSpace({ withFederation: !noFed }), null, 2));
     return;
   }
   if (argv.includes('--watch')) {
     const every = Math.max(2, Number(argOf(argv, '--every', 5)) || 5);
     // живое поле: перерисовка, тело видно дышащим. Ctrl-C — выйти.
-    const tick = () => {
-      const space = collectSpace({ withFederation: !noFed });
+    const tick = async () => {
+      const space = await collectSpace({ withFederation: !noFed });
       process.stdout.write('\x1b[2J\x1b[H'); // очистить экран + домой
       console.log(renderSpace(space));
       console.log(`\n${C.dim}живое поле · обновление раз в ${every}с · Ctrl-C выйти${C.x}`);
     };
-    tick();
-    const timer = setInterval(tick, every * 1000);
+    await tick();
+    const timer = setInterval(() => { tick().catch(() => {}); }, every * 1000);
     const stop = () => { clearInterval(timer); console.log(`\n${C.dim}вышел из пространства${C.x}`); process.exit(0); };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
     return new Promise(() => {}); // держим процесс
   }
   // один кадр
-  console.log(renderSpace(collectSpace({ withFederation: !noFed })));
+  console.log(renderSpace(await collectSpace({ withFederation: !noFed })));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

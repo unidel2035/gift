@@ -28,9 +28,10 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import {
-  registerSession, heartbeat, deregisterSession, listActiveSessions, detectConflicts,
+  registerSession, heartbeat, deregisterSession, listActiveSessions, detectConflicts, activeSession,
 } from './gift-swarm.mjs';
 import { declareIntent, clearIntent, allIntentions } from './gift-swarm-intent.mjs';
+import { pushPresence, leavePresence, coopEnabled, fetchRemote } from './coop-presence.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ZONES_PATH = resolve(ROOT, 'ZONES.md');
@@ -67,39 +68,56 @@ function recordAct(desc, receiver = '_koinon', weight = 2) {
   } catch { /* матрица недоступна — присутствие всё равно работает */ }
 }
 
+// Отправить присутствие в общее поле между машинами (graceful, no-op без COOP_SYNC_URL).
+// Орган по умолчанию берётся из локальной сессии, чтобы heartbeat его не стирал.
+async function coopSync(me, organ) {
+  if (!coopEnabled()) return null;
+  const organEff = organ ?? activeSession(me)?.metadata?.organ ?? null;
+  const mine = allIntentions().filter(it => it.agent === me).map(it => ({ files: it.files || [] }));
+  return pushPresence({ agent: me, organ: organEff, intents: mine });
+}
+
 // ── Команды ──────────────────────────────────────────────────────────
-function cmdJoin(args) {
+async function cmdJoin(args) {
   const me = argOf(args, '--as') || actor();
   const organ = argOf(args, '--organ');
   registerSession(me, organ ? { organ } : {});
   recordAct(`вошёл в общее настоящее gift team${organ ? ' (орган: ' + organ + ')' : ''}`, '_koinon', 2);
-  console.log(`${C.g}✓${C.x} ${C.b}${me}${C.x} в общем настоящем${organ ? ` · орган: ${C.m}${organ}${C.x}` : ''}`);
-  cmdStatus([]);
+  const coop = await coopSync(me, organ);
+  console.log(`${C.g}✓${C.x} ${C.b}${me}${C.x} в общем настоящем${organ ? ` · орган: ${C.m}${organ}${C.x}` : ''}${coop?.ok ? ` ${C.g}⇄ поле${C.x}` : ''}`);
+  await cmdStatus([]);
 }
 
-function cmdLeave() {
+async function cmdLeave() {
   const me = actor();
   deregisterSession(me); clearIntent(me);
+  await leavePresence(me);
   recordAct('вышел из общего настоящего gift team', '_koinon', 1);
   console.log(`${C.dim}${me} вышел из настоящего${C.x}`);
 }
 
-function cmdStatus() {
+async function cmdStatus() {
   const all = listActiveSessions();
   const sessions = all.filter(s => !s.stale);   // присутствие не лжёт: протухших не показываем как «здесь»
   const stale = all.filter(s => s.stale);
   const intents = allIntentions();
   const conflicts = detectConflicts();
   const zones = loadZones();
+  const myMachine = process.env.COOP_MACHINE || process.env.HOSTNAME || 'local';
+  const remote = coopEnabled() ? (await fetchRemote()).filter(r => (r.machine || 'remote') !== myMachine) : [];
 
-  console.log(`\n${C.b}${C.y}═══ Общее настоящее · gift team ═══${C.x}`);
+  console.log(`\n${C.b}${C.y}═══ Общее настоящее · gift team ═══${C.x}${coopEnabled() ? ` ${C.g}⇄ поле${C.x}` : ''}`);
   // присутствие (только живые: heartbeat свежее 120с)
-  console.log(`\n${C.b}Кто здесь сейчас (${sessions.length}):${C.x}`);
-  if (!sessions.length) console.log(`  ${C.dim}— пусто (никто не вошёл: gift team join)${C.x}`);
+  console.log(`\n${C.b}Кто здесь сейчас (${sessions.length + remote.length}):${C.x}`);
+  if (!sessions.length && !remote.length) console.log(`  ${C.dim}— пусто (никто не вошёл: gift team join)${C.x}`);
   for (const s of sessions) {
     const ago = Math.round((Date.now() - s.heartbeat) / 1000);
     const organ = s.metadata?.organ;
     console.log(`  ${C.g}●${C.x} ${C.b}${s.agent}${C.x}${organ ? ` ${C.m}[${organ}]${C.x}` : ''} ${C.dim}${ago}с назад${C.x}`);
+  }
+  for (const r of remote) {
+    const ago = Math.round((Date.now() - r.heartbeat) / 1000);
+    console.log(`  ${C.g}●${C.x} ${C.b}${r.agent}${C.x}${r.organ ? ` ${C.m}[${r.organ}]${C.x}` : ''} ${C.c}@${r.machine}${C.x} ${C.dim}${ago}с назад${C.x}`);
   }
   if (stale.length) console.log(`  ${C.dim}(${stale.length} протухших — молчат >120с, не считаются присутствующими)${C.x}`);
   // намерения
@@ -123,11 +141,12 @@ function cmdStatus() {
   console.log('');
 }
 
-function cmdIntent(args) {
+async function cmdIntent(args) {
   const files = args.filter(a => !a.startsWith('--'));
   if (!files.length) { console.log('Использование: gift team intent <файлы...>'); return; }
   const zones = loadZones();
   declareIntent(files, { agent: actor() });
+  await coopSync(actor());   // намерение видно всему телу, не только своей машине
   console.log(`${C.c}→${C.x} ${actor()} объявил намерение: ${files.join(', ')}`);
   // предупреждение о чужом органе (координация доверием, не блок)
   for (const f of files) {
@@ -231,7 +250,10 @@ export async function run(argv) {
   const [sub, ...args] = argv;
   // Любое касание team-CLI обновляет присутствие (no-op, если не вошёл) — чтобы
   // активный кентавр не «протухал», пока работает. join/leave управляют сами.
-  if (sub && !['join', 'leave', 'heartbeat'].includes(sub)) { try { heartbeat(actor()); } catch { /* не вошёл */ } }
+  if (sub && !['join', 'leave', 'heartbeat'].includes(sub)) {
+    try { heartbeat(actor()); } catch { /* не вошёл */ }
+    try { await coopSync(actor()); } catch { /* поле недоступно — локально всё работает */ }
+  }
   switch (sub) {
     case 'join': return cmdJoin(args);
     case 'leave': return cmdLeave();

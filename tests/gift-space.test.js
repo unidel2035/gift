@@ -74,11 +74,26 @@ test('renderSpace: gh недоступен — мягко', () => {
   assert.match(renderSpace(sp, { color: false }), /gh недоступен/);
 });
 
-test('collectSpace: возвращает структуру всех систем без сети', () => {
-  const sp = collectSpace({ withFederation: false });
-  for (const k of ['present', 'stale', 'intents', 'conflicts', 'zones', 'acts', 'federation']) {
+test('collectSpace: возвращает структуру всех систем без сети', async () => {
+  const sp = await collectSpace({ withFederation: false, withCoop: false });
+  for (const k of ['present', 'stale', 'intents', 'conflicts', 'zones', 'acts', 'federation', 'coop']) {
     assert.ok(k in sp, `нет поля ${k}`);
   }
   assert.ok(Array.isArray(sp.present));
+  assert.equal(sp.coop, false);          // поле выключено
   assert.deepEqual(sp.federation, []);   // без сети — пусто
+});
+
+test('renderSpace: удалённый кентавр помечен машиной', () => {
+  const sp = sampleSpace({
+    coop: true,
+    present: [
+      { agent: 'Дионисий', organ: 'agent-logic', heartbeat: NOW - 2000, local: true, machine: 'thinkpad' },
+      { agent: 'Дима', organ: 'infra', heartbeat: NOW - 4000, local: false, machine: 'server-2' },
+    ],
+  });
+  const out = renderSpace(sp, { color: false });
+  assert.match(out, /общее поле/);          // тег общего поля
+  assert.match(out, /Дима.*@server-2/);     // удалённый помечен машиной
+  assert.doesNotMatch(out, /Дионисий.*@/);  // свой (local) — без метки машины
 });

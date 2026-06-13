@@ -247,6 +247,8 @@ const HELP_SECTIONS = {
   gift space                      — войти в живое поле всего тела (один кадр)
   gift space --watch ${C.dim('[--every N]')}   — живое поле, дышит (перерисовка раз в N с)
   gift space --json               — структура поля (для интеграций)
+  gift space serve                — поднять общее поле присутствия между машинами (relay)
+  ${C.dim('Поле между машинами: COOP_SYNC_URL=http://host:8090 (видеть кентавров с др. машин)')}
   ${C.b('Руки в поле:')}
   gift team join --as Имя --organ зона   — войти в общее настоящее
   gift team intent <файлы...>            — объявить намерение до записи
