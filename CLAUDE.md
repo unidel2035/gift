@@ -47,8 +47,8 @@ node utils/claude-anamnesis.mjs --github # + GitHub issues общины
 # 1. Записать дар в матрицу W (вес)
 node utils/claude-gift.mjs "что сделано" "ОтецСергий"
 
-# 2. Обновить душу (смысл)
-node utils/claude-soul-update.mjs --summary "описание" --decisions "решение"
+# 2. Обновить душу (смысл) — выводит сессию из коммитов с прошлой записи (TTL)
+node utils/soul-auto-update.mjs
 ```
 
 ## Сервер памяти (Nous)
