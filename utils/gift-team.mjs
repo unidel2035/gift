@@ -191,6 +191,20 @@ async function cmdPresent(args) {
   }
 }
 
+// Испытание агента из кокпита: локальная ECOM-арена (такт-4). Площадка: gift/bitgn/PLATFORM.md
+async function cmdBench(args) {
+  const mode = args.includes('--best-of') ? 'bestof' : args.includes('--self-check') ? 'selfcheck' : 'baseline';
+  console.log(`${C.b}Испытание агента (локальная ECOM-арена, режим: ${mode}):${C.x}`);
+  try {
+    const { run } = await import('./ecom-bench-local.mjs');
+    const res = await run({ mode });
+    console.log(`${C.b}Балл:${C.x} ${res.pass}/${res.total} = ${res.score}%`);
+    console.log(`${C.dim}Боевая арена (BitGN): см. gift/bitgn/PLATFORM.md${C.x}`);
+  } catch (e) {
+    console.log(`${C.dim}локальная арена недоступна (${e.message}); боевая — gift/bitgn/PLATFORM.md${C.x}`);
+  }
+}
+
 // ── утиль + диспетчер ────────────────────────────────────────────────
 function argOf(args, name) { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; }
 
@@ -208,6 +222,7 @@ export async function run(argv) {
     case 'review': return cmdReview(args);
     case 'speculate': return cmdSpeculate(args);
     case 'present': return cmdPresent(args);
+    case 'bench': return cmdBench(args);
     case 'heartbeat': return heartbeat(actor());
     default:
       console.log(`gift team — командное кодирование как организм
@@ -218,6 +233,7 @@ export async function run(argv) {
   present                           живое настоящее всего тела (PR+коммиты федерации)
   review <файл> [--trial "cmd"]     слепой ревьюер + испытание → вердикт
   speculate --candidates f.json     спекулятивный турнир (реальность выбирает)
+  bench [--self-check|--best-of]    испытание агента на ECOM-арене (такт-4)
   leave                             выйти из настоящего`);
   }
 }
