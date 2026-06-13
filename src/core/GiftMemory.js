@@ -94,6 +94,12 @@ export class GiftMemory {
     // W — тензор NC×NC float32, Хопфилд для тварных лиц
     this._W = tf.variable(tf.zeros([this.n, this.n]));
 
+    // Жанровый тензор (Петухов): направленный дар-реестр по жанрам.
+    // genre → Map("giverId→receiverId" → weight). Σ по жанрам = направленная (стигмергийная)
+    // проекция W; скаляр _W = эта проекция + ассоциативная Хопфилд-добавка. Ключ по ИМЕНАМ
+    // (не индексам) — переживает добавление лиц и снапшот. Рефинирует, не ломая _W.
+    this._Wgenre = new Map();
+
     // Нетварные энергии: energeia[di][ci] = суммарный вес даров divine_i → creature_i
     this._energeia     = zeros2d(this.nd, this.n);
 
@@ -203,6 +209,35 @@ export class GiftMemory {
   /** Отвергнутые как фиктивные акты (видимы, не молча). */
   rejectedActs() { return (this._rejected ?? []).map(d => ({ ...d })); }
 
+  // ── Жанровый тензор W (Петухов): направленный дар по жанрам ──────────
+  _addGenre(giverId, receiverId, genre, w) {
+    if (!this._Wgenre) this._Wgenre = new Map();
+    const slice = this._Wgenre.get(genre) ?? new Map();
+    const k = `${giverId}→${receiverId}`;
+    slice.set(k, (slice.get(k) ?? 0) + w);
+    this._Wgenre.set(genre, slice);
+  }
+  /** Все жанры, встретившиеся в направленных дарах. */
+  genres() { return [...(this._Wgenre?.keys() ?? [])]; }
+  /** Вес пары в одном жанре. */
+  pairGenre(giverId, receiverId, genre) {
+    return this._Wgenre?.get(genre)?.get(`${giverId}→${receiverId}`) ?? 0;
+  }
+  /** Маргинал: суммарный направленный вес по каждому жанру. */
+  genreMarginal() {
+    const m = {};
+    for (const [genre, slice] of (this._Wgenre ?? new Map()))
+      m[genre] = [...slice.values()].reduce((a, b) => a + b, 0);
+    return m;
+  }
+  /** Направленная проекция W из жанрового тензора: пара → Σ по жанрам (стигмергийный скаляр). */
+  directedPair(giverId, receiverId) {
+    let s = 0;
+    for (const slice of (this._Wgenre ?? new Map()).values())
+      s += slice.get(`${giverId}→${receiverId}`) ?? 0;
+    return s;
+  }
+
   receive(act) {
     // δόσις необратима: замораживаем акт при входе в систему.
     // После этой точки ни один код не может модифицировать акт.
@@ -298,7 +333,11 @@ export class GiftMemory {
       const hopfield = outer.mul(1 / n);
 
       const stigma = tf.buffer([n, n]);
-      if (gi >= 0 && ri >= 0) stigma.set(w, gi, ri);
+      if (gi >= 0 && ri >= 0) {
+        stigma.set(w, gi, ri);
+        // Жанровый реестр: тот же направленный вес, но по жанру (Σ жанров = эта стигмергия).
+        this._addGenre(act.giverId, act.receiverId, act.type || act.genre || 'gift', w);
+      }
 
       const delta = hopfield.add(stigma.toTensor());
       // Дар необратим: W[i][j] ≥ 0 всегда.
@@ -1048,6 +1087,7 @@ export class GiftMemory {
       // λήψις: история отвергнутых и ожидающих даров
       declined:     this._declined.map(d => ({ act: { ...d.act }, declinedAt: d.declinedAt })),
       rejected:     (this._rejected ?? []).map(d => ({ act: { ...d.act }, reason: d.reason, rejectedAt: d.rejectedAt })),
+      wgenre:       Object.fromEntries([...(this._Wgenre ?? new Map())].map(([genre, slice]) => [genre, Object.fromEntries(slice)])),
       pending:      this._pending.map(d => ({ act: { ...d.act }, pendingAt: d.pendingAt })),
       symphonies:   (this._symphonies ?? []).map(s => ({ actId: s.actId, act: { ...s.act }, recordedAt: s.recordedAt })),
       metanoiaActs: (this._metanoiaActs ?? []).map(a => ({ ...a })),
@@ -1090,6 +1130,9 @@ export class GiftMemory {
       reason: d.reason,
       rejectedAt: d.rejectedAt,
     }));
+    if (snap.wgenre) {
+      m._Wgenre = new Map(Object.entries(snap.wgenre).map(([genre, obj]) => [genre, new Map(Object.entries(obj))]));
+    }
     if (snap.symphonies) m._symphonies = snap.symphonies.map(s => ({
       actId: s.actId,
       act: Object.freeze({ ...s.act }),
