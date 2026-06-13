@@ -1,0 +1,62 @@
+[
+  {
+    "id": "fragile-bg-run",
+    "trigger": "длинный фоновый прогон (бенч/замер) через session-bound фон",
+    "avoid": "session-bound фон — гибнет на resume/контеншене, теряешь часы",
+    "do": "setsid + результат в ПОСТОЯННЫЙ файл; либо платный быстрый API",
+    "why": "4× срыв измерения за одну сессию 13.06",
+    "weight": 8,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash"
+      ],
+      "pattern": "nohup|main\\.py|ecom-bench|--watch|bench.*&|run_in_background"
+    }
+  },
+  {
+    "id": "subscription-contention",
+    "trigger": "несколько параллельных claude --print на подписке",
+    "avoid": ">2-3 потоков → деградация 'no answer', порча измерения",
+    "do": "≤2 потока, либо платный API; не запускать claude-работу параллельно замеру",
+    "why": "5 шардов=38 no-answer; 2 шарда+дроны=24 no-answer",
+    "weight": 8,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash"
+      ],
+      "pattern": "USE_CLAUDE_SUB|claude --print|shard|main\\.py t"
+    }
+  },
+  {
+    "id": "time-heavier-than-money",
+    "trigger": "выбор медленной бесплатной подписки для длинного замера отлаженного агента",
+    "avoid": "жечь ЧАСЫ человека ради экономии рублей (нарушает аксиом время>деньги 10vs3)",
+    "do": "для ОТЛАЖЕННОГО агента — платный быстрый API; деньги беречь только на СЫРОМ/prod",
+    "why": "аксиом GiftMemory: время тяжелее денег",
+    "weight": 9,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash"
+      ],
+      "pattern": "USE_CLAUDE_SUB|подписк|main\\.py"
+    }
+  },
+  {
+    "id": "measure-not-work",
+    "trigger": "ожидание числа/замера как будто это работа",
+    "avoid": "сидеть и ждать измерение, когда сигнал для улучшения уже собран",
+    "do": "измерение ≠ работа: чинить известные классы провалов по имеющимся данным",
+    "why": "залип в ожидании 1.5ч вместо правок B/C",
+    "weight": 7,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash"
+      ],
+      "pattern": "FINAL SCORE|wait.*shard|агрегат|ded[12]\\.log"
+    }
+  }
+]

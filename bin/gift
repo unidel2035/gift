@@ -256,6 +256,12 @@ const HELP_SECTIONS = {
   gift team bench ${C.dim('[--self-check|--best-of]')}  — испытание агента (ECOM-арена)
   gift team present ${C.dim('[--send]')}             — настоящее тела (PR/коммиты федерации)`,
 
+  lesson: () => `${C.b('Память-рефлекс (выученные решения, 7-й слой):')}
+  gift lesson list                — все правила-рефлексы
+  gift lesson add --id X --trigger "..." --tools Bash --pattern "rx" --avoid "..." --do "..." ${C.dim('[--enforce block]')}
+  gift lesson match --tool Bash --input "<cmd>"   — что сработает на действии
+  ${C.dim('Срабатывает САМО через PreToolUse-хук lesson-guard перед каждым действием.')}`,
+
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — состояние онтологии (6 слоёв)
@@ -939,6 +945,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
       // (присутствие+органы+намерения+конфликты+память+федерация+иммунитет).
       // --watch — живое поле (дышит). Это устье, gift team — руки.
       await runRaw('utils/gift-space.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'lesson': {
+      // Память-рефлекс кентавра (7-й слой): захват выученных РЕШЕНИЙ как правил,
+      // которые PreToolUse-хук lesson-guard впрыскивает/блокирует в точке действия.
+      await runRaw('utils/lessons.mjs', [sub, ...rest].filter(Boolean));
       break;
     }
 
