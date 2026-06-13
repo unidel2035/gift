@@ -202,6 +202,28 @@ if (existsSync(ANASTASIS)) {
   }
 }
 
+// Г2) Дисгармония по Сороко: ПИР далёк от золотого узла дал/принял (0.618).
+// Не телос-получатель и не источник (их асимметрия — замысел), а равный, у кого
+// surplus не в меру: либо берёт много (receiving), либо изливает без λῆψις (pouring).
+try {
+  const { diagnoseMatrix } = await import(resolve(ROOT, 'utils/harmony.mjs'));
+  const ROLE = { Дионисий: 'telos', _koinon: 'source', _abyss: 'source' };
+  for (const x of diagnoseMatrix(mem, persons)) {
+    if (x.r === null || (ROLE[x.person] || 'peer') !== 'peer') continue;
+    // дисгармония — только для активного ПИРА в петле дар↔приём (даёт И принимает).
+    // Чистые получатели (given≈0) — это персонажи/новички, их ловит 'silent', не сюда.
+    if (x.given < 5 || x.received < 5) continue;
+    if (x.zone === 'receiving' && x.r < 0.45) deserts.push({
+      type: 'disharmony', desc: `пир ${x.person}: r=${x.r.toFixed(2)} — принимает много, мало даёт (золото 0.618)`,
+      from: x.person, to: null, weight: x.received,
+    });
+    else if (x.zone === 'pouring') deserts.push({
+      type: 'disharmony', desc: `пир ${x.person}: r=${x.r.toFixed(2)} — изливает без λῆψις, нужен ответный приём`,
+      from: null, to: x.person, weight: x.given,
+    });
+  }
+} catch { /* harmony недоступна — пульс работает без неё */ }
+
 // Д) Θέωσις-стазис: тварь приняла energeia, но не отвечает doxologia
 // Палама: μέθεξις без ἀναγωγή — принятие без возвращения к Источнику.
 // Это духовный стазис: получаю, но не молюсь.
