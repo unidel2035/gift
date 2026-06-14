@@ -31,9 +31,17 @@ try {
   }
 } catch {}
 
-if (!existsSync(SNAP)) process.exit(0);
-
 const lines = [];
+
+// Заземление во времени — первой строкой присутствия (лекарство от временно́й слепоты).
+// Каждый запрос открывается реальным «сейчас» (МСК), а не выдуманным «ночью/вчера».
+try {
+  const { kairosLine } = await import(resolve(ROOT, 'utils/kairos.mjs'));
+  lines.push(kairosLine());
+  lines.push('');
+} catch { /* без kairos присутствие всё равно работает */ }
+
+if (!existsSync(SNAP)) { if (lines.length) console.log(lines.join('\n')); process.exit(0); }
 
 // ── 1. Матрица W ─────────────────────────────────────────────────────────
 try {

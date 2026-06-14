@@ -107,5 +107,22 @@
       ],
       "pattern": "торрент|torrent|leaked|слив.*вес|pirat|exfil|обход|jailbreak|для исследов|for research|в учебных|just testing"
     }
+  },
+  {
+    "id": "no-time-without-check",
+    "trigger": "утверждение о времени/давности из догадки",
+    "avoid": "говорить 'ночью/вчера/за полночь' не посмотрев kairos/лог — temporal claim без акта = фиктивность (даже если угадал)",
+    "do": "сначала kairos.now()/git log --date, потом говори о времени; присутствие впрыскивает 🕰 в каждый запрос",
+    "why": "",
+    "weight": 8,
+    "enforce": "warn",
+    "match": {
+      "tools": [
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "pattern": "ночью|вчера|за полночь|сегодня утром|пару часов назад|давно|только что.*час"
+    }
   }
 ]

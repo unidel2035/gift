@@ -988,6 +988,11 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'kairos': {
+      await runRaw('utils/kairos.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'genre': {
       // W, разложенный по жанрам (Петухов): плоский скаляр = Σ по жанрам (маргинал).
       // Жанры компонуются по Кронекеру (завет·дар). Рефинирует W, не ломая старую проекцию.
