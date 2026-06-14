@@ -58,5 +58,12 @@ export function kairosLine(atMs = Date.now(), tz = TZ) {
 
 // ── CLI ───────────────────────────────────────────────────────────────
 if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log(kairosLine());
+  // --hook: формат UserPromptSubmit (для впрыска времени в любую сессию, в т.ч. deepclaude)
+  if (process.argv.includes('--hook')) {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: kairosLine() },
+    }));
+  } else {
+    console.log(kairosLine());
+  }
 }
