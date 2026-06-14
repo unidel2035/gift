@@ -1003,6 +1003,11 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'organs': {
+      await runRaw('utils/install-organs.mjs', [...rest].filter(Boolean));
+      break;
+    }
+
     case 'kairos': {
       await runRaw('utils/kairos.mjs', [sub, ...rest].filter(Boolean));
       break;
