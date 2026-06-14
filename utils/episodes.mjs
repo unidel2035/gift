@@ -73,11 +73,16 @@ export function parseEpisode(path) {
   };
 }
 
-export function listEpisodes({ all = false } = {}) {
+// Суб-сессии агентов / тест-артефакты — не главные серии сериала.
+const SUBAGENT = /^(Ты\s|Замысел:|Артефакт:|Это вопрошание|System:|You are )/;
+export function isMain(ep) { return ep.userTurns >= 3 && !SUBAGENT.test(ep.logline); }
+
+export function listEpisodes({ all = false, raw = false } = {}) {
   if (!existsSync(TRACE_DIR)) return [];
   const files = readdirSync(TRACE_DIR).filter(f => f.endsWith('.jsonl'))
     .map(f => resolve(TRACE_DIR, f));
-  const eps = files.map(parseEpisode).sort((a, b) => b.date - a.date);
+  let eps = files.map(parseEpisode).sort((a, b) => b.date - a.date);
+  if (!raw) eps = eps.filter(isMain);            // по умолчанию — главные серии (диалоги человека)
   return all ? eps : eps.slice(0, 20);
 }
 
@@ -97,9 +102,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ep.scenes.forEach((s, i) => console.log(`  ${C.c}${i + 1}.${C.x} ${s}`));
     process.exit(0);
   }
-  const eps = listEpisodes({ all: process.argv.includes('--all') });
-  const total = listEpisodes({ all: true }).length;
-  console.log(`\n${C.b}${C.y}═══ Сериал сессий (${eps.length}/${total} серий) ═══${C.x}`);
+  const raw = process.argv.includes('--raw');
+  const eps = listEpisodes({ all: process.argv.includes('--all'), raw });
+  const total = listEpisodes({ all: true, raw }).length;
+  console.log(`\n${C.b}${C.y}═══ Сериал сессий (${eps.length}/${total} ${raw ? 'всех' : 'главных'} серий) ═══${C.x}`);
   for (const e of eps) {
     console.log(`  ${C.g}${e.id}${C.x} ${C.dim}${fmtDate(e.date)}${C.x} ${C.dim}${String(e.sizeKB).padStart(5)}КБ${C.x}  ${e.logline}`);
   }
