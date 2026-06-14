@@ -142,7 +142,7 @@ export async function run(argv = []) {
   // gift space serve — поднять общее поле присутствия между машинами (relay)
   if (argv[0] === 'serve') {
     const { createCoopServer } = await import('./coop-sync-server.mjs');
-    const port = Number(process.env.COOP_SYNC_PORT) || 8090;
+    const port = Number(process.env.COOP_SYNC_PORT) || 8095;
     const server = createCoopServer();
     server.listen(port, () => console.log(`${C.g}⇄${C.x} поле присутствия открыто · http://localhost:${port} · кентаврам: COOP_SYNC_URL=http://<этот-host>:${port}`));
     return new Promise(() => {});

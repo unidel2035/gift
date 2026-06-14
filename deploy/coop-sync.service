@@ -5,7 +5,7 @@ Description=gift coop-sync presence relay
 After=network.target
 [Service]
 Type=simple
-Environment=COOP_SYNC_PORT=8090
+Environment=COOP_SYNC_PORT=8095
 ExecStart=/usr/bin/node /opt/gift/utils/coop-sync-server.mjs
 Restart=always
 RestartSec=3

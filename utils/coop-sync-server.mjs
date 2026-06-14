@@ -16,15 +16,15 @@
  *   GET  /health                                                     → {ok, count, ttlMs}
  *
  * Запуск:
- *   node utils/coop-sync-server.mjs                 # порт 8090
+ *   node utils/coop-sync-server.mjs                 # порт 8095
  *   COOP_SYNC_PORT=9000 node utils/coop-sync-server.mjs
  *
- * Клиенты указывают COOP_SYNC_URL=http://host:8090 — см. utils/coop-presence.mjs.
+ * Клиенты указывают COOP_SYNC_URL=http://host:8095 — см. utils/coop-presence.mjs.
  * Деплой на сервер общины (рядом с ботом) — отдельный шаг (под рукой Дионисия).
  */
 import { createServer } from 'node:http';
 
-const PORT = Number(process.env.COOP_SYNC_PORT) || 8090;
+const PORT = Number(process.env.COOP_SYNC_PORT) || 8095;
 const TTL_MS = Number(process.env.COOP_TTL_MS) || 120_000; // живой, если heartbeat свежее 120с
 
 // In-memory поле присутствия. Эфемерно по замыслу: рестарт = чистое настоящее.
