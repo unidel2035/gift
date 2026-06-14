@@ -988,6 +988,16 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'ideas': {
+      await runRaw('utils/idea-graph.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'recap': {
+      await runRaw('utils/recap.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'episodes': {
       await runRaw('utils/episodes.mjs', [sub, ...rest].filter(Boolean));
       break;
