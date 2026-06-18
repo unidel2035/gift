@@ -266,6 +266,15 @@ const HELP_SECTIONS = {
   gift formal "<вопрос>"          — детерминированный ответ (счёт/процент/валюта) без LLM
   ${C.dim('Воспроизводимо и бесплатно; семантику оставляем LLM. Нужен собранный formal-ai.')}`,
 
+  'spec-gate': () => `${C.b('Исполняемые спецификации (spec-gate):')}
+  gift spec-gate <spec.mjs>              — прогнать спеку (exit 0=GREEN / 1=RED)
+  gift spec-gate <spec.mjs> --n 5000    — N сценариев (default 1000)
+  gift spec-gate <spec.mjs> --json      — машиночитаемый вывод
+  gift spec-gate <spec.mjs> --seed 42   — воспроизвести контрпример
+  ${C.dim('Готовые спеки: specs/executable/drone-autonomy.spec.mjs')}
+  ${C.dim('              specs/executable/drone-hw-sovereignty.spec.mjs')}
+  ${C.dim('Формат: экспортируй META + INVARIANTS + METRICS + genScenario(seed) + evalScenario()')}`,
+
   harmony: () => `${C.b('Гармония сети (закон Сороко, математика гармонии):')}
   gift harmony                    — диагноз матрицы W по золотой пропорции дал/принял
   gift harmony <дал> <принял>     — оценить одну пару (зона + ближайший узел)
@@ -1111,6 +1120,36 @@ ${C.b('gift login')} <бэкенд> <api-key>
 
       console.log();
       break;
+    }
+
+    case 'spec-gate': {
+      // Запуск исполняемой спецификации: gift spec-gate <file.spec.mjs> [--n 1000] [--json] [--seed 1]
+      const specFile = sub;
+      if (!specFile) {
+        console.error('Использование: gift spec-gate <spec.mjs> [--n 1000] [--json] [--seed 1]');
+        console.error('Примеры:');
+        console.error('  gift spec-gate specs/executable/drone-autonomy.spec.mjs');
+        console.error('  gift spec-gate specs/executable/drone-autonomy.spec.mjs --n 5000 --json');
+        process.exit(2);
+      }
+      const specArgs = [...rest];
+      // Парсим аргументы
+      const nIdx = specArgs.indexOf('--n'); const N = nIdx >= 0 ? +specArgs[nIdx + 1] : 1000;
+      const seedIdx = specArgs.indexOf('--seed'); const seed0 = seedIdx >= 0 ? +specArgs[seedIdx + 1] : 1;
+      const asJson = specArgs.includes('--json');
+
+      const { resolve: res2, isAbsolute: isAbs } = await import('node:path');
+      const absSpec = isAbs(specFile) ? specFile : res2(ROOT, specFile);
+
+      const { runSpec, formatReport } = await import(res2(ROOT, 'utils/spec-runner.mjs'));
+      const r = await runSpec(absSpec, { N, seed0 });
+
+      if (asJson) {
+        console.log(JSON.stringify(r, null, 2));
+      } else {
+        console.log('\n' + formatReport(r) + '\n');
+      }
+      process.exit(r.passed ? 0 : 1);
     }
 
     default:
