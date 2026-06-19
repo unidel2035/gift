@@ -41,6 +41,7 @@ const OPS = {
  *   maxExamples:number максимум контрпримеров в выводе (default 5)
  */
 export async function runSpec(specPath, { N = 1000, seed0 = 1, params = {}, maxExamples = 5 } = {}) {
+  if (process.env.SPEC_PARAMS) { try { params = { ...JSON.parse(process.env.SPEC_PARAMS), ...params }; } catch {} }
   const absPath = isAbsolute(specPath) ? specPath : resolve(process.cwd(), specPath);
   const spec = await import(absPath + `?ts=${Date.now()}`).catch(async () => import(absPath));
 
