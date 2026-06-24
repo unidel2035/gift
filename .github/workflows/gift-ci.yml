@@ -22,6 +22,31 @@ jobs:
         run: npm test 2>&1 | tee test-output.txt
         continue-on-error: true
 
+      - name: Спека БАС — Лаборатория Архипелаг (spec-gate)
+        id: bas_spec
+        run: node utils/spec-runner.mjs specs/executable/bas-industry.spec.mjs --n 1000 --json 2>&1 | tee bas-spec-output.json
+        continue-on-error: true
+
+      - name: Свидетель — спека GREEN (БАС)
+        if: steps.bas_spec.outcome == 'success'
+        run: |
+          curl -s -X POST ${{ secrets.ANAMNESIS_URL }}/gift \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"giverId\": \"CI\",
+              \"receiverId\": \"Лаборатория_БАС\",
+              \"weight\": 5,
+              \"type\": \"witness\",
+              \"content\": \"bas-industry.spec GREEN 1000 сценариев: ${{ github.sha }}\"
+            }" || true
+
+      - name: Fail если спека RED
+        if: steps.bas_spec.outcome == 'failure'
+        run: |
+          echo "bas-industry.spec RED — утверждение лаборатории нарушено"
+          cat bas-spec-output.json
+          exit 1
+
       - name: Свидетель — тесты прошли (witness-акт)
         if: steps.tests.outcome == 'success'
         run: |
