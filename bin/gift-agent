@@ -58,6 +58,7 @@ gift-agent — агентный CLI
   gift-agent --max-turns 20 "промпт"
   gift-agent --verbose "промпт"
   gift-agent --no-builtins "промпт"      # только mcp__gift__* (только SDK)
+  gift-agent --cua "промпт"              # + десктоп Windows (cua-driver, только SDK)
   gift-agent -                           # промпт из stdin
 
 Auto-detect (если нет явного флага):
@@ -90,6 +91,10 @@ const model        = arg('--model', defaultModel);
 const maxTurns     = parseInt(arg('--max-turns', useOllama ? '10' : '15'), 10);
 const verbose      = flag('--verbose') || flag('-v');
 const includeBuiltins = !flag('--no-builtins');
+
+// --cua: десктоп-автоматизация Windows через cua-driver (только SDK runner).
+// Опт-ин: включает внешний MCP-сервер cua (mcp__cua__*). Можно и через env GIFT_CUA=1.
+if (flag('--cua')) process.env.GIFT_CUA = '1';
 
 // Промпт — последний позиционный аргумент или stdin
 let prompt;
