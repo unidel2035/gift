@@ -3376,9 +3376,9 @@
     "createdAt": "2026-05-20 22:34:03 +0300",
     "createdIn": "39a36e37f4e7",
     "reason": "gift code — shell script вместо Node spawn (TTY fix)",
-    "touches": 27,
+    "touches": 28,
     "lastTouch": "_claude",
-    "lastTouchAt": "2026-04-20 14:33:06 +0300",
+    "lastTouchAt": "2026-06-18T11:59:10.085Z",
     "contributors": [
       "_claude"
     ]
@@ -9371,18 +9371,6 @@
       "_claude"
     ]
   },
-  ".mcp.json": {
-    "creator": "_claude",
-    "createdAt": "2026-03-29 00:17:28 +0300",
-    "createdIn": "7cd6d934a397",
-    "reason": "анамнезис-сервер — порт 8086→8089, убран SSH-тоннель",
-    "touches": 2,
-    "lastTouch": "_claude",
-    "lastTouchAt": "2026-03-26 10:45:19 +0300",
-    "contributors": [
-      "_claude"
-    ]
-  },
   "utils/anamnesis-sync.mjs": {
     "creator": "_claude",
     "createdAt": "2026-03-29 00:17:28 +0300",
@@ -13675,6 +13663,279 @@
     "touches": 1,
     "lastTouch": "_claude",
     "lastTouchAt": "2026-03-26 10:45:19 +0300",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-autonomy.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T11:59:10.085Z",
+    "createdIn": "bae811c5b963",
+    "reason": "spec-gate — исполняемые спецификации для Мета-КБ Архипелага",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T11:59:10.085Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-hw-sovereignty.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T11:59:10.085Z",
+    "createdIn": "bae811c5b963",
+    "reason": "spec-gate — исполняемые спецификации для Мета-КБ Архипелага",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T11:59:10.085Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "utils/spec-runner.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T11:59:10.085Z",
+    "createdIn": "bae811c5b963",
+    "reason": "spec-gate — исполняемые спецификации для Мета-КБ Архипелага",
+    "issue": null,
+    "touches": 3,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:48:58.665Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-swarm.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T12:21:15.481Z",
+    "createdIn": "f59db8cc191c",
+    "reason": "spec-builder + drone-swarm.spec — 3 группы Мета-КБ с исполняемыми спеками",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T12:21:15.481Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "utils/spec-builder.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T12:21:15.481Z",
+    "createdIn": "f59db8cc191c",
+    "reason": "spec-builder + drone-swarm.spec — 3 группы Мета-КБ с исполняемыми спеками",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T12:21:15.481Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-autonomy-real.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T12:34:03.825Z",
+    "createdIn": "fdf4fd4af004",
+    "reason": "5 исполняемых спек Мета-КБ — полный стек беспилотных автономных систем",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T12:34:03.825Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-cert.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T12:34:03.825Z",
+    "createdIn": "fdf4fd4af004",
+    "reason": "5 исполняемых спек Мета-КБ — полный стек беспилотных автономных систем",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T12:34:03.825Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-channel.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-18T12:34:03.825Z",
+    "createdIn": "fdf4fd4af004",
+    "reason": "5 исполняемых спек Мета-КБ — полный стек беспилотных автономных систем",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-18T12:34:03.825Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/__init__.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/gnuradio_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/kicad_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/kompas_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/openfoam_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-channel-deep.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-hw-sovereignty-deep.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:04:27.281Z",
+    "createdIn": "8b952d4eaa93",
+    "reason": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "issue": null,
+    "touches": 2,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:25:09.636Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/cert_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.115Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.115Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/sitl_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.115Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.116Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/bridges/swarm_bridge.py": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.116Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.116Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-autonomy-deep.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.116Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.116Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-cert-deep.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.116Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.116Z",
+    "contributors": [
+      "_claude"
+    ]
+  },
+  "specs/executable/drone-swarm-deep.spec.mjs": {
+    "creator": "_claude",
+    "createdAt": "2026-06-19T08:49:14.116Z",
+    "createdIn": "694d5f2395ec",
+    "reason": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "issue": null,
+    "touches": 1,
+    "lastTouch": "_claude",
+    "lastTouchAt": "2026-06-19T08:49:14.116Z",
     "contributors": [
       "_claude"
     ]

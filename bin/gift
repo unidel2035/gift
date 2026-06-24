@@ -30,6 +30,11 @@ process.env.TF_CPP_MIN_LOG_LEVEL = process.env.TF_CPP_MIN_LOG_LEVEL || '3';
  *   gift matrix                        — снимок W-матрицы (через nous)
  *   gift matrix commune <from> <to>    — история нити
  *
+ *   gift card run "запрос" [--tech T31] [--platform P01] [--space Подземное]
+ *   gift card образ "запрос"           — только апофатический seed
+ *   gift card sobor <obraz.json>       — роевой собор на образ-файл
+ *   gift portfolio [--out файл]        — матрица наших проектов → Excel (T×P×S + τέλος/κένωσις)
+ *
  *   gift benchmark                     — CAT-9 (9/9 операций)
  *
  *   gift status                        — кратко: открытые пустыни, энергия, эпиклезы
@@ -266,14 +271,18 @@ const HELP_SECTIONS = {
   gift formal "<вопрос>"          — детерминированный ответ (счёт/процент/валюта) без LLM
   ${C.dim('Воспроизводимо и бесплатно; семантику оставляем LLM. Нужен собранный formal-ai.')}`,
 
-  'spec-gate': () => `${C.b('Исполняемые спецификации (spec-gate):')}
+  'spec-gate': () => `${C.b('Исполняемые спецификации:')}
   gift spec-gate <spec.mjs>              — прогнать спеку (exit 0=GREEN / 1=RED)
   gift spec-gate <spec.mjs> --n 5000    — N сценариев (default 1000)
   gift spec-gate <spec.mjs> --json      — машиночитаемый вывод
-  gift spec-gate <spec.mjs> --seed 42   — воспроизвести контрпример
+  gift spec-gate <spec.mjs> --seed 42   — воспроизвести контрпример по seed
+
+  gift spec-build "запрос" --out <file> — создать спеку из текста (claude-агент)
+  gift spec-build --file tz.txt --out <file>   — из файла ТЗ
+  gift spec-build --issue 42 --out <file>      — из GitHub issue
+  gift spec-build "запрос" --dry-run           — показать без сохранения
   ${C.dim('Готовые спеки: specs/executable/drone-autonomy.spec.mjs')}
-  ${C.dim('              specs/executable/drone-hw-sovereignty.spec.mjs')}
-  ${C.dim('Формат: экспортируй META + INVARIANTS + METRICS + genScenario(seed) + evalScenario()')}`,
+  ${C.dim('              specs/executable/drone-hw-sovereignty.spec.mjs')}`,
 
   harmony: () => `${C.b('Гармония сети (закон Сороко, математика гармонии):')}
   gift harmony                    — диагноз матрицы W по золотой пропорции дал/принял
@@ -1119,6 +1128,51 @@ ${C.b('gift login')} <бэкенд> <api-key>
       } catch { console.log(`  Бдений активно:   ${C.dim('n/a')}`); }
 
       console.log();
+      break;
+    }
+
+    case 'card': {
+      // Генератор продуктовых карт через роевой собор:
+      //   gift card run "запрос" [--tech T31] [--platform P01] [--space Подземное] [--out путь]
+      //   gift card образ "запрос" ...
+      //   gift card sobor <obraz.json>
+      //   gift card show <card.json>
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('utils/card-generator.mjs', allArgs);
+      break;
+    }
+
+    case 'drones': {
+      // Матрица продуктовых карт БПЛА: 23 карты × 4 пространства → Excel
+      //   gift drones [--out файл]
+      const outIdx = rest.indexOf('--out');
+      const outPath = outIdx !== -1 ? rest[outIdx + 1] : 'data/drone-cards.xlsx';
+      const { spawnSync } = await import('node:child_process');
+      const result = spawnSync('python3', [resolve(ROOT, 'utils/build-drone-cards.py'), outPath], {
+        cwd: ROOT, stdio: 'inherit', env: { ...process.env },
+      });
+      if (result.status !== 0) process.exit(result.status ?? 1);
+      break;
+    }
+
+    case 'portfolio': {
+      // Матрица наших проектов в формате продуктовых карт T×P×S + gift-онтология:
+      //   gift portfolio             — генерировать data/gift-portfolio.xlsx
+      //   gift portfolio --out путь  — в указанный файл
+      const outArg = rest.find(a => a.startsWith('--out=')) || rest[rest.indexOf('--out') + 1];
+      const outPath = (outArg && !outArg.startsWith('--')) ? outArg : 'data/gift-portfolio.xlsx';
+      const { spawnSync } = await import('node:child_process');
+      const result = spawnSync('python3', [resolve(ROOT, 'utils/build-portfolio.py'), outPath], {
+        cwd: ROOT, stdio: 'inherit', env: { ...process.env },
+      });
+      if (result.status !== 0) process.exit(result.status ?? 1);
+      break;
+    }
+
+    case 'spec-build': {
+      // Генератор спеки из текста запроса: gift spec-build "запрос" --out <file>
+      const allArgs = [sub, ...rest].filter(Boolean);
+      await run('utils/spec-builder.mjs', allArgs);
       break;
     }
 
