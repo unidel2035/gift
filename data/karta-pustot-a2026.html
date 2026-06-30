@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Карта с пустотами — Архипелаг 2026</title>
+<style>
+  @page { size: A1 landscape; margin: 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #041845;
+    color: #e2e8f0;
+    font-family: 'Arial Narrow', Arial, sans-serif;
+    font-size: 7.5pt;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px 5px;
+    border-bottom: 2px solid #FF5C00;
+    margin-bottom: 8px;
+  }
+  .page-title {
+    font-size: 15pt;
+    font-weight: bold;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+  .page-meta {
+    font-size: 7pt;
+    color: #94a3b8;
+    text-align: right;
+    line-height: 1.4;
+  }
+  .stats-bar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat-num {
+    font-size: 14pt;
+    font-weight: bold;
+  }
+  .stat-label {
+    font-size: 6pt;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  col.col-label { width: 12%; }
+  col.col-space { width: 14.67%; }
+
+  .vyzov-header {
+    padding: 4px 6px;
+    font-size: 8.5pt;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .subrow-label {
+    padding: 3px 5px;
+    vertical-align: top;
+    border: 1px solid #1e3a5f;
+    border-right: 2px solid;
+    font-size: 6.5pt;
+    line-height: 1.3;
+    color: #cbd5e1;
+  }
+  .space-header {
+    padding: 4px 3px;
+    text-align: center;
+    font-size: 7.5pt;
+    font-weight: bold;
+    background: #0a1f5c;
+    border: 1px solid #1e3a5f;
+    color: #93c5fd;
+  }
+  .cell-filled {
+    background: #0d3d2e;
+    border: 1px solid #166534;
+    padding: 3px 4px;
+    vertical-align: top;
+  }
+  .cell-filled .card-name {
+    font-size: 7pt;
+    font-weight: bold;
+    color: #4ade80;
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+  .cell-filled .card-param {
+    font-size: 5.5pt;
+    color: #86efac;
+    line-height: 1.3;
+  }
+  .cell-filled .card-effect {
+    font-size: 5pt;
+    color: #4ade80;
+    margin-top: 1px;
+    opacity: 0.8;
+    line-height: 1.2;
+  }
+  .cell-lacuna {
+    background: #1a1a2e;
+    border: 1px solid #2d1b69;
+    padding: 3px 4px;
+    vertical-align: top;
+  }
+  .lacuna-tag {
+    font-size: 8pt;
+    font-weight: bold;
+    color: #FF5C00;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+    display: block;
+  }
+  .gap-list {
+    list-style: none;
+    padding: 0;
+  }
+  .gap-list li {
+    font-size: 5.5pt;
+    color: #94a3b8;
+    line-height: 1.6;
+    border-bottom: 1px dotted #334155;
+    padding-bottom: 1px;
+    margin-bottom: 1px;
+  }
+  .gap-list li:last-child { border-bottom: none; }
+  .legend {
+    display: flex;
+    gap: 16px;
+    padding: 5px 8px;
+    margin-top: 6px;
+    border-top: 1px solid #1e3a5f;
+    font-size: 6pt;
+    color: #94a3b8;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+  }
+  .question-box {
+    margin-top: 8px;
+    padding: 5px 10px;
+    background: #0f172a;
+    border-left: 3px solid #FF5C00;
+    font-size: 9pt;
+    color: #fbbf24;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">КАРТА С ПУСТОТАМИ</div>
+    <div style="font-size:7pt;color:#64748b;margin-top:2px;">Архипелаг 2026 · Мета-КБ · Стадия 0 — Ввод в ситуацию</div>
+  </div>
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num" style="color:#4ade80;">68</div><div class="stat-label">Решений</div></div>
+    <div class="stat"><div class="stat-num" style="color:#FF5C00;">40</div><div class="stat-label">Лакун</div></div>
+    <div class="stat"><div class="stat-num" style="color:#94a3b8;">108</div><div class="stat-label">Ячеек</div></div>
+  </div>
+  <div class="page-meta">
+    Июль 2026 · НТИ<br>
+    Вызовы × Пространства<br>
+    4 × 6 = 24 секции
+  </div>
+</div>
+
+<div class="question-box">
+  Вопрос модератора (один): «Посмотрите на карту. Что вас удивляет?»
+</div>
+
+<table style="margin-top:8px;">
+<colgroup>
+  <col class="col-label">
+  <col class="col-space"><col class="col-space"><col class="col-space">
+  <col class="col-space"><col class="col-space"><col class="col-space">
+</colgroup>
+<thead>
+<tr>
+  <th class="space-header" style="text-align:left;color:#fbbf24;">ПОДВЫЗОВ</th>
+  <th class="space-header">✈<br>Воздух</th>
+  <th class="space-header">🏔<br>Земля</th>
+  <th class="space-header">⚓<br>Море</th>
+  <th class="space-header">⛏<br>Подземное</th>
+  <th class="space-header">🧠<br>Когнитивное</th>
+  <th class="space-header">📡<br>ЭМ</th>
+</tr>
+</thead>
+<tbody>
+
+<tr>
+  <td colspan="7" class="vyzov-header" style="background:#7c3aed22;border-left:4px solid #7c3aed;border-top:2px solid #7c3aed33;">
+    ☢ ЯДЕРНОЕ ОРУЖИЕ
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#7c3aed;">Раннее предупреждение об ударе</td>
+  <td class="cell-filled">
+    <div class="card-name">Ядерный страж</div>
+    <div class="card-param">⚡ БПЛА-детектор ядерного удара</div>
+    <div class="card-effect">несколько секунд форы для активации защитных мер — без спутниковой зависимости</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Тепловой следопыт</div>
+    <div class="card-param">⚡ высотный ИК-разведчик субмарин</div>
+    <div class="card-effect">36-часовое патрулирование — субмарина не может ждать дольше ресурса экипажа</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Невидимая сеть ПВО</div>
+    <div class="card-param">⚡ пассивная система обнаружения БПЛА</div>
+    <div class="card-effect">противник не знает, что обнаружен — сеть не излучает ничего</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#7c3aed;">ЭМИ / сохранение управления и связи</td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Паутина-ЭМИ</div>
+    <div class="card-param">⚡ подводная антиЭМИ mesh-сеть</div>
+    <div class="card-effect">флот получает приказы через 10 мин после ЭМИ — когда наземная связь уже мертва</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Нора</div>
+    <div class="card-param">⚡ подземный командный пункт с автономной навигацией</div>
+    <div class="card-effect">командование функционирует 72 ч без внешнего питания, связи и навигации</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Квантовый ключ</div>
+    <div class="card-param">⚡ QKD-защита канала связи КП</div>
+    <div class="card-effect">любая попытка прослушать канал физически видна — атака засекается сама по себе</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">ЭМИ-щит</div>
+    <div class="card-param">⚡ мобильный генератор защитного ЭМ-поля</div>
+    <div class="card-effect">оборудование в радиусе 500 м выживает в ядерном ЭМИ — без аппаратной экранировки</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#7c3aed;">Радиационная разведка и картирование</td>
+  <td class="cell-filled">
+    <div class="card-name">Всевидящее</div>
+    <div class="card-param">⚡ беспилотный ДРЛО</div>
+    <div class="card-effect">36-часовое дежурство без смены — экипаж отдыхает, дрон не устаёт</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Дозиметр-крот</div>
+    <div class="card-param">⚡ UGV-картограф зоны радиационного заражения</div>
+    <div class="card-effect">спасатель получает карту заражения до входа — никто не облучается</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской радар</div>
+    <div class="card-param">⚡ морской SAR-разведчик</div>
+    <div class="card-effect">полная картина акватории в любую погоду без оптики — туман и ночь не помеха</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Крот-разведчик</div>
+    <div class="card-param">⚡ автономный робот-картограф тоннелей</div>
+    <div class="card-effect">штурмовая группа получает план объекта до входа — без риска разведчика</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#7c3aed;">Постъядерная навигация</td>
+  <td class="cell-filled">
+    <div class="card-name">Сокол без радара</div>
+    <div class="card-param">⚡ перехватчик БПЛА</div>
+    <div class="card-effect">перехват работает там, где весь радиодиапазон подавлен — пассивная система</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Подводный навигатор</div>
+    <div class="card-param">⚡ автономный UUV без GNSS</div>
+    <div class="card-effect">работает именно там, где любой GNSS-зависимый UUV слеп</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Нить Ариадны</div>
+    <div class="card-param">⚡ тоннельный перехватчик</div>
+    <div class="card-effect">радиоподавление не работает — связь физическая, только обрыв кабеля опасен</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+
+<tr>
+  <td colspan="7" class="vyzov-header" style="background:#0ea5e922;border-left:4px solid #0ea5e9;border-top:2px solid #0ea5e933;">
+    🚁 АВТОНОМНЫЙ РОЙ
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#0ea5e9;">Роевой барьер / зона отказа</td>
+  <td class="cell-filled">
+    <div class="card-name">Живой барьер</div>
+    <div class="card-param">⚡ рой дронов заграждения</div>
+    <div class="card-effect">барьер не имеет центра — нельзя обезглавить одним ударом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Наземный барьер</div>
+    <div class="card-param">⚡ рой UGV заграждения</div>
+    <div class="card-effect">наземный барьер без единой точки — нельзя уничтожить одним залпом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стая скатов</div>
+    <div class="card-param">⚡ рой подводных дронов</div>
+    <div class="card-effect">надводные корабли не могут войти — угроза невидима и не имеет одной точки</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Подземный рой</div>
+    <div class="card-param">⚡ группа UGV для тоннельного прочёсывания</div>
+    <div class="card-effect">время разведки / N роботов — параллельное покрытие всех ветвей</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стохастический глушитель</div>
+    <div class="card-param">⚡ рой РЭБ с непредсказуемым паттерном</div>
+    <div class="card-effect">противник не может подобрать «окно» — адаптация требует времени, которого нет</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#0ea5e9;">Роевой перехват / уничтожение угроз</td>
+  <td class="cell-filled">
+    <div class="card-name">Сокол без радара</div>
+    <div class="card-param">⚡ перехватчик БПЛА</div>
+    <div class="card-effect">перехват работает там, где весь радиодиапазон подавлен — пассивная система</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стая скатов</div>
+    <div class="card-param">⚡ рой подводных дронов</div>
+    <div class="card-effect">надводные корабли не могут войти — угроза невидима и не имеет одной точки</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Нить Ариадны</div>
+    <div class="card-param">⚡ тоннельный перехватчик</div>
+    <div class="card-effect">радиоподавление не работает — связь физическая, только обрыв кабеля опасен</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Имитатор своего</div>
+    <div class="card-param">⚡ дрон с адаптивным IFF</div>
+    <div class="card-effect">ПВО видит «своего» — дрон достигает цели без единого выстрела</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#0ea5e9;">Роевая разведка / сбор данных</td>
+  <td class="cell-filled">
+    <div class="card-name">Невидимая сеть ПВО</div>
+    <div class="card-param">⚡ пассивная система обнаружения БПЛА</div>
+    <div class="card-effect">противник не знает, что обнаружен — сеть не излучает ничего</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской радар</div>
+    <div class="card-param">⚡ морской SAR-разведчик</div>
+    <div class="card-effect">полная картина акватории в любую погоду без оптики — туман и ночь не помеха</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Ухо земли</div>
+    <div class="card-param">⚡ акустическая сеть подземного мониторинга</div>
+    <div class="card-effect">невидимая охрана: нет камер, нет излучения, нет ничего обнаруживаемого</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Цифровой двойник поля</div>
+    <div class="card-param">⚡ live-система управления боевой обстановкой</div>
+    <div class="card-effect">командир видит реальную обстановку — решение за секунды, не за минуты</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Всевидящее</div>
+    <div class="card-param">⚡ беспилотный ДРЛО</div>
+    <div class="card-effect">36-часовое дежурство без смены — экипаж отдыхает, дрон не устаёт</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#0ea5e9;">Роевой удар / распределённая атака</td>
+  <td class="cell-filled">
+    <div class="card-name">Невидимый барражир</div>
+    <div class="card-param">⚡ барражирующий боеприпас-невидимка</div>
+    <div class="card-effect">ПВО физически не успевает среагировать — обнаружение и поражение одновременны</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стая скатов</div>
+    <div class="card-param">⚡ рой подводных дронов</div>
+    <div class="card-effect">надводные корабли не могут войти — угроза невидима и не имеет одной точки</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Семантическая бомба</div>
+    <div class="card-param">⚡ рой ложных целей для перегрузки ПВО</div>
+    <div class="card-effect">оператор не знает где настоящая угроза — решение заблокировано шумом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Летающий глушитель</div>
+    <div class="card-param">⚡ воздушный постановщик помех</div>
+    <div class="card-effect">связь противника пропадает не в точке — в радиусе, который движется с ним</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#0ea5e9;">Роевое РЭБ / подавление и обман</td>
+  <td class="cell-filled">
+    <div class="card-name">Летающий глушитель</div>
+    <div class="card-param">⚡ воздушный постановщик помех</div>
+    <div class="card-effect">связь противника пропадает не в точке — в радиусе, который движется с ним</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Семантическая бомба</div>
+    <div class="card-param">⚡ рой ложных целей для перегрузки ПВО</div>
+    <div class="card-effect">оператор не знает где настоящая угроза — решение заблокировано шумом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стохастический глушитель</div>
+    <div class="card-param">⚡ рой РЭБ с непредсказуемым паттерном</div>
+    <div class="card-effect">противник не может подобрать «окно» — адаптация требует времени, которого нет</div>
+  </td>
+</tr>
+
+<tr>
+  <td colspan="7" class="vyzov-header" style="background:#16a34a22;border-left:4px solid #16a34a;border-top:2px solid #16a34a33;">
+    🧬 БИОЛОГИЧЕСКОЕ ОРУЖИЕ
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#16a34a;">Детекция и идентификация патогенов</td>
+  <td class="cell-filled">
+    <div class="card-name">Биосенсор-зонд</div>
+    <div class="card-param">⚡ БПЛА с летающей лабораторией</div>
+    <div class="card-effect">БО обнаруживается через 8 мин после выброса — до заражения гражданского населени</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Хемоухо</div>
+    <div class="card-param">⚡ подземная сеть хемосенсоров</div>
+    <div class="card-effect">обнаружение биоагента в тоннеле за 2 мин — до того как он достигнет жилых зон</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Геномный двойник</div>
+    <div class="card-param">⚡ ИИ-платформа геномного анализа в реальном времени</div>
+    <div class="card-effect">командир знает: что это, откуда, куда распространится — до госпитализации первог</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#16a34a;">Картирование заражения / мониторинг</td>
+  <td class="cell-filled">
+    <div class="card-name">Всевидящее</div>
+    <div class="card-param">⚡ беспилотный ДРЛО</div>
+    <div class="card-effect">36-часовое дежурство без смены — экипаж отдыхает, дрон не устаёт</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Биомаппер</div>
+    <div class="card-param">⚡ UGV-картограф зоны биозаражения</div>
+    <div class="card-effect">границы карантинной зоны установлены за 30 мин без контакта людей с заражённой с</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской радар</div>
+    <div class="card-param">⚡ морской SAR-разведчик</div>
+    <div class="card-effect">полная картина акватории в любую погоду без оптики — туман и ночь не помеха</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Летающий маппер</div>
+    <div class="card-param">⚡ мини-дрон 3D-картографирования тоннелей</div>
+    <div class="card-effect">карта объекта без риска для людей — дрон заходит первым</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Геномный двойник</div>
+    <div class="card-param">⚡ ИИ-платформа геномного анализа в реальном времени</div>
+    <div class="card-effect">командир знает: что это, откуда, куда распространится — до госпитализации первог</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#16a34a;">Карантинный барьер / ограничение распространения</td>
+  <td class="cell-filled">
+    <div class="card-name">Живой барьер</div>
+    <div class="card-param">⚡ рой дронов заграждения</div>
+    <div class="card-effect">барьер не имеет центра — нельзя обезглавить одним ударом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Наземный барьер</div>
+    <div class="card-param">⚡ рой UGV заграждения</div>
+    <div class="card-effect">наземный барьер без единой точки — нельзя уничтожить одним залпом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стая скатов</div>
+    <div class="card-param">⚡ рой подводных дронов</div>
+    <div class="card-effect">надводные корабли не могут войти — угроза невидима и не имеет одной точки</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Подземный рой</div>
+    <div class="card-param">⚡ группа UGV для тоннельного прочёсывания</div>
+    <div class="card-effect">время разведки / N роботов — параллельное покрытие всех ветвей</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стохастический глушитель</div>
+    <div class="card-param">⚡ рой РЭБ с непредсказуемым паттерном</div>
+    <div class="card-effect">противник не может подобрать «окно» — адаптация требует времени, которого нет</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#16a34a;">Дезактивация / очистка территорий</td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Дозиметр-крот</div>
+    <div class="card-param">⚡ UGV-картограф зоны радиационного заражения</div>
+    <div class="card-effect">спасатель получает карту заражения до входа — никто не облучается</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Подземный рой</div>
+    <div class="card-param">⚡ группа UGV для тоннельного прочёсывания</div>
+    <div class="card-effect">время разведки / N роботов — параллельное покрытие всех ветвей</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+
+<tr>
+  <td colspan="7" class="vyzov-header" style="background:#dc262622;border-left:4px solid #dc2626;border-top:2px solid #dc262633;">
+    🤖 AGI
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#dc2626;">Когнитивная атака / управление восприятием</td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской призрак</div>
+    <div class="card-param">⚡ подводный имитатор надводного судна</div>
+    <div class="card-effect">гидрофонная сеть «видит» танкер — боевой UUV достигает цели под прикрытием</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Семантическая бомба</div>
+    <div class="card-param">⚡ рой ложных целей для перегрузки ПВО</div>
+    <div class="card-effect">оператор не знает где настоящая угроза — решение заблокировано шумом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Стохастический глушитель</div>
+    <div class="card-param">⚡ рой РЭБ с непредсказуемым паттерном</div>
+    <div class="card-effect">противник не может подобрать «окно» — адаптация требует времени, которого нет</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#dc2626;">Взлом и отравление системы управления</td>
+  <td class="cell-filled">
+    <div class="card-name">Имитатор своего</div>
+    <div class="card-param">⚡ дрон с адаптивным IFF</div>
+    <div class="card-effect">ПВО видит «своего» — дрон достигает цели без единого выстрела</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Отравитель КП</div>
+    <div class="card-param">⚡ агент отравления данных системы управления</div>
+    <div class="card-effect">КП уверен в своей картине мира — и она полностью ложная; ошибки накапливаются</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#dc2626;">Имитация и подмена (IFF / дезинформация)</td>
+  <td class="cell-filled">
+    <div class="card-name">Имитатор своего</div>
+    <div class="card-param">⚡ дрон с адаптивным IFF</div>
+    <div class="card-effect">ПВО видит «своего» — дрон достигает цели без единого выстрела</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской призрак</div>
+    <div class="card-param">⚡ подводный имитатор надводного судна</div>
+    <div class="card-effect">гидрофонная сеть «видит» танкер — боевой UUV достигает цели под прикрытием</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Семантическая бомба</div>
+    <div class="card-param">⚡ рой ложных целей для перегрузки ПВО</div>
+    <div class="card-effect">оператор не знает где настоящая угроза — решение заблокировано шумом</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">ЭМ-зеркало</div>
+    <div class="card-param">⚡ имитатор электромагнитных сигнатур</div>
+    <div class="card-effect">противник видит в своей системе «Боинг-737» — ракета улетает</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#dc2626;">Квантовая защита / стойкость к AGI-атаке</td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Подводная паутина</div>
+    <div class="card-param">⚡ самовосстанавливающаяся подводная mesh-сеть</div>
+    <div class="card-effect">подводная связь выживает при уничтожении трети сети — деградирует, не падает</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Нора</div>
+    <div class="card-param">⚡ подземный командный пункт с автономной навигацией</div>
+    <div class="card-effect">командование функционирует 72 ч без внешнего питания, связи и навигации</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Квантовый ключ</div>
+    <div class="card-param">⚡ QKD-защита канала связи КП</div>
+    <div class="card-effect">любая попытка прослушать канал физически видна — атака засекается сама по себе</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">ЭМИ-щит</div>
+    <div class="card-param">⚡ мобильный генератор защитного ЭМ-поля</div>
+    <div class="card-effect">оборудование в радиусе 500 м выживает в ядерном ЭМИ — без аппаратной экранировки</div>
+  </td>
+</tr>
+<tr>
+  <td class="subrow-label" style="border-right-color:#dc2626;">Тактическая поддержка решений / ИИ-ко-пилот</td>
+  <td class="cell-filled">
+    <div class="card-name">Всевидящее</div>
+    <div class="card-param">⚡ беспилотный ДРЛО</div>
+    <div class="card-effect">36-часовое дежурство без смены — экипаж отдыхает, дрон не устаёт</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Второй пилот на теле</div>
+    <div class="card-param">⚡ носимое тактическое AR-устройство</div>
+    <div class="card-effect">боец видит «следующий шаг» без отвлечения — время реакции снижается в 2×</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Морской радар</div>
+    <div class="card-param">⚡ морской SAR-разведчик</div>
+    <div class="card-effect">полная картина акватории в любую погоду без оптики — туман и ночь не помеха</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Крот-разведчик</div>
+    <div class="card-param">⚡ автономный робот-картограф тоннелей</div>
+    <div class="card-effect">штурмовая группа получает план объекта до входа — без риска разведчика</div>
+  </td>
+  <td class="cell-filled">
+    <div class="card-name">Цифровой двойник поля</div>
+    <div class="card-param">⚡ live-система управления боевой обстановкой</div>
+    <div class="card-effect">командир видит реальную обстановку — решение за секунды, не за минуты</div>
+  </td>
+  <td class="cell-lacuna">
+    <span class="lacuna-tag">ЛАКУНА</span>
+    <ul class="gap-list"><li>□ Нет технологии?</li><li>□ Нет субъекта, кому нужно?</li><li>□ Засекречено?</li><li>□ Вопрос неверно поставлен?</li></ul>
+  </td>
+</tr>
+
+</tbody>
+</table>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#0d3d2e;border:1px solid #166534;"></div> Решение существует (карточка + параметр-сдвиг)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1a1a2e;border:1px solid #FF5C00;"></div> ЛАКУНА — выберите тип пустоты из своей роли</div>
+  <div class="legend-item" style="margin-left:auto;">
+    <span>□ Нет технологии</span>&nbsp;&nbsp;
+    <span>□ Нет субъекта</span>&nbsp;&nbsp;
+    <span>□ Засекречено</span>&nbsp;&nbsp;
+    <span>□ Вопрос неверен</span>
+  </div>
+</div>
+
+</body>
+</html>
