@@ -522,5 +522,136 @@
     "commit": "0477384bdd1a",
     "kenosis": true,
     "kenosisScore": 1
+  },
+  {
+    "ts": "2026-06-18T11:59:10.081Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "spec-gate — исполняемые спецификации для Мета-КБ Архипелага",
+    "linkedIssue": null,
+    "commit": "bae811c5b963",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "3240b468",
+    "files": [
+      "bin/gift",
+      "specs/executable/drone-autonomy.spec.mjs",
+      "specs/executable/drone-hw-sovereignty.spec.mjs",
+      "utils/spec-runner.mjs"
+    ],
+    "filesCount": 4,
+    "insertions": 520,
+    "deletions": 0
+  },
+  {
+    "ts": "2026-06-18T12:21:15.477Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "spec-builder + drone-swarm.spec — 3 группы Мета-КБ с исполняемыми спеками",
+    "linkedIssue": null,
+    "commit": "f59db8cc191c",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "45e43cc4",
+    "files": [
+      "specs/executable/drone-swarm.spec.mjs",
+      "utils/spec-builder.mjs"
+    ],
+    "filesCount": 2,
+    "insertions": 446,
+    "deletions": 0
+  },
+  {
+    "ts": "2026-06-18T12:34:03.821Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "5 исполняемых спек Мета-КБ — полный стек беспилотных автономных систем",
+    "linkedIssue": null,
+    "commit": "fdf4fd4af004",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "ae1ea04",
+    "files": [
+      "specs/executable/drone-autonomy-real.spec.mjs",
+      "specs/executable/drone-cert.spec.mjs",
+      "specs/executable/drone-channel.spec.mjs"
+    ],
+    "filesCount": 3,
+    "insertions": 521,
+    "deletions": 0
+  },
+  {
+    "ts": "2026-06-19T08:04:27.269Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "bridges + deep specs — КОМПАС/OpenFOAM/KiCad/GNU Radio → Мета-КБ",
+    "linkedIssue": null,
+    "commit": "8b952d4eaa93",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "9a49a12c",
+    "files": [
+      "specs/bridges/__init__.py",
+      "specs/bridges/gnuradio_bridge.py",
+      "specs/bridges/kicad_bridge.py",
+      "specs/bridges/kompas_bridge.py",
+      "specs/bridges/openfoam_bridge.py",
+      "specs/executable/drone-channel-deep.spec.mjs",
+      "specs/executable/drone-hw-sovereignty-deep.spec.mjs"
+    ],
+    "filesCount": 7,
+    "insertions": 1330,
+    "deletions": 0
+  },
+  {
+    "ts": "2026-06-19T08:25:32.280Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "Python-мосты + deep specs — двухуровневая верификация Архипелага-2026",
+    "linkedIssue": null,
+    "commit": "5277cfba9d8e",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "35ebda4",
+    "files": [
+      "utils/spec-runner.mjs"
+    ],
+    "filesCount": 1,
+    "insertions": 1,
+    "deletions": 0
+  },
+  {
+    "ts": "2026-06-19T08:49:14.107Z",
+    "from": "_claude",
+    "to": "Дионисий",
+    "type": "code",
+    "weight": 4,
+    "content": "3 моста + 3 deep спеки — полный стек tier:deep для всех 5 вызовов",
+    "linkedIssue": null,
+    "commit": "694d5f2395ec",
+    "kenosis": true,
+    "kenosisScore": 1,
+    "contentId": "a4dbe096",
+    "files": [
+      "specs/bridges/cert_bridge.py",
+      "specs/bridges/sitl_bridge.py",
+      "specs/bridges/swarm_bridge.py",
+      "specs/executable/drone-autonomy-deep.spec.mjs",
+      "specs/executable/drone-cert-deep.spec.mjs",
+      "specs/executable/drone-swarm-deep.spec.mjs"
+    ],
+    "filesCount": 6,
+    "insertions": 1016,
+    "deletions": 0
   }
 ]

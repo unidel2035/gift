@@ -12,6 +12,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { buildGiftMcpServer, GIFT_TOOL_NAMES } from './gift-tools.js';
+import { buildCuaMcpServer, CUA_TOOL_ALLOW, CUA_SYSTEM_HINT, cuaEnabled } from './cua-tools.js';
 import { GIFT_SYSTEM_PROMPT } from './system-prompt.js';
 import { GIFT_HOOKS } from './hooks.js';
 
@@ -76,14 +77,17 @@ export async function runGiftAgent(opts = {}) {
   const allowedTools = [...new Set([
     ...builtins,
     ...GIFT_TOOL_NAMES,
+    ...(cuaEnabled() ? CUA_TOOL_ALLOW : []),
     ...extraTools,
   ])];
 
-  const systemPrompt = systemPromptExtra
+  let systemPrompt = systemPromptExtra
     ? `${GIFT_SYSTEM_PROMPT}\n\n--- ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ ---\n\n${systemPromptExtra}`
     : GIFT_SYSTEM_PROMPT;
+  if (cuaEnabled()) systemPrompt += `\n\n--- ${CUA_SYSTEM_HINT}`;
 
   const giftServer = buildGiftMcpServer();
+  const cuaServers = buildCuaMcpServer();
   const claudeBin = findClaudeBin();
 
   let lastResult = null;
@@ -91,7 +95,7 @@ export async function runGiftAgent(opts = {}) {
 
   const queryOptions = {
     systemPrompt,
-    mcpServers: { gift: giftServer },
+    mcpServers: { gift: giftServer, ...cuaServers },
     allowedTools,
     permissionMode,
     maxTurns,

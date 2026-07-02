@@ -318,15 +318,17 @@
     "source": "auto-consolidation"
   },
   {
-    "type": "fact",
-    "content": "Матрица W: sacred-history-W.json. Священная история: Отец→Адам(40), Христос→Падший(28), Змей→Ева(14)",
-    "weight": 6,
-    "ts": "2026-03-26T08:53:50.525Z"
+    "type": "insight",
+    "content": "relay присутствия порт 8090→8095 (8090 занят onnx-эмбеддером) — честная правка",
+    "weight": 7,
+    "ts": "2026-06-14 15:19:20 +0300",
+    "source": "auto-consolidation"
   },
   {
-    "type": "fact",
-    "content": "GitHub repo: github.com/unidel2035/gift. Labels: gift-ready, plan-ready, plan-approved.",
-    "weight": 6,
-    "ts": "2026-03-26T08:53:50.804Z"
+    "type": "insight",
+    "content": "deploy relay присутствия — systemd unit + deploy-скрипт (рычаг 2 Мета-КБ: живость федерации)",
+    "weight": 7,
+    "ts": "2026-06-14 15:18:30 +0300",
+    "source": "auto-consolidation"
   }
 ]
