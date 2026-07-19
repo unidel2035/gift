@@ -997,6 +997,14 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'axioms': {
+      // Defeasible reasoning (FLoC26: KR/DL, NMR) над лентой актов: default-правило
+      // тип→канонический вес (отменяемо через note), hard-правило завет=10 (не отменяемо),
+      // precedence «время тяжелее денег» кросс-инстансно по всей ленте.
+      await runRaw('utils/axioms.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'ideas': {
       await runRaw('utils/idea-graph.mjs', [sub, ...rest].filter(Boolean));
       break;
