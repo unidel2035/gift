@@ -33,9 +33,12 @@
         "incarnation", "gift",        "witness",     "sacrifice",
         "resurrection","grace",       "question",    "covenant",
         "offering",    "labour",      "prayer",      "anamnesis",
-        "intercession","symphony"
+        "intercession","symphony",
+        "reception",   "metanoia",    "insight",     "direction",
+        "conflict",    "pulse",       "oracle",      "eval-winner",
+        "eval-participant"
       ],
-      "description": "Тип дара — богословская категория. 'symphony' = соборный акт с μία ἐνέργεια (Деян 15:28)."
+      "description": "Тип дара — богословская категория. 'symphony' = соборный акт с μία ἐνέργεια (Деян 15:28). Системные типы, добавлены 19.07.2026 по факту дрейфа TBox/ABox (utils/ontology-drift.mjs): 'reception' = λήψις, свидетельство получателем принятия дара (GiftAct.js); 'metanoia' = акт-поворот покаяния через _abyss (GiftMemory.repent); 'insight' = озарение/накопленное знание сессии; 'direction' = вопрошание fromArg→_claude (мыслебродильня); 'conflict' = пересечение агентов роя — приглашение к собору, не негатив; 'pulse' = регулярный пульс онтологии (Адам/Ева); 'oracle' = акт от аппаратного оракула (FPGA); 'eval-winner'/'eval-participant' = соборная оценка агентов (GiftAgentEval)."
     },
     "chorus": {
       "type": "boolean",

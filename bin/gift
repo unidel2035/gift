@@ -1005,6 +1005,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'ontology-drift': {
+      // FLoC26 KR/DL: TBox (data/gift-act.schema.json enum) vs ABox (giverId+type по
+      // всей кодовой базе). Ловит типы, которые код уже пишет в W, а схема не признаёт.
+      await runRaw('utils/ontology-drift.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'ideas': {
       await runRaw('utils/idea-graph.mjs', [sub, ...rest].filter(Boolean));
       break;
