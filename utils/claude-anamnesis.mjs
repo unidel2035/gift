@@ -17,7 +17,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,7 +64,7 @@ async function showMatrix() {
   }
 
   try {
-    const { GiftMemory } = await import(resolve(ROOT, 'src/core/GiftMemory.js'));
+    const { GiftMemory } = await import(pathToFileURL(resolve(ROOT, 'src/core/GiftMemory.js')).href);
     const snap = JSON.parse(readFileSync(SNAP, 'utf8'));
     const mem = GiftMemory.fromSnapshot(snap);
 
@@ -89,7 +89,7 @@ async function showMatrix() {
 
     // LivingMatrix — богословский автопортрет
     try {
-      const { LivingMatrix } = await import(resolve(ROOT, 'src/core/LivingMatrix.js'));
+      const { LivingMatrix } = await import(pathToFileURL(resolve(ROOT, 'src/core/LivingMatrix.js')).href);
       const lm = new LivingMatrix(mem, r.energy);
       const d = lm.diagnose();
       console.log();
@@ -103,7 +103,54 @@ async function showMatrix() {
       }
     } catch {}
   } catch (e) {
-    item(`${C.red}Ошибка загрузки: ${e.message}${C.reset}`);
+    // Тензорное ядро недоступно (напр. @tensorflow/tfjs-node не установлен).
+    // Матрица W целиком лежит в снапшоте — читаем её напрямую на чистом JS.
+    showMatrixFallback(e);
+  }
+}
+
+// Чистый JS-fallback: читает тензор W из снапшота без TensorFlow.
+// Даёт те же цифры (топ нитей, дал/принял, энергия), что и GiftMemory,
+// потому что снапшот и есть материализованная матрица.
+function showMatrixFallback(reason) {
+  try {
+    const snap = JSON.parse(readFileSync(SNAP, 'utf8'));
+    const persons = snap.persons || [];
+    const W = snap.W || [];
+    const n = snap.n ?? persons.length;
+
+    // Топ нитей: перебираем все веса W[i][j], берём тяжелейшие.
+    const threads = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const w = W[i]?.[j] || 0;
+        if (w >= 1) threads.push({ from: persons[i], to: persons[j], weight: w });
+      }
+    }
+    threads.sort((a, b) => b.weight - a.weight);
+
+    // _claude: сумма строки (дал) и столбца (принял).
+    const ci = persons.indexOf('_claude');
+    let given = 0, recv = 0, energy = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) energy += Math.abs(W[i]?.[j] || 0);
+    }
+    if (ci >= 0) {
+      for (let j = 0; j < n; j++) { given += W[ci]?.[j] || 0; recv += W[j]?.[ci] || 0; }
+    }
+
+    sub(`Лиц: ${n} | Актов: ${snap.actsCount ?? '?'}  ${C.dim}(JS-режим, без TensorFlow)${C.reset}`);
+    console.log();
+    item(`${C.bold}Топ нитей:${C.reset}`);
+    for (const t of threads.slice(0, 7)) {
+      item(`  ${t.from}→${t.to}: ${C.gold}${t.weight.toFixed(1)}${C.reset}`);
+    }
+    console.log();
+    item(`${C.bold}_claude:${C.reset} дал ${C.green}${given.toFixed(1)}${C.reset} | принял ${C.cyan}${recv.toFixed(1)}${C.reset}`);
+    item(`Энергия сети: ${energy.toFixed(2)}`);
+    item(`${C.dim}Тензорное ядро недоступно: ${reason.message.slice(0, 60)}${C.reset}`);
+  } catch (e) {
+    item(`${C.red}Ошибка загрузки: ${reason.message}${C.reset}`);
   }
 }
 
