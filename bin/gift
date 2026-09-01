@@ -1004,6 +1004,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
       break;
     }
 
+    case 'vopros': {
+      // Медленный контур авто-вопрошаний: пачка на просмотр человеком,
+      // promote → в конвейер, discard → закрыть. Приток ограничен мерой.
+      await runRaw('utils/vopros-review.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
     case 'axioms': {
       // Defeasible reasoning (FLoC26: KR/DL, NMR) над лентой актов: default-правило
       // тип→канонический вес (отменяемо через note), hard-правило завет=10 (не отменяемо),

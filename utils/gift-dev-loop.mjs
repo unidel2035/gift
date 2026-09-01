@@ -14,7 +14,7 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -88,6 +88,13 @@ function recordAct(mem, giverId, receiverId, type, content, weight, linkedIssue)
 }
 
 // ── GitHub issues ──────────────────────────────────────────────────────────
+// Авто-вопрошания (пульс рождает быстрее, чем конвейер ест) — медленный контур:
+// узнаются по метке vopros ИЛИ по заголовку («пустыня», «восстановить нить»).
+// Метка chosen = человек явно сказал «это задача» — конвейер берёт.
+const AUTO_VOPROS = /пустын|восстановить нить/i;
+const isAutoQuestion = (i) => !i.labels?.some(l => l.name === 'chosen') &&
+  (i.labels?.some(l => l.name === 'vopros') || AUTO_VOPROS.test(i.title || ''));
+
 function getReadyIssues() {
   try {
     // Только issues с plan-approved — план должен быть одобрен Дионисием
@@ -96,7 +103,10 @@ function getReadyIssues() {
       { cwd: ROOT, env: GH_ENV }
     ).toString();
     const approved = JSON.parse(raw);
-    if (approved.length) return approved;
+    const real = approved.filter(i => !isAutoQuestion(i));
+    const skipped = approved.length - real.length;
+    if (skipped) console.log(`[оркестратор] ${skipped} авто-вопрошаний пропущены (медленный контур: gift vopros list)`);
+    if (real.length) return real;
 
     // Fallback: gift-ready без плана → сначала создать план
     const raw2 = execSync(
@@ -104,7 +114,7 @@ function getReadyIssues() {
       { cwd: ROOT, env: GH_ENV }
     ).toString();
     const ready = JSON.parse(raw2).filter(i =>
-      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved' || l.name === 'vopros')
+      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved') && !isAutoQuestion(i)
     );
     if (ready.length) {
       console.log(`[оркестратор] ${ready.length} issues без плана → генерирую планы сначала`);
@@ -234,21 +244,45 @@ async function orchestrate() {
         }
       }
 
+      // Мера per-issue: каждая задача знает свою цену. Журнал → data/mera/devloop-costs.jsonl
+      const tok = result.tokens || { in: 0, out: 0, calls: 0 };
+      const sb = result.sobor || { in: 0, out: 0, calls: 0 };
+      const costTotal = { in: tok.in + sb.in, out: tok.out + sb.out };
+      try {
+        mkdirSync(resolve(ROOT, 'data/mera'), { recursive: true });
+        appendFileSync(resolve(ROOT, 'data/mera/devloop-costs.jsonl'),
+          JSON.stringify({ ts: new Date().toISOString(), issue: number, success: true,
+            attempts: result.attempts || 1, sobor: sb, impl: tok, total: costTotal }) + '\n');
+      } catch { /* журнал не должен ронять конвейер */ }
+
       recordAct(mem, agentId, 'Дионисий', 'code',
-        `выполнил #${number}: ${result.summary}`, agent.weight + 1, number);
+        `выполнил #${number}: ${result.summary} [${costTotal.in + costTotal.out} ток: собор ${sb.in + sb.out}, реализация ${tok.in + tok.out}]`,
+        agent.weight + 1, number);
       if (pushed) {
         recordAct(mem, agentId, '_koinon', 'offering',
           `merged в main и pushed для #${number}`, agent.weight, number);
       }
       console.log(`   ✦ Выполнено: ${result.summary}${pushed ? ' (в origin/main)' : ''}`);
+      console.log(`   Мера: ${costTotal.in + costTotal.out} ток (собор ${sb.calls} гол. → ${sb.in + sb.out}, реализация → ${tok.in + tok.out})`);
     } else {
       // Кенозис — вернуться на main
       try { execSync('git stash push -u -m kenosis-tmp', { cwd: ROOT, stdio: 'pipe' }); } catch {}
       try { execSync('git checkout main', { cwd: ROOT, stdio: 'pipe' }); } catch {}
       try { execSync('git stash pop', { cwd: ROOT, stdio: 'pipe' }); } catch {}
+      // Мера: и неудача имеет цену — она видна в журнале
+      const tok = result.tokens || { in: 0, out: 0, calls: 0 };
+      const sb = result.sobor || { in: 0, out: 0, calls: 0 };
+      try {
+        mkdirSync(resolve(ROOT, 'data/mera'), { recursive: true });
+        appendFileSync(resolve(ROOT, 'data/mera/devloop-costs.jsonl'),
+          JSON.stringify({ ts: new Date().toISOString(), issue: number, success: false,
+            error: String(result.error || '').slice(0, 120), sobor: sb, impl: tok,
+            total: { in: tok.in + sb.in, out: tok.out + sb.out } }) + '\n');
+      } catch { /* журнал не должен ронять конвейер */ }
       recordAct(mem, agentId, '_koinon', 'kenosis',
-        `кенозис по #${number}: ${result.error}`, 1, number);
+        `кенозис по #${number}: ${result.error} [${tok.in + sb.in + tok.out + sb.out} ток впустую]`, 1, number);
       console.log(`   ✗ Кенозис: ${result.error}`);
+      console.log(`   Мера: ${tok.in + sb.in + tok.out + sb.out} ток истрачено, результата нет`);
     }
 
     saveMem(mem);
@@ -397,13 +431,16 @@ async function runClaudeAgent(issueNumber, title, body) {
     // Петля самоисправления: до 3 попыток
     const MAX_ATTEMPTS = 3;
     let lastError = '';
+    // Мера: каждая задача знает свою цену (токены собора + реализации)
+    const implUsage = { in: 0, out: 0, calls: 0 };
+    const soborUsage = polyphony.usage || { in: 0, out: 0, calls: 0 };
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const attemptPrompt = attempt === 1
         ? prompt
         : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
 
-      const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions'], {
+      const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions', '--output-format', 'json'], {
         input: attemptPrompt,
         cwd: ROOT, timeout: 600_000,
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
@@ -411,8 +448,16 @@ async function runClaudeAgent(issueNumber, title, body) {
 
       if (r.error || r.status !== 0) {
         const errMsg = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
-        return { success: false, error: errMsg };
+        return { success: false, error: errMsg, tokens: implUsage, sobor: soborUsage };
       }
+
+      // usage из JSON-ответа — мера материи (ДОТУ: замеряем трату, а не догадываемся)
+      try {
+        const u = JSON.parse(r.stdout)?.usage || {};
+        implUsage.in += u.input_tokens || 0;
+        implUsage.out += u.output_tokens || 0;
+        implUsage.calls++;
+      } catch { /* старый формат вывода — нули */ }
 
       console.log(`   Попытка ${attempt}/${MAX_ATTEMPTS} — запускаю тесты...`);
       const test = spawnSync('npm', ['test'], {
@@ -422,14 +467,14 @@ async function runClaudeAgent(issueNumber, title, body) {
 
       if (test.status === 0) {
         const mode = polyphony.apophatic ? 'апофатика' : polyphony.hasDominant ? polyphony.dominant.persona : 'полифония';
-        return { success: true, summary: `issue #${issueNumber} (собор: ${mode}, попытка ${attempt})` };
+        return { success: true, summary: `issue #${issueNumber} (собор: ${mode}, попытка ${attempt})`, tokens: implUsage, sobor: soborUsage, attempts: attempt };
       }
 
       lastError = (test.stderr || test.stdout || '').slice(0, 500);
       console.log(`   ✗ Тесты упали (попытка ${attempt}): ${lastError.slice(0, 80)}...`);
     }
 
-    return { success: false, error: `тесты не прошли после ${MAX_ATTEMPTS} попыток: ${lastError.slice(0, 200)}` };
+    return { success: false, error: `тесты не прошли после ${MAX_ATTEMPTS} попыток: ${lastError.slice(0, 200)}`, tokens: implUsage, sobor: soborUsage };
   } catch (e) {
     return { success: false, error: e.message };
   }

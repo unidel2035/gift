@@ -128,11 +128,11 @@ export const VoiceSource = {
 
         try {
           const out = await runClaudePrint(prompt, { agentType, timeout });
-          const content = out.trim();
+          const content = String(out.text ?? '').trim();
           // Nested reasoning steps (вдохновлено Formal AI):
           // Парсим ответ на шаги рассуждения для прозрачности
           const steps = parseReasoningSteps(content);
-          return { persona, logos, content, steps, timestamp: Date.now() };
+          return { persona, logos, content, steps, usage: out.usage || null, timestamp: Date.now() };
         } catch (e) {
           return { persona, logos, content: `[молчит: ${e.message}]`, steps: [], timestamp: Date.now() };
         }
@@ -246,7 +246,8 @@ export const VoiceSource = {
  */
 function runClaudePrint(prompt, { agentType, timeout }) {
   return new Promise((resolve, reject) => {
-    const args = ['--print'];
+    // --output-format json даёт usage — мера токенов каждого голоса (ДОТУ: замеряемая материя)
+    const args = ['--print', '--output-format', 'json'];
     if (agentType) args.push('--agent', agentType);
     const child = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -266,7 +267,12 @@ function runClaudePrint(prompt, { agentType, timeout }) {
     child.on('close', code => {
       clearTimeout(killer);
       if (code !== 0) reject(new Error(`claude exit ${code}: ${stderr.slice(0, 200)}`));
-      else resolve(stdout);
+      else {
+        try {
+          const d = JSON.parse(stdout);
+          resolve({ text: d.result ?? stdout, usage: d.usage || null });
+        } catch { resolve({ text: stdout, usage: null }); }
+      }
     });
 
     child.stdin.end(prompt);
@@ -327,6 +333,11 @@ export class PolyphonyOrchestrator {
       : await this._collectSequential(question, onVoice);
 
     const polyphony = await this.dissent.assemble(voices);
+    // Мера: суммарная цена голосов собора (в токенах)
+    polyphony.usage = voices.reduce((a, v) => {
+      if (v.usage) { a.in += v.usage.input_tokens || 0; a.out += v.usage.output_tokens || 0; a.calls++; }
+      return a;
+    }, { in: 0, out: 0, calls: 0 });
     return polyphony;
   }
 
