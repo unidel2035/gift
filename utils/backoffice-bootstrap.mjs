@@ -56,7 +56,7 @@ const callRoot = async (method, path, body) => {
 const arr = (x) => Array.isArray(x) ? x : (x?.items || x || []);
 
 // ── 1. референс: таблицы/колонки/портал источника ───────────────────────────
-const TYPES = ['Проекты', 'Сессии', 'Решения', 'Инциденты', 'Грабли платформы', 'Участники', 'Портфель', 'Полка'];
+const TYPES = ['Проекты', 'Сессии', 'Решения', 'Инциденты', 'Грабли платформы', 'Участники', 'Портфель', 'Полка', 'Люди'];
 const srcTypes = arr(await call(SRC_WS, 'GET', '/schema?limit=500')).filter(t => TYPES.includes(t.name));
 const srcBatch = await call(SRC_WS, 'GET', `/schema/columns/batch?typeIds=${srcTypes.map(t => t.id).join(',')}`);
 const srcPortal = await call(SRC_WS, 'GET', '/portal/api/config');

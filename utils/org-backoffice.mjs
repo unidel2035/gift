@@ -150,7 +150,18 @@ async function syncSnapshot(ws) {
     value: i.title,
     cols: { 'статус': i.status, 'ярлыки': (i.labels || []).join(', '), 'описание': String(i.description || '').slice(0, 500) },
   })), shelfCols);
-  console.log(`  снапшот: портфель ${pf.items?.length || 0}, полка ${issues.length}`);
+  // люди: кто сколько держит (org pm/people)
+  try {
+    const ppl = await call('GET', `/orgs/${ORG}/pm/people`);
+    const pplId = await ensureTable(ws, 'Люди', [['открыто', 8], ['просрочено', 8], ['точки', 8]]);
+    const batch3 = await call('GET', `/${ws}/schema/columns/batch?typeIds=${pplId}`);
+    const pplCols = Object.fromEntries((batch3?.[String(pplId)] || []).map(c => [c.name, c.id]));
+    await upsertRows(ws, pplId, (ppl.items || []).map(u => ({
+      value: u.name || `user ${u.userId}`,
+      cols: { 'открыто': u.active, 'просрочено': u.overdue || '', 'точки': u.totalPoints ?? '' },
+    })), pplCols);
+    console.log(`  снапшот: портфель ${pf.items?.length || 0}, полка ${issues.length}, люди ${(ppl.items || []).length}`);
+  } catch (e) { console.log(`  снапшот люди: ${e.message.slice(0, 100)}`); }
 }
 
 // ── status ──────────────────────────────────────────────────────────────────
@@ -243,6 +254,38 @@ if (CMD === 'pulse') {
       }
     }
   } catch (e) { console.log(`  хвосты: ${e.message.slice(0, 100)}`); }
+
+  // события журнала: инциденты без лечения, решения вне сессий
+  try {
+    const { byName, colsOf } = await journalSchema(BOARD);
+    const incT = byName.get('Инциденты'), decT = byName.get('Решения');
+    if (incT) {
+      const cols = colsOf('Инциденты');
+      for (const o of await objectsOf(BOARD, incT.id)) {
+        const det = await call('GET', `/${BOARD}/objects/${o.id}`).catch(() => null);
+        const req = det?.requisites || {};
+        if (String(req[String(cols.get('лечение'))] || '').trim()) continue;
+        const title = `инцидент без лечения: ${String(o.value || '').slice(0, 60)}`;
+        if (openCards.some(i => i.title === title)) continue;
+        if (APPLY) await call('POST', `/${BOARD}/pm/issues`, { title, description: `Инцидент «${o.value}» без лечения в журнале.${req[String(cols.get('симптом'))] ? `\nСимптом: ${req[String(cols.get('симптом'))]}` : ''}\n\nЛибо лечим, либо осознанно закрываем инцидент в журнале.`, type: 'task', status: 'backlog', priority: 'high', labels: ['белое-пятно'] });
+        console.log(`  + ${title}`);
+        made++;
+      }
+    }
+    if (decT) {
+      const cols = colsOf('Решения');
+      for (const o of await objectsOf(BOARD, decT.id)) {
+        const det = await call('GET', `/${BOARD}/objects/${o.id}`).catch(() => null);
+        const req = det?.requisites || {};
+        if (req[String(cols.get('сессия'))]) continue;
+        const title = `решение вне сессии: ${String(o.value || '').slice(0, 60)}`;
+        if (openCards.some(i => i.title === title)) continue;
+        if (APPLY) await call('POST', `/${BOARD}/pm/issues`, { title, description: `Решение «${o.value}» не привязано к сессии — оно не вырастет в летописи. Привяжи в журнале или удали.`, type: 'task', status: 'backlog', priority: 'low', labels: ['белое-пятно'] });
+        console.log(`  + ${title}`);
+        made++;
+      }
+    }
+  } catch (e) { console.log(`  события: ${e.message.slice(0, 100)}`); }
 
   if (APPLY) {
     try { await syncSnapshot(BOARD); } catch (e) { console.log(`  снапшот: ${e.message.slice(0, 120)}`); }
