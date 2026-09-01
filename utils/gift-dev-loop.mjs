@@ -87,61 +87,43 @@ function recordAct(mem, giverId, receiverId, type, content, weight, linkedIssue)
   mem.receive({ giverId, receiverId, weight, type, content, linkedIssue, irreversible: true });
 }
 
-// ── GitHub issues ──────────────────────────────────────────────────────────
-// Авто-вопрошания (пульс рождает быстрее, чем конвейер ест) — медленный контур:
-// узнаются по метке vopros ИЛИ по заголовку («пустыня», «восстановить нить»).
-// Метка chosen = человек явно сказал «это задача» — конвейер берёт.
-const AUTO_VOPROS = /пустын|восстановить нить/i;
-const isAutoQuestion = (i) => !i.labels?.some(l => l.name === 'chosen') &&
-  (i.labels?.some(l => l.name === 'vopros') || AUTO_VOPROS.test(i.title || ''));
+// ── Задачи: Инеграм-PM (GitHub больше не источник) ─────────────────────────
+// Конвейер берёт только карточки в статусе in_progress — их переводит туда
+// человек перетаскиванием (это и есть одобрение плана).
+// Номер карточки в Инеграме — не номер гитхаба: настоящий номер живёт
+// в суффиксе заголовка «(gh #N)» — по нему зовём ветки и пишем «closes #N».
+function ghNumberOf(card) {
+  const m = (card.title || '').match(/\(gh #(\d+)\)\s*$/);
+  return m ? Number(m[1]) : card.number;
+}
 
-function getReadyIssues() {
+async function getReadyTasks() {
   try {
-    // Только issues с plan-approved — план должен быть одобрен Дионисием
-    const raw = execSync(
-      'gh issue list --label plan-approved --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT, env: GH_ENV }
-    ).toString();
-    const approved = JSON.parse(raw);
-    const real = approved.filter(i => !isAutoQuestion(i));
-    const skipped = approved.length - real.length;
-    if (skipped) console.log(`[оркестратор] ${skipped} авто-вопрошаний пропущены (медленный контур: gift vopros list)`);
-    if (real.length) return real;
-
-    // Fallback: gift-ready без плана → сначала создать план
-    const raw2 = execSync(
-      'gh issue list --label gift-ready --state open --json number,title,body,labels --limit 10',
-      { cwd: ROOT, env: GH_ENV }
-    ).toString();
-    const ready = JSON.parse(raw2).filter(i =>
-      !i.labels.some(l => l.name === 'plan-ready' || l.name === 'plan-approved') && !isAutoQuestion(i)
-    );
-    if (ready.length) {
-      console.log(`[оркестратор] ${ready.length} issues без плана → генерирую планы сначала`);
-      for (const i of ready) {
-        spawnSync('node', ['utils/gift-plan.mjs', String(i.number)],
-          { cwd: ROOT, stdio: 'inherit', env: GH_ENV });
-      }
-      console.log('[оркестратор] Планы созданы. Жду одобрения Дионисия.');
-      return []; // не реализуем до одобрения
+    const pm = await import(resolve(ROOT, 'utils/pm.mjs'));
+    // Фильтр статуса — в самом запросе: параметр page сервер игнорирует,
+    // без фильтра хвост списка не попал бы в первую сотню
+    const it = await pm.listIssues('?limit=100&status=in_progress');
+    const ready = it.items || it;
+    const waiting = (await pm.listIssues('?limit=1&status=todo')).total || 0;
+    const raw = (await pm.listIssues('?limit=1&status=backlog')).total || 0;
+    if (waiting || raw) {
+      console.log(`[оркестратор] Доска: в работе ${ready.length} · ждут тебя ${waiting} · на полке ${raw}`);
     }
-    return [];
-  } catch {
+    return ready.map(i => ({
+      id: i.id,
+      pmId: i.id,
+      number: ghNumberOf(i),
+      title: i.title,
+      body: i.description || '',
+    }));
+  } catch (e) {
+    console.log(`[оркестратор] Доска недоступна: ${e.message}`);
     return [];
   }
 }
 
-function assignIssue(number, agent) {
-  try {
-    execSync(`gh issue edit ${number} --add-assignee ${agent} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
-  } catch {}
-}
-
-function closeIssue(number, comment) {
-  try {
-    execSync(`gh issue comment ${number} --body "${comment}" 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
-    execSync(`gh issue close ${number} 2>/dev/null`, { cwd: ROOT, env: GH_ENV });
-  } catch {}
+async function pmReport(pm, pmId, text) {
+  try { await pm.comment(pmId, text); } catch { /* доска не должна ронять конвейер */ }
 }
 
 // ── Оркестратор ───────────────────────────────────────────────────────────
@@ -149,14 +131,15 @@ async function orchestrate() {
   // Загрузить скомпилированные .gift спецификации (связывает онтологию с рантаймом)
   await loadCompiledSpecs();
 
-  const issues = getReadyIssues();
+  const issues = await getReadyTasks();
   if (!issues.length) {
-    console.log('[оркестратор] Нет issues с меткой gift-ready');
+    console.log('[оркестратор] Пусто в «В работе» на доске (одобри карточку перетаскиванием)');
     return;
   }
 
   const mem = await loadMem();
-  console.log(`[оркестратор] Открытых issues: ${issues.length} | Лиц в матрице: ${mem.n}`);
+  const pmApi = await import(resolve(ROOT, 'utils/pm.mjs'));
+  console.log(`[оркестратор] Задач в работе: ${issues.length} | Лиц в матрице: ${mem.n}`);
 
   // Убедиться что мы на main и она свежая
   try {
@@ -264,6 +247,13 @@ async function orchestrate() {
       }
       console.log(`   ✦ Выполнено: ${result.summary}${pushed ? ' (в origin/main)' : ''}`);
       console.log(`   Мера: ${costTotal.in + costTotal.out} ток (собор ${sb.calls} гол. → ${sb.in + sb.out}, реализация → ${tok.in + tok.out})`);
+      // Карточка на доске: готово + цена
+      try {
+        await pmReport(pmApi, issue.pmId, '✦ Готово: ' + result.summary
+          + `\nМера: ${costTotal.in + costTotal.out} ток (собор ${sb.in + sb.out}, реализация ${tok.in + tok.out})`
+          + (pushed ? '\nКод в main.' : '\nКоммиты локальные, push не прошёл — посмотри руками.'));
+        await pmApi.updateIssue(issue.pmId, { status: 'done' });
+      } catch { /* доска не должна ронять конвейер */ }
     } else {
       // Кенозис — вернуться на main
       try { execSync('git stash push -u -m kenosis-tmp', { cwd: ROOT, stdio: 'pipe' }); } catch {}
@@ -283,6 +273,12 @@ async function orchestrate() {
         `кенозис по #${number}: ${result.error} [${tok.in + sb.in + tok.out + sb.out} ток впустую]`, 1, number);
       console.log(`   ✗ Кенозис: ${result.error}`);
       console.log(`   Мера: ${tok.in + sb.in + tok.out + sb.out} ток истрачено, результата нет`);
+      // Карточка возвращается в «Ждёт» — человек смотрит, что не вышло
+      try {
+        await pmReport(pmApi, issue.pmId, '✗ Не получилось: ' + result.error
+          + `\nМера: ${tok.in + sb.in + tok.out + sb.out} ток впустую`);
+        await pmApi.updateIssue(issue.pmId, { status: 'todo' });
+      } catch { /* доска не должна ронять конвейер */ }
     }
 
     saveMem(mem);

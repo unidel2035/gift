@@ -23,3 +23,6 @@ data/metakb-loop.log
 data/.swarm/sessions/
 data/.swarm/intentions/
 data/.swarm/locks/
+
+# JWT Инеграма не должен попасть в git
+data/mera/pm-token.json
