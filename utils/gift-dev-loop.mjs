@@ -314,6 +314,20 @@ async function runClaudeAgent(issueNumber, title, body) {
       specCtx ? `\n${specCtx}` : '',
     ].join('');
 
+    // ── Мера: релевантное знание по теме issue (ДОТУ-триада в dev-loop) ──
+    // Вместо «всего анамнезиса» — top-K записей хранилища, релевантных задаче.
+    // Токены = материя: платим за перенос, а не за хранение.
+    let meraKnowledge = '';
+    try {
+      const mera = await import(resolve(ROOT, 'utils/mera.mjs'));
+      const { prompt: meraPrompt } = await mera.assembleContext(
+        `${title}. ${body || ''}`.slice(0, 500),
+        { budget: 1500 }
+      );
+      const kIdx = meraPrompt.indexOf('## Релевантное знание');
+      if (kIdx >= 0) meraKnowledge = '\n' + meraPrompt.slice(kIdx);
+    } catch { /* мера не должна ломать цикл */ }
+
     // ── Собор: три голоса ────────────────────────────────────────────
     const { PolyphonyOrchestrator, VoiceSource } = await import(resolve(ROOT, 'utils/polyphony-orchestrator.mjs'));
     const { ConciliarDissent } = await import(resolve(ROOT, 'src/theology/ConciliarDissent.js'));
@@ -370,6 +384,7 @@ async function runClaudeAgent(issueNumber, title, body) {
 
     const prompt = [
       issueContext,
+      meraKnowledge,
       `\n═══ Решение собора ═══`,
       `План (${polyphony.dominant?.persona || 'полифония'}):`,
       plan,
