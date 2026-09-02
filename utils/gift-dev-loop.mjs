@@ -113,6 +113,7 @@ async function getReadyTasks() {
       id: i.id,
       pmId: i.id,
       number: ghNumberOf(i),
+      pmNumber: i.number, // номер карточки в Инеграме — его видит PM-git интеграция
       title: i.title,
       body: i.description || '',
     }));
@@ -149,7 +150,8 @@ async function orchestrate() {
 
   for (const issue of issues) {
     const { number, title, body } = issue;
-    console.log(`\n── Issue #${number}: ${title}`);
+    const pmNumber = issue.pmNumber ?? number; // PM-N в ветке/коммите двигает статусы Инеграма сам
+    console.log(`\n── Issue #${number} (PM-${pmNumber}): ${title}`);
 
     const agentId = pickAgent(title, body);
     const agent   = AGENTS[agentId];
@@ -159,7 +161,9 @@ async function orchestrate() {
       `берёт issue #${number}: ${title}`, agent.weight, number);
 
     // ── Создать ветку ДО запуска агента ─────────────────────────────────────
-    const branch = `gift/issue-${number}`;
+    // Имя с PM-N: платформенная git-интеграция Инеграма ловит номер карточки
+    // в ветке/коммите и двигает статусы сама (merge → «Готово»).
+    const branch = `gift/pm-${pmNumber}`;
     let onBranch = false;
     try {
       // Убрать незафиксированные изменения (data-файлы от хука)
@@ -193,8 +197,8 @@ async function orchestrate() {
         error: report.completed === 0 ? 'ни один шаг не выполнен' : undefined,
       };
     } else {
-      // Запустить агента (коммитит на текущую ветку — gift/issue-N)
-      result = await runAgent(agentId, number, title, body);
+      // Запустить агента (коммитит на текущую ветку — gift/pm-N)
+      result = await runAgent(agentId, number, title, body, pmNumber);
     }
 
     if (result.success) {
@@ -301,16 +305,16 @@ function pickAgent(title, body = '') {
 }
 
 // ── Запуск агента ─────────────────────────────────────────────────────────
-async function runAgent(agentId, issueNumber, title, body) {
+async function runAgent(agentId, issueNumber, title, body, pmNumber) {
   if (agentId === '_executor' || agentId === '_claude') {
-    return runClaudeAgent(issueNumber, title, body);
+    return runClaudeAgent(issueNumber, title, body, pmNumber);
   }
   if (agentId === '_witness') {
     return runCIAgent(issueNumber);
   }
   if (agentId === '_discerner' || agentId === '_questioner') {
     // Различитель и Вопрошатель пока делегируют Исполнителю
-    return runClaudeAgent(issueNumber, title, body);
+    return runClaudeAgent(issueNumber, title, body, pmNumber);
   }
   return { success: false, error: `роль ${agentId} ещё не подключена` };
 }
@@ -326,7 +330,7 @@ async function runAgent(agentId, issueNumber, title, body) {
  * После собора: dominant голос → реализация → тесты → коммит.
  * Анти-сговор (КИС) проверяет голоса перед финализацией.
  */
-async function runClaudeAgent(issueNumber, title, body) {
+async function runClaudeAgent(issueNumber, title, body, pmNumber) {
   try {
     // Найти релевантные спецификации
     const { searchSpecs, formatContext } = await import(resolve(ROOT, 'utils/spec-search.mjs'));
@@ -339,7 +343,7 @@ async function runClaudeAgent(issueNumber, title, body) {
     }
 
     const issueContext = [
-      `GitHub Issue #${issueNumber}: ${title}`,
+      `Задача PM-${pmNumber}${pmNumber !== issueNumber ? ` (gh #${issueNumber})` : ''}: ${title}`,
       body ? `\nОписание:\n${body}` : '',
       specCtx ? `\n${specCtx}` : '',
     ].join('');
@@ -421,7 +425,9 @@ async function runClaudeAgent(issueNumber, title, body) {
       criticWarnings ? `\nПредупреждения Критика:\n${criticWarnings}` : '',
       polyphony.apophatic ? '\n⟨апофатика⟩ Собор не дал единого голоса — действуй по своему разумению, но осторожно.' : '',
       `\nЗадача: реализовать по плану, учитывая предупреждения. Завершить коммитом:`,
-      `gift(Дионисий): [краткое описание] (closes #${issueNumber})`,
+      // PM-N двигает статус карточки в Инеграме (merge → «Готово»);
+      // closes #N остаётся для GitHub, когда у карточки есть настоящий gh-номер
+      `gift(Дионисий): [краткое описание] (PM-${pmNumber}${pmNumber !== issueNumber ? `, closes #${issueNumber}` : ''})`,
     ].join('\n');
 
     // Петля самоисправления: до 3 попыток

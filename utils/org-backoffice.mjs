@@ -68,6 +68,27 @@ async function call(method, path, body) {
 const arr = (x) => Array.isArray(x) ? x : (x?.items || x || []);
 const norm = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, ' ').trim();
 
+// Закрытые статусы — по КАТЕГОРИИ (kind), не по имени: у каждого воркспейса
+// свой набор статусов, и «done» там может называться иначе. kind приходят из
+// GET /<ws>/pm/statuses; закрытым считаем done и canceled.
+const closedStatusCache = new Map();
+async function closedStatuses(ws) {
+  if (closedStatusCache.has(ws)) return closedStatusCache.get(ws);
+  let names = ['done', 'canceled'];
+  try {
+    const st = arr(await call('GET', `/${ws}/pm/statuses`));
+    const byKind = st.filter(s => s.kind === 'done' || s.kind === 'canceled').map(s => s.name);
+    if (byKind.length) names = byKind;
+  } catch { /* нет статусов —fallback выше */ }
+  closedStatusCache.set(ws, names);
+  return names;
+}
+// Открытая задача = её статус не в закрытых категориях этого воркспейса
+const openIn = async (ws, issues) => {
+  const closed = await closedStatuses(ws);
+  return issues.filter(i => !closed.includes(i.status));
+};
+
 // ── Журнал: таблицы и колонки по именам (id у стендов разные) ───────────────
 async function journalSchema(ws) {
   const types = arr(await call('GET', `/${ws}/schema?limit=500`));
@@ -145,7 +166,7 @@ async function syncSnapshot(ws) {
   const shelfId = await ensureTable(ws, 'Полка', [['статус', 8], ['ярлыки', 8], ['описание', 12]]);
   const batch2 = await call('GET', `/${ws}/schema/columns/batch?typeIds=${shelfId}`);
   const shelfCols = Object.fromEntries((batch2?.[String(shelfId)] || []).map(c => [c.name, c.id]));
-  const issues = arr(await call('GET', `/${ws}/pm/issues?limit=100`)).filter(i => i.status !== 'done');
+  const issues = await openIn(ws, arr(await call('GET', `/${ws}/pm/issues?limit=100`)));
   await upsertRows(ws, shelfId, issues.map(i => ({
     value: i.title,
     cols: { 'статус': i.status, 'ярлыки': (i.labels || []).join(', '), 'описание': String(i.description || '').slice(0, 500) },
@@ -174,7 +195,7 @@ if (CMD === 'status') {
     console.log(`  ${w.name} [${w.slug}]: ${marks.join(' · ')} · прогресс ${w.progress}%${w.activeSprint ? ` · спринт «${w.activeSprint.name}»` : ''}`);
   }
   const board = arr(await call('GET', `/${BOARD}/pm/issues?limit=100`));
-  const open = board.filter(i => i.status !== 'done');
+  const open = await openIn(BOARD, board);
   console.log(`\n═══ полка бэкофиса [${BOARD}]: открыто ${open.length}`);
   for (const i of open) console.log(`  #${i.number} [${i.status}] ${i.title}`);
   try {
@@ -201,14 +222,15 @@ if (CMD === 'status') {
 if (CMD === 'pulse') {
   const pf = await call('GET', `/orgs/${ORG}/pm/portfolio`);
   const boardIssues = arr(await call('GET', `/${BOARD}/pm/issues?limit=200`));
-  const openCards = boardIssues.filter(i => i.status !== 'done');
+  const openCards = await openIn(BOARD, boardIssues);
   let made = 0, updated = 0, skipped = 0;
 
   for (const w of pf.items || []) {
     if (!w.pmEnabled || !w.overdue) continue;
-    // точечный список просроченных
-    const issues = arr(await call('GET', `/${w.slug}/pm/issues?limit=100`))
-      .filter(i => i.status !== 'done' && i.due_date && new Date(i.due_date) < new Date());
+    // точечный список просроченных (открытые — по категориям статусов воркспейса)
+    const wsIssues = arr(await call('GET', `/${w.slug}/pm/issues?limit=100`));
+    const issues = (await openIn(w.slug, wsIssues))
+      .filter(i => i.due_date && new Date(i.due_date) < new Date());
     if (!issues.length) continue;
     const title = `белое пятно: ${w.name} — просрочено`;
     const desc = ['Просроченные задачи (собрано пульсом бэкофиса):', '',
