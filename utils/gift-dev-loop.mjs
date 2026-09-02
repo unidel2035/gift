@@ -438,9 +438,13 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
     const soborUsage = polyphony.usage || { in: 0, out: 0, calls: 0 };
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // После неудачной попытки смыть её недоделки — следующая идёт по чистой ветке
+      if (attempt > 1) {
+        try { execSync('git checkout -- .', { cwd: ROOT, stdio: 'pipe' }); } catch { /* нечего мыть */ }
+      }
       const attemptPrompt = attempt === 1
         ? prompt
-        : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой тестов:\n${lastError}\nИсправь и повтори.`;
+        : `${prompt}\n\nПредыдущая попытка (${attempt-1}) завершилась ошибкой:\n${lastError}\nИсправь и повтори.`;
 
       const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions', '--output-format', 'json'], {
         input: attemptPrompt,
@@ -448,9 +452,13 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
+      // Неудача (таймаут, сеть, выход с ошибкой) — не приговор задаче:
+      // попытка считается, следующая идёт с сообщением об ошибке.
+      // Прежде таймаут убивал задачу с первой же попытки, минуя петлю.
       if (r.error || r.status !== 0) {
-        const errMsg = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
-        return { success: false, error: errMsg, tokens: implUsage, sobor: soborUsage };
+        lastError = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
+        console.log(`   ✗ Попытка ${attempt}/${MAX_ATTEMPTS} не удалась: ${lastError.slice(0, 80)}`);
+        continue;
       }
 
       // usage из JSON-ответа — мера материи (ДОТУ: замеряем трату, а не догадываемся)
@@ -476,7 +484,7 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
       console.log(`   ✗ Тесты упали (попытка ${attempt}): ${lastError.slice(0, 80)}...`);
     }
 
-    return { success: false, error: `тесты не прошли после ${MAX_ATTEMPTS} попыток: ${lastError.slice(0, 200)}`, tokens: implUsage, sobor: soborUsage };
+    return { success: false, error: `агент не справился за ${MAX_ATTEMPTS} попыток: ${lastError.slice(0, 200)}`, tokens: implUsage, sobor: soborUsage };
   } catch (e) {
     return { success: false, error: e.message };
   }
