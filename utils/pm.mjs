@@ -10,7 +10,7 @@
  *
  * Окружение: INTEGRAM_URL, INTEGRAM_EMAIL, INTEGRAM_PASSWORD, PM_WORKSPACE (по умолч. gift-koinon)
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -58,7 +58,7 @@ export async function token() {
 }
 
 /** Запрос к PM API воркспейса. */
-export async function api(method, path, body = null) {
+export async function api(method, path, body = null, _retried = false) {
   const jwt = await token();
   const r = await fetch(`${URL_}/api/v2/${WS}/pm${path}`, {
     method,
@@ -66,6 +66,13 @@ export async function api(method, path, body = null) {
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20000),
   });
+  // Сервер гасит JWT раньше нашего TTL (и логин из другого скрипта
+  // инвалидирует чужой токен): 401 → сбросить кэш, перелогиниться, повторить.
+  if (r.status === 401 && !_retried) {
+    cached = null;
+    try { unlinkSync(TOKEN_FILE); } catch { /* уже нет */ }
+    return api(method, path, body, true);
+  }
   if (!r.ok) throw new Error(`pm ${method} ${path} → ${r.status}: ${(await r.text()).slice(0, 150)}`);
   const d = await r.json();
   return d.data ?? d;
