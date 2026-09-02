@@ -332,12 +332,13 @@ export class PolyphonyOrchestrator {
         }))
       : await this._collectSequential(question, onVoice);
 
-    const polyphony = await this.dissent.assemble(voices);
-    // Мера: суммарная цена голосов собора (в токенах)
-    polyphony.usage = voices.reduce((a, v) => {
+    // Мера: суммарная цена голосов собора (в токенах). Считается ДО сборки:
+    // Polyphony заморожен (дар необратим), доложить поле после — нельзя.
+    const usage = voices.reduce((a, v) => {
       if (v.usage) { a.in += v.usage.input_tokens || 0; a.out += v.usage.output_tokens || 0; a.calls++; }
       return a;
     }, { in: 0, out: 0, calls: 0 });
+    const polyphony = await this.dissent.assemble(voices, { usage });
     return polyphony;
   }
 

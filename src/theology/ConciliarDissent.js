@@ -42,9 +42,10 @@ export class ConciliarDissent {
    * (Интеграция с LLM-субагентами — на уровень выше, здесь — ядро.)
    *
    * @param {Array<{persona,logos,content}>} voices
+   * @param {Object} [measure] — { usage: {in, out, calls} } мера голосов
    * @returns {Promise<Polyphony>}
    */
-  async assemble(voices) {
+  async assemble(voices, { usage } = {}) {
     if (!Array.isArray(voices) || voices.length === 0) {
       return this._silent('нет голосов — собор не собрался');
     }
@@ -92,6 +93,7 @@ export class ConciliarDissent {
       silent: false,
       totalAuthority: weighted.reduce((s, v) => s + v.authority, 0),
       collusion: collusionResult,
+      usage,
     });
   }
 
@@ -196,7 +198,7 @@ export class ConciliarDissent {
 export class Polyphony {
   constructor({
     voices, byLogos, dominant, apophatic, silent,
-    silenceReason, totalAuthority, collusion,
+    silenceReason, totalAuthority, collusion, usage,
   }) {
     this.voices = voices;
     this.byLogos = byLogos;
@@ -206,6 +208,9 @@ export class Polyphony {
     this.silenceReason = silenceReason || null;
     this.totalAuthority = totalAuthority;
     this.collusion = collusion || null; // { anomalies: [], trustScore: 0..1 }
+    // Мера: цена голосов в токенах ({in, out, calls}). Входит в акт ДО
+    // заморозки — акт необратим, и доложить меру после него нельзя.
+    this.usage = usage || null;
     Object.freeze(this);
   }
 
