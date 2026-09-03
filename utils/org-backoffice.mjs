@@ -350,6 +350,146 @@ async function syncMatrix(ws) {
   console.log(`  пустыни: ${deserts.length} тишин, ${fading.length} затуханий`);
 }
 
+// ── Команда фонда: отношения людей ФСТ из живых данных воркспейса ──────────
+// Цеху на trytofly нужна матрица НЕ gift-проекта (община, _claude, заветы —
+// она лежит выше), а команды фонда ФСТ. У фонда нет своей W-матрицы, но есть
+// платформенные следы отношений, из которых она пересчитывается каждую ночь:
+//   PM-карточки — кто ставит работу (reporter → assignee, статус по kind)
+//   голоса ИК   — ревью-агенты и их вердикты (до/после кросс-дебата)
+//   решения ИК  — итог и кто утвердил
+// Форма — квадратная (лица × лица, клетка = акты между ними), как морфологический
+// ящик uav-портала: там челлендж × пространство, здесь донор × получатель.
+// Всё пересчитывается вперёд из живых данных; акты фонда необратимы на
+// стороне платформы (журнал объектов), здесь — срез.
+async function syncFundTeam(ws) {
+  const FUND = process.env.PM_FUND || 'fund-demo';
+
+  // 1. Состав команды: роли и логины фонда (1813: логин 1814, роль 1815).
+  const roster = [];
+  for (const t of arr(await call('GET', `/${FUND}/objects?typeId=1813&limit=50`))) {
+    const det = await call('GET', `/${FUND}/objects/${t.id}`).catch(() => null);
+    const r = det?.requisites || {};
+    roster.push({ name: String(t.value || ''), login: String(r['1814'] || ''), role: String(r['1815'] || ''), critical: String(r['1816'] || '') });
+  }
+
+  // 2. PM-карточки: нити «поставил → исполняет». Статус закрыт — по категории
+  // (kind), не по имени: closedStatuses знает про done/canceled.
+  const cards = arr(await call('GET', `/${FUND}/pm/issues?limit=200`));
+  const closed = await closedStatuses(FUND);
+  const PUT = 'Постановщик'; // reporter_id=1 — супервайзер демо-фонда, ставит всю работу
+  const threads = new Map(); // "от→кому" → {from,to,total,done,open}
+  for (const c of cards) {
+    const to = c.assignee_name || 'без исполнителя';
+    const key = `${PUT}→${to}`;
+    if (!threads.has(key)) threads.set(key, { from: PUT, to, total: 0, done: 0, open: 0 });
+    const t = threads.get(key);
+    t.total++;
+    if (closed.includes(c.status)) t.done++; else t.open++;
+  }
+
+  // 3. Голоса ИК: агент → вердикт (547, 548), уверенность и сдвиг после дебатов.
+  const amap = new Map(arr(await call('GET', `/${FUND}/objects?typeId=524&limit=50`)).map(a => [String(a.id), a.value]));
+  const vmap = new Map(arr(await call('GET', `/${FUND}/objects?typeId=523&limit=50`)).map(v => [String(v.id), v.value]));
+  const votes = [];
+  for (const v of arr(await call('GET', `/${FUND}/objects?typeId=526&limit=100`))) {
+    const det = await call('GET', `/${FUND}/objects/${v.id}`).catch(() => null);
+    const r = det?.requisites || {};
+    votes.push({
+      agent: amap.get(String(r['547'])) || '—',
+      verdict: vmap.get(String(r['548'])) || '—',
+      before: vmap.get(String(r['4627'])) || '',
+      score: String(r['543'] || ''),
+      confidence: String(r['4620'] || ''),
+      solution: String(v.value.split(' · ')[1] || ''),
+    });
+  }
+
+  // 4. Решения ИК: итог (342 → справочник 305) и кто утвердил (720).
+  const smap = new Map(arr(await call('GET', `/${FUND}/objects?typeId=305&limit=50`)).map(s => [String(s.id), s.value]));
+  const decisions = [];
+  for (const i of arr(await call('GET', `/${FUND}/objects?typeId=309&limit=50`))) {
+    const det = await call('GET', `/${FUND}/objects/${i.id}`).catch(() => null);
+    const r = det?.requisites || {};
+    decisions.push({
+      name: String(i.value || ''),
+      outcome: smap.get(String(r['342'])) || '',
+      approvedBy: r['720'] ? String(r['720']).split(' (')[0] : '',
+    });
+  }
+
+  // ── Квадрат: строки = доноры, колонки = получатели, клетка = акты ─────────
+  // Лица: команда фонда + постановщик + «без исполнителя» + ревью-агенты ИК.
+  // Акты считаем поштучно, не по свёрнутым нитям: клетка = счётчик актов.
+  const names = [...new Set([
+    ...roster.map(p => p.name), PUT, 'без исполнителя',
+    ...votes.map(v => v.agent).filter(a => a !== '—'),
+  ])];
+  const cell = new Map(names.map(a => [a, new Map(names.map(b => [b, { total: 0, done: 0, open: 0, kinds: [] }]))]));
+  const bump = (from, to, kind, done) => {
+    const row = cell.get(from); if (!row || !row.has(to)) return;
+    const c = row.get(to);
+    c.total++; if (done) c.done++; else c.open++;
+    if (!c.kinds.includes(kind)) c.kinds.push(kind);
+  };
+  for (const c of cards) {
+    const to = c.assignee_name || 'без исполнителя';
+    bump(PUT, to, 'поручение', closed.includes(c.status));
+  }
+  for (const v of votes) bump('Член инвест-комитета', v.agent, 'ревью', false);
+  for (const d of decisions) if (d.approvedBy) bump(d.approvedBy, 'Член инвест-комитета', 'утверждение', true);
+
+  const qId = await ensureTable(ws, 'Квадрат фонда', [
+    ['от', 8], ['кому', 8], ['актов', 8], ['закрыто', 8], ['открыто', 8], ['род', 8],
+  ]);
+  const qBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${qId}`);
+  const qCols = Object.fromEntries((qBatch?.[String(qId)] || []).map(c => [c.name, c.id]));
+  const qRows = [];
+  for (const a of names) for (const b of names) {
+    if (a === b) continue;
+    const c = cell.get(a).get(b);
+    if (!c.total) continue;
+    qRows.push({ value: `${a} → ${b}`, cols: { 'от': a, 'кому': b, 'актов': c.total, 'закрыто': c.done, 'открыто': c.open, 'род': c.kinds.join('+') } });
+  }
+  await upsertRows(ws, qId, qRows, qCols);
+  console.log(`  квадрат фонда: ${qRows.length} клеток (лиц ${names.length}, карточек ${cards.length})`);
+
+  // ── Состав: роли и логины — кто вообще есть в фонде ───────────────────────
+  const rId = await ensureTable(ws, 'Состав фонда', [
+    ['роль', 8], ['логин', 8], ['критичные сигналы', 8],
+  ]);
+  const rBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${rId}`);
+  const rCols = Object.fromEntries((rBatch?.[String(rId)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, rId, roster.map(p => ({
+    value: p.name,
+    cols: { 'роль': p.role, 'логин': p.login, 'критичные сигналы': p.critical === '1' ? 'да' : '' },
+  })), rCols);
+  console.log(`  состав фонда: ${roster.length} лиц`);
+
+  // ── Ревью: голоса ИК — вердикты до/после кросс-дебата ─────────────────────
+  const vId = await ensureTable(ws, 'Ревью фонда', [
+    ['агент', 8], ['вердикт', 8], ['до дебатов', 8], ['скор', 8], ['уверенность', 8], ['решение', 12],
+  ]);
+  const vBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${vId}`);
+  const vCols = Object.fromEntries((vBatch?.[String(vId)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, vId, votes.map(v => ({
+    value: `${v.agent} · ${v.solution}`,
+    cols: { 'агент': v.agent, 'вердикт': v.verdict, 'до дебатов': v.before, 'скор': v.score, 'уверенность': v.confidence, 'решение': v.solution },
+  })), vCols);
+  console.log(`  ревью фонда: ${votes.length} голосов ИК`);
+
+  // ── Решения: итоги и утвердившие ──────────────────────────────────────────
+  const dId2 = await ensureTable(ws, 'Решения фонда', [
+    ['итог', 8], ['утвердил', 12],
+  ]);
+  const d2Batch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${dId2}`);
+  const d2Cols = Object.fromEntries((d2Batch?.[String(dId2)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, dId2, decisions.map(d => ({
+    value: d.name,
+    cols: { 'итог': d.outcome, 'утвердил': d.approvedBy || 'на утверждении' },
+  })), d2Cols);
+  console.log(`  решения фонда: ${decisions.length}`);
+}
+
 // ── status ──────────────────────────────────────────────────────────────────
 if (CMD === 'status') {
   const pf = await call('GET', `/orgs/${ORG}/pm/portfolio`);
@@ -481,6 +621,7 @@ if (CMD === 'pulse') {
     try { await syncSnapshot(BOARD); } catch (e) { console.log(`  снапшот: ${e.message.slice(0, 120)}`); }
     try { await syncBoard(BOARD); } catch (e) { console.log(`  доска: ${e.message.slice(0, 120)}`); }
     try { await syncMatrix(BOARD); } catch (e) { console.log(`  матрица: ${e.message.slice(0, 120)}`); }
+    try { await syncFundTeam(BOARD); } catch (e) { console.log(`  фонд: ${e.message.slice(0, 120)}`); }
   }
   console.log(APPLY ? `\nпульс: создано ${made}, обновлено ${updated}, уже были ${skipped}` : '\nсухой прогон — ничего не записано. Запиши: --apply');
   process.exit(0);
