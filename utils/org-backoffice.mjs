@@ -222,12 +222,20 @@ async function syncBoard(ws) {
   const byNum = new Map();
   for (const i of [...flow, ...shelf]) byNum.set(i.number, i);
   const cards = [...byNum.values()];
-  // мера по PM-номеру из журнала цен (последняя запись о задаче побеждает)
+  // мера из журнала цен (последняя запись о задаче побеждает). Ключи двойные:
+  // новые записи несут pm-номер, старые — только gh-issue, и связка
+  // gh#N ↔ PM-N живёт в титуле карточки «… (gh #789)». Без второго ключа
+  // старые записи (а там 99к токенов впустую на PM-6) были бы невидимы.
   const measureBy = new Map();
+  const measureByIssue = new Map();
   try {
     const lines = readFileSync(resolve(process.cwd(), 'data/mera/devloop-costs.jsonl'), 'utf8').trim().split('\n').slice(-300);
     for (const ln of lines) {
-      try { const j = JSON.parse(ln); if (j.pm != null) measureBy.set(String(j.pm), j); } catch { /* битая строка */ }
+      try {
+        const j = JSON.parse(ln);
+        if (j.pm != null) measureBy.set(String(j.pm), j);
+        else if (j.issue != null) measureByIssue.set(String(j.issue), j);
+      } catch { /* битая строка */ }
     }
   } catch { /* журнала ещё нет — мера пустая */ }
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
@@ -243,7 +251,8 @@ async function syncBoard(ws) {
     .filter(i => i.status !== 'done' || (i.closed_at && new Date(i.closed_at) > weekAgo))
     .sort((a, b) => order(a) - order(b))
     .map(i => {
-      const m = measureBy.get(String(i.number));
+      const gh = (String(i.title || '').match(/\(gh #(\d+)\)/) || [])[1];
+      const m = measureBy.get(String(i.number)) || (gh ? measureByIssue.get(gh) : null);
       return {
         value: `PM-${i.number}`,
         cols: {
@@ -338,8 +347,11 @@ if (CMD === 'pulse') {
         const tail = String(req[String(cols.get('не закрыто'))] || '').trim();
         const date = String(req[String(cols.get('дата'))] || '').slice(0, 10);
         if (!tail) continue;
-        // соглашение журнала: хвост «ЗАКРЫТО: …» — фактически закрыт, пятном не считаем
-        if (/^закрыто\b/i.test(norm(tail))) continue;
+        // соглашение журнала: хвост «ЗАКРЫТО: …» — фактически закрыт, пятном не считаем.
+        // \b для кириллицы в JS не определён (граница слова считается только
+        // по латинице) — «закрыто:» не отсекалось вовсе. Граница задаётся
+        // взглядом «вперёд не-буква» (грабля 03.09.2026, найдена на Пульте).
+        if (/^закрыто(?![а-яё])/i.test(norm(tail))) continue;
         // хвост старше 14 дней — пятно
         const age = (Date.now() - new Date(date).getTime()) / 86400000;
         if (!(age > 14)) continue;
