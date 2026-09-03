@@ -151,17 +151,16 @@ async function upsertRows(ws, typeId, rows, cols, { keepOrder = false } = {}) {
     if (!want.has(String(o.value || ''))) await call('DELETE', `/${ws}/objects/${o.id}`).catch(() => {});
   }
   if (!keepOrder) return;
-  // расставить порядок: строки уже лежат историей вставки, двигаем только те,
-  // что не на месте. reorder тяжёлый (перенумеровывает хвост) — по одной с края.
-  const now = await objectsOf(ws, typeId);
-  const byId = new Map(now.map(o => [String(o.value || ''), o.id]));
-  let pos = 0;
-  for (const v of fresh) {
-    const cur = now[pos];
-    if (cur && String(cur.value) !== v && byId.has(v)) {
-      try { await call('POST', `/${ws}/objects/${byId.get(v)}/reorder`, { order: pos }); } catch { /* порядок не критичен */ }
-    }
-    pos++;
+  // Расставить порядок поданный вид: сервер перенумеровывает хвост после
+  // каждого reorder, поэтому список перечитывается после каждого сдвига,
+  // а нужная строка тянется на позицию цикла (вставочная сортировка).
+  // Поток мал (единицы строк) — перечиты дороги только полке, но её не двигаем.
+  for (let pos = 0; pos < fresh.length; pos++) {
+    const now = await objectsOf(ws, typeId);
+    if (String(now[pos]?.value || '') === fresh[pos]) continue; // на месте
+    const from = now.findIndex(o => String(o.value || '') === fresh[pos]);
+    if (from === -1) continue;
+    try { await call('POST', `/${ws}/objects/${now[from].id}/reorder`, { order: pos + 1 }); } catch { /* порядок не критичен */ }
   }
 }
 
