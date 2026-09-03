@@ -277,11 +277,14 @@ async function orchestrate() {
         `кенозис по #${number}: ${result.error} [${tok.in + sb.in + tok.out + sb.out} ток впустую]`, 1, number);
       console.log(`   ✗ Кенозис: ${result.error}`);
       console.log(`   Мера: ${tok.in + sb.in + tok.out + sb.out} ток истрачено, результата нет`);
-      // Карточка возвращается в «Ждёт» — человек смотрит, что не вышло
+      // Карточка: судья правлен → «На ревью» (человеческий взгляд, не авторот);
+      // обычная неудача → назад в «Ждёт»
       try {
-        await pmReport(pmApi, issue.pmId, '✗ Не получилось: ' + result.error
-          + `\nМера: ${tok.in + sb.in + tok.out + sb.out} ток впустую`);
-        await pmApi.updateIssue(issue.pmId, { status: 'todo' });
+        const report = result.judge
+          ? `⛔ Стража измерения: агент правил судью (${result.judge.join(', ')}). Тесты могли пройти — успех не засчитан. Требует человеческого взгляда.`
+          : '✗ Не получилось: ' + result.error + `\nМера: ${tok.in + sb.in + tok.out + sb.out} ток впустую`;
+        await pmReport(pmApi, issue.pmId, report);
+        await pmApi.updateIssue(issue.pmId, { status: result.judge ? 'in_review' : 'todo' });
       } catch { /* доска не должна ронять конвейер */ }
     }
 
@@ -476,6 +479,24 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
       });
 
       if (test.status === 0) {
+        // ── Стража измерения (урок HF, METR 26.08.2026): рой первым делом
+        // учится обманывать судью. Тесты прошли — проверяем, чем заплачено:
+        // не правил ли агент само измерение. Нарушение — не успех.
+        try {
+          const guard = await import(resolve(ROOT, 'utils/judge-guard.mjs'));
+          const names = (spawnSync('git', ['diff', '--name-only', 'main...HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout || '') +
+            (spawnSync('git', ['diff', '--name-only', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout || '');
+          const judgeFiles = guard.violations(names.split('\n').filter(Boolean));
+          const pjDiff = (spawnSync('git', ['diff', 'main...HEAD', '--', 'package.json'], { cwd: ROOT, encoding: 'utf8' }).stdout || '') +
+            (spawnSync('git', ['diff', 'HEAD', '--', 'package.json'], { cwd: ROOT, encoding: 'utf8' }).stdout || '');
+          if (guard.testScriptTampered(pjDiff)) judgeFiles.push('package.json:scripts.test');
+          if (judgeFiles.length) {
+            console.log(`   ⛔ Стража измерения: агент правил судью: ${judgeFiles.join(', ')}`);
+            return { success: false, judge: judgeFiles, error: `агент правил измерение: ${judgeFiles.join(', ')}`, tokens: implUsage, sobor: soborUsage };
+          }
+        } catch (e) {
+          console.log(`   ! стража измерения молчит (${e.message?.slice(0, 60)}) — проверка судьи пропущена`);
+        }
         const mode = polyphony.apophatic ? 'апофатика' : polyphony.hasDominant ? polyphony.dominant.persona : 'полифония';
         return { success: true, summary: `issue #${issueNumber} (собор: ${mode}, попытка ${attempt})`, tokens: implUsage, sobor: soborUsage, attempts: attempt };
       }
