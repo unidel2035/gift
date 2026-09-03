@@ -111,9 +111,12 @@ const ledger = computed(() => {
 
 <template>
   <div class="j-page">
-    <Nav :db="db" here="matrix" />
+    <Nav :db="db" here="home" />
 
-    <div class="j-pult__head">
+    <!-- Матрица живёт на главной после Пульта: у портала пять фиксированных
+         роутов и своего слага нет, а управление — одна полоса. here=home,
+         чтобы открытой в навигации оставалась «Управление». -->
+    <div id="matrix" class="j-pult__head">
       <div>
         <h1 class="j-pult__title">Матрица даров</h1>
         <p class="j-pult__sub">
