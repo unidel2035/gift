@@ -22,8 +22,9 @@
  * Доступ: INTEGRAM_URL/EMAIL/PASSWORD из окружения или ~/.pm-credentials.json.
  */
 import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
 import { spawnSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
 const HOST = (process.env.INTEGRAM_URL || 'https://ai2o.online').replace(/\/$/, '');
 const ORG = process.argv[2];
@@ -270,6 +271,85 @@ async function syncBoard(ws) {
   return id;
 }
 
+// ── Матрица даров: W-тензор + журнал актов → таблицы цеха ──────────────────
+// Цеху нужен не только поток задач, но и отношения, на которых стоит конвейер:
+// кто, кому и сколько дал, и откуда каждый факт. Источник — локальный снапшот
+// матрицы (data/sacred-history-W.json, тензор) и журнал актов с провенансом
+// (data/act-index.json, полный журнал). На сервере Nous полнее, но порт 8086
+// не публичен, а локальный срез достатен для управления разработкой.
+//
+// Три таблицы отвечают на три вопроса цеха:
+//   «Матрица»  — сколько дано (вес нитей, пересчёт вперёд)
+//   «Дары»     — почему (журнал актов с провенансом: коммит, gh, время)
+//   «Пустыни»  — чего не хватает (обратный вопрос: где актов нет вовсе)
+// Пустыни — единственный вывод «от цели» в цехе, и он вшит руками; общий
+// механизм вывода от цели в матрице не живёт и не должен: она помнит, не
+// выводит. Таблица фиксирует границу честно — как есть.
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const readJson = (p) => JSON.parse(readFileSync(join(ROOT, p), 'utf8'));
+
+async function syncMatrix(ws) {
+  const snap = readJson('data/sacred-history-W.json');
+  const P = snap.persons || [];
+  const threads = [];
+  for (let i = 0; i < P.length; i++) {
+    for (let j = 0; j < P.length; j++) {
+      const v = snap.W?.[i]?.[j] ?? 0;
+      if (i !== j && v > 0) threads.push({ from: P[i], to: P[j], w: +Number(v).toFixed(1) });
+    }
+  }
+  threads.sort((a, b) => b.w - a.w);
+  const mId = await ensureTable(ws, 'Матрица', [
+    ['кому', 8], ['вес', 8], ['от', 8],
+  ]);
+  const mBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${mId}`);
+  const mCols = Object.fromEntries((mBatch?.[String(mId)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, mId, threads.map(t => ({
+    value: `${t.from} → ${t.to}`,
+    cols: { 'кому': t.to, 'вес': t.w, 'от': t.from },
+  })), mCols);
+  console.log(`  матрица: ${threads.length} нитей (лиц ${P.length}, актов ${snap.actsCount})`);
+
+  // Журнал актов: свежие 200 — управлению нужны последние, а не все 56+.
+  // Порядок новый-сверху: последнее решение цех видит первым.
+  const acts = readJson('data/act-index.json');
+  const recent = [...acts].slice(-200).reverse();
+  const aId = await ensureTable(ws, 'Дары', [
+    ['от', 8], ['кому', 8], ['род', 8], ['вес', 8], ['что', 12], ['провенанс', 12], ['когда', 8],
+  ]);
+  const aBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${aId}`);
+  const aCols = Object.fromEntries((aBatch?.[String(aId)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, aId, recent.map(a => ({
+    value: String(a.ts || '').slice(0, 16).replace('T', ' ') + ' · ' + (a.from || '?') + '→' + (a.to || '?'),
+    cols: {
+      'от': a.from || '', 'кому': a.to || '', 'род': a.type || '',
+      'вес': a.weight ?? '', 'что': a.content || '',
+      'провенанс': [a.commit ? a.commit.slice(0, 7) : '', a.linkedIssue ? 'gh #' + a.linkedIssue : ''].filter(Boolean).join(' · '),
+      'когда': String(a.ts || '').slice(0, 16).replace('T', ' '),
+    },
+  })), aCols);
+  console.log(`  дары: ${recent.length} актов журнала (из ${acts.length})`);
+
+  // Пустыни: у кого из живых лиц цеха нет ни одной нити. Живые = люди и агенты
+  // роя (божественные лица и служебные _koinon/_abyss не цех). Порог того же
+  // масштаба, что в ontology-pulse: тишина = ни одного акта, faded = <2.
+  const workshop = P.filter(x => !/^(Отец|Сын|Дух|Христос|Небо|ДушиЖивые)$/.test(x) && x !== '_koinon' && x !== '_abyss');
+  const has = new Set(threads.flatMap(t => [t.from, t.to]));
+  const deserts = workshop.filter(x => !has.has(x));
+  const fading = threads.filter(t => t.w < 2);
+  const dId = await ensureTable(ws, 'Пустыни', [
+    ['род', 8], ['тянется с', 8], ['что делать', 12],
+  ]);
+  const dBatch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${dId}`);
+  const dCols = Object.fromEntries((dBatch?.[String(dId)] || []).map(c => [c.name, c.id]));
+  const desertRows = [
+    ...deserts.map(x => ({ value: `тишина: ${x}`, cols: { 'род': 'тишина', 'тянется с': '—', 'что делать': `ни одного акта дара с ${x} — родить вопрошание или вывести лицо из цеха` } })),
+    ...fading.map(t => ({ value: `${t.from} → ${t.to} (${t.w})`, cols: { 'род': 'затухание', 'тянется с': `${t.w}`, 'что делать': `вес ${t.w} < 2 — связь почти расторгнута, нужен новый акт или честное расставание` } })),
+  ];
+  await upsertRows(ws, dId, desertRows, dCols);
+  console.log(`  пустыни: ${deserts.length} тишин, ${fading.length} затуханий`);
+}
+
 // ── status ──────────────────────────────────────────────────────────────────
 if (CMD === 'status') {
   const pf = await call('GET', `/orgs/${ORG}/pm/portfolio`);
@@ -400,6 +480,7 @@ if (CMD === 'pulse') {
   if (APPLY) {
     try { await syncSnapshot(BOARD); } catch (e) { console.log(`  снапшот: ${e.message.slice(0, 120)}`); }
     try { await syncBoard(BOARD); } catch (e) { console.log(`  доска: ${e.message.slice(0, 120)}`); }
+    try { await syncMatrix(BOARD); } catch (e) { console.log(`  матрица: ${e.message.slice(0, 120)}`); }
   }
   console.log(APPLY ? `\nпульс: создано ${made}, обновлено ${updated}, уже были ${skipped}` : '\nсухой прогон — ничего не записано. Запиши: --apply');
   process.exit(0);
