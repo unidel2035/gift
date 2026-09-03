@@ -238,7 +238,7 @@ async function orchestrate() {
       try {
         mkdirSync(resolve(ROOT, 'data/mera'), { recursive: true });
         appendFileSync(resolve(ROOT, 'data/mera/devloop-costs.jsonl'),
-          JSON.stringify({ ts: new Date().toISOString(), issue: number, success: true,
+          JSON.stringify({ ts: new Date().toISOString(), issue: number, pm: pmNumber, success: true,
             attempts: result.attempts || 1, sobor: sb, impl: tok, total: costTotal }) + '\n');
       } catch { /* журнал не должен ронять конвейер */ }
 
@@ -269,7 +269,7 @@ async function orchestrate() {
       try {
         mkdirSync(resolve(ROOT, 'data/mera'), { recursive: true });
         appendFileSync(resolve(ROOT, 'data/mera/devloop-costs.jsonl'),
-          JSON.stringify({ ts: new Date().toISOString(), issue: number, success: false,
+          JSON.stringify({ ts: new Date().toISOString(), issue: number, pm: pmNumber, success: false,
             error: String(result.error || '').slice(0, 120), sobor: sb, impl: tok,
             total: { in: tok.in + sb.in, out: tok.out + sb.out } }) + '\n');
       } catch { /* журнал не должен ронять конвейер */ }

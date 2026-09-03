@@ -127,11 +127,16 @@ async function ensureTable(ws, name, cols) {
   return t.id;
 }
 
-async function upsertRows(ws, typeId, rows, cols) {
-  // полная пересинхронизация: таблица принадлежит агенту
+async function upsertRows(ws, typeId, rows, cols, { keepOrder = false } = {}) {
+  // полная пересинхронизация: таблица принадлежит агенту.
+  // Порядок строки в таблице — отдельный ресурс: поле order в PATCH сервер
+  // молча игнорирует, двигает только /objects/:id/reorder (грабля 03.09.2026).
+  // keepOrder=true зовут таблицы, где порядок = что увидит портал первыми N.
   const existing = await objectsOf(ws, typeId);
   const byValue = new Map(existing.map(o => [String(o.value || ''), o]));
+  const fresh = [];
   const want = new Set();
+  let n = 0;
   for (const r of rows) {
     want.add(r.value);
     const req = {};
@@ -139,9 +144,24 @@ async function upsertRows(ws, typeId, rows, cols) {
     const ex = byValue.get(r.value);
     if (ex) await call('PATCH', `/${ws}/objects/${ex.id}`, { requisites: req });
     else await call('POST', `/${ws}/objects`, { typeId, value: r.value, requisites: req });
+    fresh.push(r.value);
+    n++;
   }
   for (const o of existing) {
     if (!want.has(String(o.value || ''))) await call('DELETE', `/${ws}/objects/${o.id}`).catch(() => {});
+  }
+  if (!keepOrder) return;
+  // расставить порядок: строки уже лежат историей вставки, двигаем только те,
+  // что не на месте. reorder тяжёлый (перенумеровывает хвост) — по одной с края.
+  const now = await objectsOf(ws, typeId);
+  const byId = new Map(now.map(o => [String(o.value || ''), o.id]));
+  let pos = 0;
+  for (const v of fresh) {
+    const cur = now[pos];
+    if (cur && String(cur.value) !== v && byId.has(v)) {
+      try { await call('POST', `/${ws}/objects/${byId.get(v)}/reorder`, { order: pos }); } catch { /* порядок не критичен */ }
+    }
+    pos++;
   }
 }
 
@@ -183,6 +203,63 @@ async function syncSnapshot(ws) {
     })), pplCols);
     console.log(`  снапшот: портфель ${pf.items?.length || 0}, полка ${issues.length}, люди ${(ppl.items || []).length}`);
   } catch (e) { console.log(`  снапшот люди: ${e.message.slice(0, 100)}`); }
+}
+
+// ── Доска конвейера: карточки gift-koinon → таблица «Доска» ─────────────────
+// Нодовый пульт портала рисует граф статусов из этой таблицы. Канал тот же,
+// что у прочих снапшотов: ключ у агента, cookie у портала — каждый в своих
+// правах. Меру (токены) берём из локального журнала dev-loop.
+async function syncBoard(ws) {
+  const CONVEYOR = process.env.PM_CONVEYOR || 'gift-koinon';
+  // Живой поток (todo/in_progress/in_review/done) берём по статусам — он мал,
+  // и так ни одна живая карточка не выпадет из выборки. Полка (backlog) — их
+  // сотни, API отдаёт не более 200 за раз (page игнорируется) — берём последние
+  // 200 и честно говорим на пульте, что она показана не целиком.
+  const flow = [];
+  for (const st of ['todo', 'in_progress', 'in_review', 'done']) {
+    flow.push(...arr(await call('GET', `/${CONVEYOR}/pm/issues?limit=100&status=${st}`)));
+  }
+  const shelf = arr(await call('GET', `/${CONVEYOR}/pm/issues?limit=200&status=backlog`));
+  const byNum = new Map();
+  for (const i of [...flow, ...shelf]) byNum.set(i.number, i);
+  const cards = [...byNum.values()];
+  // мера по PM-номеру из журнала цен (последняя запись о задаче побеждает)
+  const measureBy = new Map();
+  try {
+    const lines = readFileSync(resolve(process.cwd(), 'data/mera/devloop-costs.jsonl'), 'utf8').trim().split('\n').slice(-300);
+    for (const ln of lines) {
+      try { const j = JSON.parse(ln); if (j.pm != null) measureBy.set(String(j.pm), j); } catch { /* битая строка */ }
+    }
+  } catch { /* журнала ещё нет — мера пустая */ }
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  // Порядок строк = порядок чтения порталом (он берёт первые N по order):
+  // живой поток впереди, полка следом. Иначе todo/done лягут за 200-й строкой
+  // и пульт покажет «План 0» при живой карточке.
+  const FLOW = ['in_progress', 'in_review', 'todo', 'done'];
+  const order = (i) => {
+    const k = FLOW.indexOf(i.status);
+    return k === -1 ? 100 : k; // полка (backlog и прочие) — после потока
+  };
+  const rows = cards
+    .filter(i => i.status !== 'done' || (i.closed_at && new Date(i.closed_at) > weekAgo))
+    .sort((a, b) => order(a) - order(b))
+    .map(i => {
+      const m = measureBy.get(String(i.number));
+      return {
+        value: `PM-${i.number}`,
+        cols: {
+          'титул': i.title || '', 'статус': i.status || '',
+          'мера': m ? `${(m.total?.in ?? 0) + (m.total?.out ?? m.total?.in ?? 0)} ток` : '',
+          'прогон': m ? String(m.ts || '').slice(0, 16).replace('T', ' ') : '',
+        },
+      };
+    });
+  const id = await ensureTable(ws, 'Доска', [['титул', 12], ['статус', 8], ['мера', 8], ['прогон', 8]]);
+  const batch = await call('GET', `/${ws}/schema/columns/batch?typeIds=${id}`);
+  const cols = Object.fromEntries((batch?.[String(id)] || []).map(c => [c.name, c.id]));
+  await upsertRows(ws, id, rows, cols, { keepOrder: true });
+  console.log(`  доска: ${rows.length} карточек в узлах (из ${cards.length})`);
+  return id;
 }
 
 // ── status ──────────────────────────────────────────────────────────────────
@@ -311,6 +388,7 @@ if (CMD === 'pulse') {
 
   if (APPLY) {
     try { await syncSnapshot(BOARD); } catch (e) { console.log(`  снапшот: ${e.message.slice(0, 120)}`); }
+    try { await syncBoard(BOARD); } catch (e) { console.log(`  доска: ${e.message.slice(0, 120)}`); }
   }
   console.log(APPLY ? `\nпульс: создано ${made}, обновлено ${updated}, уже были ${skipped}` : '\nсухой прогон — ничего не записано. Запиши: --apply');
   process.exit(0);
