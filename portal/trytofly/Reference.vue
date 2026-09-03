@@ -15,8 +15,7 @@
 // Пульта. Хвосты сессий не дублируются: непокрытые показаны на Пульте в
 // «ждёт тебя», здесь только сводный счёт.
 import { reactive, computed, onMounted } from 'vue'
-import { fmtDate } from '@kit'
-import Nav from './Nav.vue'
+import { Timeline, fmtDate, field } from '@kit'
 
 const props = defineProps({
   bindings: { type: Object, default: () => ({}) },
@@ -68,6 +67,29 @@ const recentDecisions = computed(() =>
     решение: String(f(r, 'решение') ?? ''),
   }))
 )
+
+// Событие оси из записи сессии — то же правило, что в разделе «Журнал»:
+// род — плашкой с тоном, приставка даты «дд.мм» срезается из имени
+// (ось печатает дату первой колонкой), название — обычным текстом.
+// Поле label остаётся для ветки Timeline по умолчанию.
+function toEvent(r) {
+  const kind = String(f(r, 'тип') ?? '').trim()
+  const name = String(r.name ?? '').trim().replace(/^\d{1,2}\.\d{1,2}(?:\.\d{2,4})?\s*[—–-]?\s*/, '')
+  return {
+    at: f(r, 'дата'),
+    kind,
+    name: name || (kind ? '' : 'сессия'),
+    label: [kind, name].filter(Boolean).join(' — ') || 'сессия',
+  }
+}
+
+// Ось строится по дню, а не по порядку хранения: маршрут отдаёт строки
+// в порядке ord/id, и последние события легли бы на ось вперёд дат.
+const timelineEvents = computed(() =>
+  [...tables.sessions]
+    .map(toEvent)
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
+)
 </script>
 
 <template>
@@ -87,14 +109,15 @@ const recentDecisions = computed(() =>
         <span v-if="tailCount" class="j-ref__flag">{{ tailCount }} хвостов</span>
       </summary>
       <div class="j-ref__body">
-        <ul class="j-list">
-          <li v-for="r in [...tables.sessions].reverse().slice(0, 12)" :key="r.name">
-            <span class="j-when">{{ fmtDate(f(r, 'дата')) }}</span>
-            <span v-if="f(r, 'тип')" class="j-kind" :data-kind="String(f(r, 'тип'))">{{ f(r, 'тип') }}</span>
-            {{ r.name }}
-          </li>
-        </ul>
-        <p class="j-meta">Последние 12. Полный журнал — в разделе «Сессии»; незакрытые хвосты — на Пульте.</p>
+        <Timeline :events="timelineEvents" what="сессий" :gap-days="14">
+          <template #event="{ event }">
+            <span class="j-time-row">
+              <span v-if="event.kind" class="j-kind" :data-kind="event.kind">{{ event.kind }}</span>
+              <span>{{ event.name }}</span>
+            </span>
+          </template>
+        </Timeline>
+        <p class="j-meta">Полный журнал — в разделе «Сессии»; незакрытые хвосты — на Пульте.</p>
       </div>
     </details>
 
