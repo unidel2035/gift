@@ -190,6 +190,31 @@ function showInsights() {
 
 // ── Слой 2b: Soul (если существует) ─────────────────────────────────────
 
+// Доска конвейера (ai2o · gift-koinon) — глаза консоли на живой доске.
+// Молчит, если доска недоступна: анамнезис не должен зависеть от сети.
+async function showBoard() {
+  try {
+    const pm = await import('./pm.mjs');
+    const sections = [
+      ['in_progress', 'в работе'],
+      ['in_review', 'на ревью'],
+      ['todo', 'ждут тебя'],
+    ];
+    const out = [];
+    for (const [st, label] of sections) {
+      const it = await pm.listIssues(`?limit=8&status=${st}`);
+      const items = it.items || it;
+      if (items.length) out.push({ label, items });
+    }
+    if (!out.length) return; // пусто — не шумим
+    header('Доска (ai2o · gift-koinon)');
+    for (const l of out) {
+      sub(`${l.items.length} — ${l.label}`);
+      for (const i of l.items.slice(0, 3)) item(`${C.dim}·${C.reset} ${String(i.title).slice(0, 80)}`);
+    }
+  } catch { /* доска недоступна — анамнезис продолжается без неё */ }
+}
+
 function showSoul() {
   if (!existsSync(SOUL_FILE)) return;
 
@@ -376,6 +401,7 @@ async function main() {
 
   await showMatrix();
   showInsights();
+  await showBoard();
   showSoul();
   showConsolidationStatus();
 

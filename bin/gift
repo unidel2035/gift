@@ -285,6 +285,7 @@ const HELP_SECTIONS = {
   status: () => `${C.b('Бенчмарк / статус:')}
   gift benchmark                  — CAT-9
   gift status                     — состояние онтологии (6 слоёв)
+  gift board                      — доска конвейера на ai2o (в работе / ждут / сделано)
   gift glossary ${C.dim('[find <слово>]')}      — словарь греческих терминов (русск.)`,
 };
 
@@ -1055,6 +1056,47 @@ ${C.b('gift login')} <бэкенд> <api-key>
       // W, разложенный по жанрам (Петухов): плоский скаляр = Σ по жанрам (маргинал).
       // Жанры компонуются по Кронекеру (завет·дар). Рефинирует W, не ломая старую проекцию.
       await runRaw('utils/genre-tensor-w.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'board': {
+      // Глаза консоли на ai2o: доска конвейера (gift-koinon) одним взглядом.
+      // Снимает разрыв «работаю в консоли, а живу на ai2o» — состояние доски
+      // видно, не выходя из терминала, вместе с адресами, куда идти глазами.
+      const pm = await import(resolve(ROOT, 'utils/pm.mjs'));
+      console.log(`\n${C.b('Доска конвейера')} ${C.dim('· ai2o · gift-koinon')}`);
+      console.log(`${C.dim('─'.repeat(46))}`);
+      try {
+        let any = false;
+        const sections = [
+          ['in_progress', C.gold('В РАБОТЕ'), 'их ведёт конвейер (собор + агент)'],
+          ['in_review', C.violet('НА РЕВЬЮ'), 'сделано, но требует твоего взгляда'],
+          ['todo', C.b('ЖДУТ ТЕБЯ'), 'план готов — перетащи в «В работе»'],
+        ];
+        for (const [st, label, hint] of sections) {
+          const it = await pm.listIssues(`?limit=20&status=${st}`);
+          const items = it.items || it;
+          if (!items.length) continue;
+          any = true;
+          console.log(`\n  ${label} ${C.dim(`(${items.length}) — ${hint}`)}`);
+          for (const i of items) console.log(`    ${C.dim('PM-' + i.number)}  ${i.title.slice(0, 76)}`);
+        }
+        // сделано за сегодня — полная дата закрытия
+        const doneIt = await pm.listIssues('?limit=100&status=done');
+        const today = (doneIt.items || doneIt)
+          .filter(i => String(i.closed_at || '').startsWith(new Date().toISOString().slice(0, 10)));
+        if (today.length) {
+          console.log(`\n  ${C.gold('СДЕЛАНО СЕГОДНЯ')} ${C.dim(`(${today.length})`)}`);
+          for (const i of today) console.log(`    ${C.dim('PM-' + i.number)}  ${i.title.slice(0, 76)}`);
+        }
+        if (!any && !today.length) console.log(`  ${C.dim('пусто — конвейер спит')}`);
+      } catch (e) {
+        console.log(`  ${C.dim('доска недоступна: ' + (e.message || e).toString().slice(0, 80))}`);
+      }
+      console.log(`\n  Доска:   ${C.cyan('https://ai2o.online/gift-koinon/pm')}`);
+      console.log(`  Портал:  ${C.cyan('https://ai2o.online/trytofly/portal')}`);
+      console.log(`  Бэкофис: ${C.dim('node utils/org-backoffice.mjs nightcall status')}`);
+      console.log('');
       break;
     }
 
