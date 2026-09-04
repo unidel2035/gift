@@ -286,6 +286,7 @@ const HELP_SECTIONS = {
   gift benchmark                  — CAT-9
   gift status                     — состояние онтологии (6 слоёв)
   gift board                      — доска конвейера на ai2o (в работе / ждут / сделано)
+  gift org                        — организация одним взглядом: портфель orgs, полка, пятна
   gift glossary ${C.dim('[find <слово>]')}      — словарь греческих терминов (русск.)`,
 };
 
@@ -1056,6 +1057,37 @@ ${C.b('gift login')} <бэкенд> <api-key>
       // W, разложенный по жанрам (Петухов): плоский скаляр = Σ по жанрам (маргинал).
       // Жанры компонуются по Кронекеру (завет·дар). Рефинирует W, не ломая старую проекцию.
       await runRaw('utils/genre-tensor-w.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'org': {
+      // Организация одним взглядом: https://ai2o.online/orgs из консоли.
+      // Портфель воркспейсов + полка бэкофиса + белые пятна + адреса — всё,
+      // что видит команда в цехе trytofly/pm, не выходя из терминала.
+      // Логику берёт у org-backoffice status (один источник правды).
+      console.log(`\n${C.b('Организация')} ${C.dim('· nightcall @ ai2o')}`);
+      console.log(`${C.dim('─'.repeat(46))}`);
+      const r = await new Promise((res) => {
+        const cp = spawn('node', [resolve(ROOT, 'utils/org-backoffice.mjs'), 'nightcall', 'status'],
+          { cwd: ROOT, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        cp.stdout.on('data', d => out += d);
+        cp.stderr.on('data', d => out += d);
+        cp.on('close', () => res(out));
+        cp.on('error', (e) => res('  недоступно: ' + e.message));
+      });
+      // раскрасить заголовки портфеля
+      for (const line of r.split('\n')) {
+        const l = line.replace(/\u001b\[[0-9;]*m/g, '');
+        if (l.startsWith('  ') && l.includes('[') && l.includes('%')) console.log(C.cyan(l));
+        else if (l.includes('белое пятно')) console.log(C.gold(l));
+        else if (l.startsWith('═══')) console.log(C.b(l));
+        else console.log(line);
+      }
+      console.log(`\n  Цех:     ${C.cyan('https://ai2o.online/trytofly/pm')}`);
+      console.log(`  Орг:     ${C.cyan('https://ai2o.online/orgs')}`);
+      console.log(`  Пульс:   ${C.dim('node utils/org-backoffice.mjs nightcall pulse --apply')}`);
+      console.log('');
       break;
     }
 
