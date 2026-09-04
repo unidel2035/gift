@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP = resolve(ROOT, 'data/sacred-history-W.json');
@@ -76,11 +76,17 @@ const body = `## Вопрошание от ${giver}\n\n${prompt}\n\n---\n_Авт
 let issueUrl = '';
 let issueNumber = null;
 try {
-  if (GITHUB_TOKEN) {
+  // Токен из env ИЛИ gh auth (hosts.yml) — токены не живут в коммитах.
+  let authHeader = GITHUB_TOKEN ? `Bearer ${GITHUB_TOKEN}` : '';
+  if (!authHeader) {
+    const gh = spawnSync('gh', ['auth', 'token'], { encoding: 'utf8', timeout: 5000 });
+    if (!gh.status && gh.stdout) authHeader = `Bearer ${gh.stdout.trim()}`;
+  }
+  if (authHeader) {
     const resp = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ title, body, labels: ['gift-ready'] }),
