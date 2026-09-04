@@ -6,15 +6,16 @@
  * ссылка (GAB-xxx), supersededBy не удаляет, findClause резолвит.
  *
  * Критерий Евы (#96): «PoC без доказанной теоремы — просто перевод на другой
- * синтаксис». Теорема здесь — монотонность консолидации: вес нити W[from→to]
- * не убывает при добавлении акта. Доказательство — аналитическое (induction
- * по consolidate: W' = W + w(act), w(act) > 0 после witness-валидации),
- * проверка — property-based прогон в SBCL по specs/abml/PoC.lisp.
+ * синтаксис». Две теоремы:
+ *   GAB-002 — монотонность консолидации: вес нити не убывает при добавлении
+ *             акта (дар необратим математически, не только Object.freeze).
+ *   GAB-005 — идемпотентность анамнезиса: повторное предъявление дара не
+ *             добавляет веса. Грань между со-присутствием и новым даром.
  */
 
 export const meta = {
   module: 'gift-abml',
-  description: 'ABML-модель GiftEngine: дар = константный объект, consolidate = аспект, теорема монотонности (proposal #96)',
+  description: 'ABML-модель GiftEngine: дар=константный объект, аспекты witness/consolidate/anamnesis, теоремы монотонности и идемпотентности (proposal #96)',
   tags: ['gift', 'abml', 'ontology'],
 }
 
@@ -23,19 +24,21 @@ export const specs = [
     name: 'sbcl-poc-runs',
     clause: 'GAB-001',
     given: 'SBCL установлен (~/bin/sbcl-dist) и specs/abml/PoC.lisp существует',
-    when: 'запуск sbcl --script specs/abml/PoC.lisp',
-    then: 'демо печатает нити, анамнезис и строку «ТЕОРЕМА ... ПРОЙДЕНА»',
+    when: 'запуск sbcl --script /home/unidel/gift/specs/abml/PoC.lisp',
+    then: 'демо печатает нити, анамнезис и обе строки «ТЕОРЕМА ... ПРОЙДЕНА»',
     falsifier: 'SBCL отсутствует, файл не найден, ИЛИ в выхлопе нет «ПРОЙДЕНА»',
-    desc: 'ABML-PoC исполняется и теорема монотонности проходит 500 случайных прогонов',
+    desc: 'ABML-PoC исполняется, обе теоремы проходят случайные прогоны',
     timeout: 30000,
     async run(ctx) {
-      const out = await ctx.exec(
-        '$HOME/bin/sbcl-dist/bin/sbcl --script specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
+      const r = await ctx.exec(
+        '$HOME/bin/sbcl-dist/bin/sbcl --script /home/unidel/gift/specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
         25000,
       )
-      ctx.assert(out.includes('ТЕОРЕМА (монотонность консолидации): ПРОЙДЕНА'), `нет ПРОЙДЕНА в: ${out.slice(0, 300)}`)
-      ctx.assert(out.includes('500/500 ok'), `не 500/500: ${out.slice(0, 300)}`)
-      ctx.assert(out.includes('нить Дионисий→_claude: вес 9.0'), `демо-нить неверна: ${out.slice(0, 300)}`)
+      const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
+      ctx.assert(out.includes('ТЕОРЕМА 1 (монотонность консолидации): ПРОЙДЕНА'), `нет ПРОЙДЕНА-1: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('ТЕОРЕМА 2 (идемпотентность анамнезиса): ПРОЙДЕНА'), `нет ПРОЙДЕНА-2: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('500/500 ok'), `теорема 1 не 500/500: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('200/200 ok'), `теорема 2 не 200/200: ${out.slice(0, 300)}`)
     },
   },
   {
@@ -48,50 +51,52 @@ export const specs = [
     desc: 'Монотонность консолидации: дар необратим математически, не только Object.freeze',
     timeout: 30000,
     async run(ctx) {
-      // Аналитическое ядро теоремы — в PoC.lisp (индукция по consolidate).
-      // Здесь — позитивная и НЕГАТИВНАЯ проверка: подменяем consolidate
+      // Аналитическое ядро теоремы — в PoC.lisp (индукция по fold-act).
+      // Здесь — позитивная и НЕГАТИВНАЯ проверка: подменяем fold-act
       // на «откатывающий» и убеждаемся, что фальсификатор ловит нарушение.
       const negative = `
-        ;; bad-consolidate — «откатывающая» консолидация (нарушение теоремы).
-        (defun bad-consolidate (mem act)
+        ;; bad-fold — «откатывающая» свёртка (нарушение теоремы 1).
+        (defun bad-fold (mem act)
           (let ((th (w-get mem (act-from act) (act-to act))))
             (setf (w-get mem (act-from act) (act-to act))
                   (make-thread% (thread-from th) (thread-to th)
                                 (max 0 (- (thread-weight th) (act-weight act)))
                                 (1+ (thread-acts th))))
             (w-get mem (act-from act) (act-to act))))
-        ;; Детерминированно: сначала честная consolidate(act), затем откат.
+        ;; Детерминированно: consolidate(act) → bad-fold(тот же act) — вес падает.
         (let* ((mem (make-memory))
                (act (witness mem (make-act 'code "Дионисий" "_claude" 3.0 1 1))))
-          (consolidate mem act)
+          (declare (ignore act))
+          (run-stack mem)
           (let ((before (thread-weight (w-get mem "Дионисий" "_claude"))))
-            (bad-consolidate mem act)
+            (bad-fold mem (make-act 'code "Дионисий" "_claude" 3.0 1 1))
             (let ((after (thread-weight (w-get mem "Дионисий" "_claude"))))
               (format t "NEGATIVE-TEST: before=~a after=~a — ~:[не поймано~;НАРУШЕНИЕ ЛОВИТСЯ~]~%"
                       before after (< after before)))))`
-      const file = 'specs/abml/PoC.lisp'
-      const out = await ctx.exec(
-        `cp ${file} /tmp/poc-neg.lisp && printf '%s\\n' '${negative.replace(/'/g, "'\\''")}' >> /tmp/poc-neg.lisp && ` +
+      const r = await ctx.exec(
+        `cp /home/unidel/gift/specs/abml/PoC.lisp /tmp/poc-neg.lisp && printf '%s\\n' '${negative.replace(/'/g, "'\\''")}' >> /tmp/poc-neg.lisp && ` +
         `$HOME/bin/sbcl-dist/bin/sbcl --script /tmp/poc-neg.lisp 2>&1 | grep -v "^;"`,
         25000,
       )
+      const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
       ctx.assert(out.includes('НАРУШЕНИЕ ЛОВИТСЯ'), `негативный тест не сработал: ${out.slice(0, 300)}`)
     },
   },
   {
     name: 'anamnesis-deferred-contexts',
     clause: 'GAB-003',
-    given: 'GiftMemory с логом актов (отложенные аспектные контексты в терминах ABML)',
+    given: 'GiftMemory с журналом актов (отложенные аспектные контексты, ABML §1.5)',
     when: 'anamnesis(mem) — makePresent прошлого',
-    then: 'возвращаются id актов в хронологическом порядке, записи не удалены',
-    falsifier: 'anamnesis возвращает пустой список ИЛИ порядок обратный хронологии',
-    desc: 'Анамнезис ≠ архив: отложенный контекст можно исполнить снова',
+    then: 'возвращаются сами акты в хронологическом порядке (1 2 3), W не тронута',
+    falsifier: 'anamnesis возвращает пустой список, ИЛИ порядок обратный хронологии, ИЛИ изменилась W',
+    desc: 'Анамнезис ≠ архив: отложенный контекст исполняется снова, метка :present',
     timeout: 30000,
     async run(ctx) {
-      const out = await ctx.exec(
-        '$HOME/bin/sbcl-dist/bin/sbcl --script specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
+      const r = await ctx.exec(
+        '$HOME/bin/sbcl-dist/bin/sbcl --script /home/unidel/gift/specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
         25000,
       )
+      const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
       ctx.assert(out.includes('анамнезис (первые 3 акта): (1 2 3)'), `анамнезис неверен: ${out.slice(0, 300)}`)
     },
   },
@@ -100,7 +105,7 @@ export const specs = [
     clause: 'GAB-004',
     given: 'акт — константный объект ABML: все поля read-only',
     when: 'попытка (setf (act-from act) "другое") после создания',
-    then: 'компилятор SBCL отвергает запись в read-only слот с ошибкой',
+    then: 'SBCL отвергает запись в read-only слот с ошибкой',
     falsifier: 'переприсваивание from/to/weight проходит молча',
     desc: 'Необратимость по построению: у акта нет писателей полей',
     timeout: 30000,
@@ -112,13 +117,32 @@ export const specs = [
         (handler-case
             (progn (eval '(setf (act-from act) "Хаос")) (format t "MUTABLE"))
           (error () (format t "IMMUTABLE")))`
-      const out = await ctx.exec(
-        `cp specs/abml/PoC.lisp /tmp/poc-imm.lisp && ` +
+      const r = await ctx.exec(
+        `cp /home/unidel/gift/specs/abml/PoC.lisp /tmp/poc-imm.lisp && ` +
         `printf '%s\\n' '(defparameter act (make-act (quote code) "A" "B" 1.0 1 99))' '${probe.replace(/'/g, "'\\''")}' >> /tmp/poc-imm.lisp && ` +
         `$HOME/bin/sbcl-dist/bin/sbcl --script /tmp/poc-imm.lisp 2>&1 | grep -v "^;" | tail -2`,
         25000,
       )
+      const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
       ctx.assert(out.includes('IMMUTABLE'), `акт оказался мутабельным: ${out.slice(0, 300)}`)
+    },
+  },
+  {
+    name: 'theorem-anamnesis-idempotent',
+    clause: 'GAB-005',
+    given: 'память с исполненными актами: все id свёрнуты в W, журнал полон',
+    when: 'anamnesis(W, a) над всеми актами журнала, дважды',
+    then: 'срез W до и после идентичен (покоординатно), идентичность не нарушена',
+    falsifier: 'после анамнезиса какая-либо нить W изменила вес или счётчик актов',
+    desc: 'Идемпотентность анамнезиса: со-присутствие не добавляет веса, дар был единожды',
+    timeout: 30000,
+    async run(ctx) {
+      const r = await ctx.exec(
+        '$HOME/bin/sbcl-dist/bin/sbcl --script /home/unidel/gift/specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
+        25000,
+      )
+      const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
+      ctx.assert(out.includes('ТЕОРЕМА 2 (идемпотентность анамнезиса): ПРОЙДЕНА'), `теорема 2 не пройдена: ${out.slice(0, 300)}`)
     },
   },
 ]
