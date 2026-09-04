@@ -168,6 +168,7 @@ const HELP_SECTIONS = {
   gift start                       — кодинг через дешёвые модели (DeepSeek по умолчанию)
   gift start --backend ra          — через RouterAI (рубли, 360 моделей)
   gift start --backend ds          — через DeepSeek напрямую
+  gift start --backend glm         — GLM Coding Plan (z.ai, подписка)
   ${C.dim('Внутри сессии: /switch ra|ds|or|fw, /login ra <key>')}`,
 
   switch: () => `${C.b('Переключение бэкенда (на лету):')}
@@ -175,7 +176,8 @@ const HELP_SECTIONS = {
   gift switch ra                   — RouterAI (рубли)
   gift switch ds                   — DeepSeek
   gift switch or                   — OpenRouter
-  gift switch fw                   — Fireworks`,
+  gift switch fw                   — Fireworks
+  gift switch glm                  — GLM Coding Plan (подписка z.ai)`,
 
   login: () => `${C.b('Ввод API-ключа (на лету):')}
   gift login ra <key>              — установить ключ RouterAI + переключить
@@ -802,7 +804,7 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
         a !== '--backend' && a !== '--port' &&
         i !== backendIdx + 1 && i !== portIdx + 1
       );
-      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks', glm: 'glm2', glm2: 'glm2' };
       await launchWithClaude({
         backend: shortMap[backend] || backend,
         port,
@@ -814,7 +816,7 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
     case 'switch': {
       // gift switch [ra|ds|or|fw|anthropic]
       const PROXY = 'http://127.0.0.1:3200';
-      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks', glm: 'glm2', glm2: 'glm2' };
       if (!sub) {
         try {
           const r = await fetch(`${PROXY}/_proxy/status`);
@@ -842,7 +844,7 @@ ${C.b(C.gold('gift myslo'))} — мыслебродильня (сферный п
     case 'login': {
       // gift login ra sk-PQcW...
       const PROXY = 'http://127.0.0.1:3200';
-      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks' };
+      const shortMap = { ra: 'routerai', ds: 'deepseek', or: 'openrouter', fw: 'fireworks', glm: 'glm2', glm2: 'glm2' };
       if (!sub || rest.length === 0) {
         console.log(`
 ${C.b('gift login')} <бэкенд> <api-key>
