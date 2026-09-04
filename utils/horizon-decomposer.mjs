@@ -3,6 +3,11 @@
  * horizon-decomposer.mjs — Long-horizon decomposer (proposal #61)
  *
  * Разбивает сложный issue на шаги (до 32+), с checkpoint'ами между ними.
+ *
+ * Правило верификации длинных цепей (proposal #98, вывод из GPT-6 Astra):
+ * цепь длиннее 10 шагов обязана кончаться исполняемой спекой — npm test ловит
+ * средний ответ, спека ловит хвост. 0.95^30 = 21.5% против 0.98^30 = 54.5%:
+ * весь выигрыш сидит в редких сбоях на 30-м шаге, которые глаз не видит.
  * Каждый шаг — отдельный вызов claude --print с контекстом предыдущих.
  *
  * Принцип: не один гигантский prompt, а цепочка шагов с обратной связью.
@@ -18,7 +23,7 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -130,6 +135,59 @@ function checkpoint() {
   }
 }
 
+// Финальный checkpoint длинной цепи (proposal #98): шаги >10 — цепь, чей хвост
+// npm test не видит. Требуем исполняемую спеку: specs/ рядом с проектом, а в ней
+// спеку с clause И falsifier — без условия опровержения цепь «похоже исполнена»,
+// не «доказуемо исполнена». Прогон через runModule конвейера ISTOK.
+const SPEC_DIR = resolve(ROOT, 'specs');
+export async function checkpointSpecChain(issueNumber) {
+  // спека цепи: specs/**/spec.<module>.js (включая подкаталоги — abml и пр.),
+  // где в тексте есть issue-номер
+  const candidates = [];
+  const walk = (d) => {
+    for (const f of existsSync(d) ? readdirSync(d, { withFileTypes: true }) : []) {
+      if (f.isDirectory()) walk(resolve(d, f.name));
+      // .js и .mjs (грабля 04.09.2026: спека .mjs молча невидима для верификации цепи)
+      else if (/^spec\..*\.(m?js)$/.test(f.name)) candidates.push(resolve(d, f.name));
+    }
+  };
+  walk(SPEC_DIR);
+  let specFile = null;
+  for (const f of candidates) {
+    try {
+      const text = readFileSync(f, 'utf8');
+      if (text.includes(`#${issueNumber}`) || text.includes(`issue ${issueNumber}`)) { specFile = f; break; }
+    } catch { /* читаем следующий */ }
+  }
+  if (!specFile) {
+    return { passed: false, output: `нет исполняемой спеки цепи #${issueNumber}: создай specs/spec.<module>.js с clause+falsifier (proposal #98)` };
+  }
+  try {
+    const mod = await import(`file://${specFile}?t=${Date.now()}`);
+    const specs = mod.specs || [];
+    const bad = specs.filter(sp => sp.clause && !sp.falsifier).map(sp => sp.name);
+    if (bad.length) {
+      return { passed: false, output: `спека без falsifier: ${bad.join(', ')} — не контракт (proposal #98)` };
+    }
+    // Прогон: ctx.exec в стиле SpecRunner — здесь просто assert-обёртка
+    let failed = 0; const lines = [];
+    for (const sp of specs) {
+      try {
+        await Promise.race([
+          sp.run({ assert: (cond, msg) => { if (!cond) throw new Error(msg || 'assert'); }, exec: async () => ({ stdout: '' }) }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), sp.timeout || 15000)),
+        ]);
+        lines.push(`  PASS ${sp.name}`);
+      } catch (e) {
+        failed++; lines.push(`  FAIL ${sp.name}: ${String(e.message).slice(0, 120)}`);
+      }
+    }
+    return { passed: failed === 0, output: lines.join('\n') };
+  } catch (e) {
+    return { passed: false, output: `спека цепи не загрузилась: ${e.message}` };
+  }
+}
+
 // ── Выполнение цепочки шагов ──────────────────────────────────────────────
 
 /**
@@ -226,13 +284,29 @@ gift(Дионисий): ${step.title} (шаг ${step.step}/${steps.length}, clos
     }
   }
 
+  // Верификация длинной цепи (proposal #98): >10 шагов → обязана кончаться спекой.
+  // npm test на каждом шаге ловит средний ответ; хвост распределения ошибок —
+  // только фальсифицируемая клауза. Без неё цепь не считается завершённой.
+  let specVerified = null;
+  if (completed === steps.length && steps.length > 10) {
+    console.log(`\n  ⟨верификация цепи⟩ ${steps.length} шагов > 10 — требую исполняемую спеку…`);
+    const check = await checkpointSpecChain(issueNumber);
+    specVerified = { passed: check.passed, output: check.output.slice(0, 500) };
+    if (check.passed) console.log(`     ✓ Спека цепи: pass`);
+    else {
+      console.log(`     ✗ Спека цепи: fail`);
+      console.log(check.output.split('\n').slice(0, 6).map(l => '       ' + l).join('\n'));
+    }
+  }
+
   // Финальный отчёт
   const report = {
     horizonId,
     issueNumber,
-    completed,
+    completed: specVerified && !specVerified.passed ? completed - 1 : completed,
     total: steps.length,
     results,
+    specVerified,
     finishedAt: new Date().toISOString(),
   };
   writeFileSync(resolve(horizonDir, 'report.json'), JSON.stringify(report, null, 2));
