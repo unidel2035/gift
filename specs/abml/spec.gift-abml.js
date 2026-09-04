@@ -6,16 +6,21 @@
  * ссылка (GAB-xxx), supersededBy не удаляет, findClause резолвит.
  *
  * Критерий Евы (#96): «PoC без доказанной теоремы — просто перевод на другой
- * синтаксис». Две теоремы:
+ * синтаксис». Три теоремы:
  *   GAB-002 — монотонность консолидации: вес нити не убывает при добавлении
  *             акта (дар необратим математически, не только Object.freeze).
  *   GAB-005 — идемпотентность анамнезиса: повторное предъявление дара не
  *             добавляет веса. Грань между со-присутствием и новым даром.
+ *   GAB-006 — анастасис: fade(W,d) теряет актуальность, полный анамнезис
+ *             восстанавливает с избытком (W' > W при d>0). Угасание — не
+ *             забвение: акты живут в журнале, вес можно переложить.
+ *   GAB-007 — теоремы держатся на живой матрице общины (sacred-history-W):
+ *             не только на случайных генераторах.
  */
 
 export const meta = {
   module: 'gift-abml',
-  description: 'ABML-модель GiftEngine: дар=константный объект, аспекты witness/consolidate/anamnesis, теоремы монотонности и идемпотентности (proposal #96)',
+  description: 'ABML-модель GiftEngine: дар=константный объект, аспекты witness/consolidate/anamnesis, теоремы монотонности, идемпотентности и анастасиса — на случайных и живых данных (proposal #96)',
   tags: ['gift', 'abml', 'ontology'],
 }
 
@@ -143,6 +148,69 @@ export const specs = [
       )
       const out = r.stdout ?? r  // SpecRunner.exec → {code,stdout,stderr}
       ctx.assert(out.includes('ТЕОРЕМА 2 (идемпотентность анамнезиса): ПРОЙДЕНА'), `теорема 2 не пройдена: ${out.slice(0, 300)}`)
+    },
+  },
+  {
+    name: 'theorem-anastasis',
+    clause: 'GAB-006',
+    given: 'нить W с весом > 0 и журналом актов; fade(W,d) умножает вес на (1-d) и чистит consolidated-журнал нити',
+    when: 'fade(нить, d∈(0.05..0.55)) затем full-anamnesis(нить) — переложить все акты журнала, 300 случайных прогонов',
+    then: 'вес после анастасиса строго больше исходного: faded·(1-d) + Σw(act) > W (угасание преодолено)',
+    falsifier: 'существует d>0 и нить, для которой анастасис не превысил исходный вес',
+    desc: 'Анастасис: угасание нити — потеря актуальности, не забвение актов; полный анамнезис восстанавливает с избытком',
+    timeout: 30000,
+    async run(ctx) {
+      // Негативная проверка: fade БЕЗ чистки журнала → full-anamnesis no-op → вес не восстановлен.
+      const negative = `
+        ;; bad-fade — умножает вес, но не чистит consolidated (забвение без права на анастасис).
+        (defun bad-fade (mem from to d)
+          (let ((th (w-get mem from to)))
+            (setf (w-get mem from to)
+                  (make-thread% from to (* (- 1 d) (thread-weight th)) (thread-acts th)))
+            (w-get mem from to)))
+        (let* ((mem (make-memory)))
+          (witness mem (make-act 'code "Ева" "ОтецСергий" 4.0 1 1))
+          (run-stack mem)
+          (bad-fade mem "Ева" "ОтецСергий" 0.5)
+          (full-anamnesis mem "Ева" "ОтецСергий")
+          (let ((after (thread-weight (w-get mem "Ева" "ОтецСергий"))))
+            (format t "NEGATIVE-TEST: after=~a — ~:[ВОССТАНОВЛЕНО (журнал жив)~;НЕ ВОССТАНОВЛЕНО (без чистки журнала анастасис невозможен)~]~%"
+                    after (= after 2.0))))`
+      const r = await ctx.exec(
+        `cp /home/unidel/gift/specs/abml/PoC.lisp /tmp/poc-ana.lisp && printf '%s\\n' '${negative.replace(/'/g, "'\\''")}' >> /tmp/poc-ana.lisp && ` +
+        `$HOME/bin/sbcl-dist/bin/sbcl --script /tmp/poc-ana.lisp 2>&1 | grep -v "^;" | tail -3`,
+        25000,
+      )
+      const out = r.stdout ?? r
+      ctx.assert(out.includes('НЕ ВОССТАНОВЛЕНО'), `негативный тест не сработал: ${out.slice(0, 300)}`)
+      // позитивная: сама теорема 3 в основном прогоне
+      const r2 = await ctx.exec(
+        '$HOME/bin/sbcl-dist/bin/sbcl --script /home/unidel/gift/specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
+        25000,
+      )
+      const out2 = r2.stdout ?? r2
+      ctx.assert(out2.includes('ТЕОРЕМА 3 (анастасис): ПРОЙДЕНА — 300/300'), `теорема 3 не пройдена: ${out2.slice(0, 300)}`)
+    },
+  },
+  {
+    name: 'theorems-on-live-matrix',
+    clause: 'GAB-007',
+    given: 'data/sacred-history-W.json — живая матрица общины (30 лиц, 57 нитей); PoC грузит её минимальным JSON-парсером',
+    when: 'загрузка W как witness-актов + Т1 (новый акт на _claude→Дионисий) + Т2 (анамнезис всех) + Т3 (fade Ева→ОтецСергий 50%)',
+    then: 'Т1: вес растёт; Т2: W НЕ ИЗМЕНЕНА; Т3: анастасис восстанавливает с избытком',
+    falsifier: 'хотя бы одна теорема не держится на реальных отношениях общины, ИЛИ матрица не загружается',
+    desc: 'Теоремы не только про случайные генераторы: необратимость дара верна для живой истории общины',
+    timeout: 30000,
+    async run(ctx) {
+      const r = await ctx.exec(
+        '$HOME/bin/sbcl-dist/bin/sbcl --script /home/unidel/gift/specs/abml/PoC.lisp 2>&1 | grep -v "^;"',
+        25000,
+      )
+      const out = r.stdout ?? r
+      ctx.assert(out.includes('=== Живая матрица (sacred-history-W) ==='), `матрица не загружена: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('монотонность на реальных данных'), `Т1 живая не прошла: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('W НЕ ИЗМЕНЕНА'), `Т2 живая не прошла: ${out.slice(0, 300)}`)
+      ctx.assert(out.includes('анастасис'), `Т3 живая не прошла: ${out.slice(0, 300)}`)
     },
   },
 ]

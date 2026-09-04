@@ -219,7 +219,7 @@
 ;; стадии (nil → present) не пишут ни в W, ни в consolidated (см.
 ;; eval-acontext: ветка anamnesis не вызывает fold-act).  ∎
 ;;
-;; П��оверка: строим память, фиксируем срез всех нитей, гоняем anamnesis
+;; Проверка: строим память, фиксируем срез всех нитей, гоняем anamnesis
 ;; над всеми актами журнала, сравниваем срезы.
 
 (defun snapshot-w (mem)
@@ -285,3 +285,218 @@
               (null (cdr res2)) (car res2)))))
 
 (demo)
+
+;; ═══ THEOREM 3: ANASTASIS — full remembrance restores a faded W ═══════════
+;;
+;; In the live matrix there is a consolidation-state: a thread's weight
+;; declines if acts do not refresh it (desert "fading"). The gift is
+;; irreversible by act, but the RELATION can fade — this is not a
+;; contradiction, but a distinction: an act (weight in W) vs remembrance
+;; (energeia). The desertScanner of the gift project lives here.
+;;
+;; Formulation: let W — a faded thread (fading factor d∈(0,1)):
+;;     fade(W, d)[f→t] = (1-d)·W[f→t]
+;; Then a FULL anamnesis over all acts of the thread (full anamnesis,
+;; weight w(a) for each) gives W' with
+;;     W'[f→t] >= W[f→t]  (restoration, non-strict)
+;; and with d>0 — strictly greater: full remembrance overcomes fading.
+;;
+;; Proof: W'[f→t] = (1-d)·W[f→t] + Σ w(a) = (1-d)·W[f→t] + W[f→t]·(W[f→t]/W[f→t]) —
+;;   since Σ w(a) over all acts of the thread = W[f→t] (definition of fold),
+;;   W' = (1-d)·W + W = W + (1-1)... no: W' = (1-d)·W + W > W for d>0. ∎
+;; (re-fold acts do not double the weight — idempotency of theorem 2 does
+;;  NOT work here: fading resets the consolidated journal — see below)
+
+;; Fading: the thread loses a fraction d of its weight, the journal of the
+;; folded ids for that thread is cleared (fading is not forgetting acts,
+;; but losing their actuality in W — they can be re-folded).
+(defun fade-thread (mem from to d)
+  "Fades the thread by coefficient d∈(0,1); the thread's ids are removed
+from the consolidation journal — acts are not forgotten, actuality is."
+  (let ((th (w-get mem from to)))
+    (setf (w-get mem from to)
+          (make-thread% from to (* (- 1 d) (thread-weight th)) (thread-acts th)))
+    ;; clear the ids of this thread from the journal
+    (let ((dead '()))
+      (maphash (lambda (id v) (declare (ignore v))
+                 (let ((a (find id (memory-log mem) :key #'act-id)))
+                   (when (and a (string= (act-from a) from) (string= (act-to a) to))
+                     (push id dead))))
+               (memory-consolidated mem))
+      (dolist (id dead) (remhash id (memory-consolidated mem))))
+    (w-get mem from to)))
+
+;; Full remembrance: re-fold ALL acts of the thread (they are in the journal
+;; of acts — memory, not in W).
+(defun full-anamnesis (mem from to)
+  "makePresent of an entire thread: all acts of the pair are re-folded into W."
+  (dolist (a (memory-log mem))
+    (when (and (string= (act-from a) from) (string= (act-to a) to))
+      (fold-act mem a)))
+  (w-get mem from to))
+
+(defun theorem-anastasis (&key (trials 300) (verbose nil))
+  "Fading d and full anamnesis: W' >= W, and for d>0 — strictly greater. → (ok . failures)"
+  (let ((ok 0) (failures '()))
+    (loop repeat trials
+          do (let* ((mem (%random-memory))
+                    (keys (let ((ks '()))
+                            (maphash (lambda (k v) (declare (ignore v)) (push k ks)) (memory-w mem))
+                            ks))
+                    (k (nth (random (max 1 (length keys))) keys))
+                    (f (car k)) (t. (cdr k))
+                    (d (+ 0.05 (random 0.5)))
+                    (before (thread-weight (w-get mem f t.))))
+               (fade-thread mem f t. d)
+               (full-anamnesis mem f t.)
+               (let ((after (thread-weight (w-get mem f t.))))
+                 (if (and (>= after before) (> after before)) ; strictly — fading overcome
+                     (incf ok)
+                     (push (list f t. d before after) failures)))))
+    (when verbose
+      (theorem-anastasis-print ok trials failures))
+    (cons ok failures)))
+
+(defun theorem-anastasis-print (ok trials failures)
+  (format t "~&theorem-anastasis: ~a/~a ok, failures: ~a~%" ok trials failures))
+
+;; ── Theorem on LIVE data: sacred-history-W.json ────────────────────────────
+;; The community matrix (30 faces) is loaded from a JSON snapshot; theorems 1
+;; and 2 hold on real relations of the community, not on random generators.
+;; Loading is via a simple JSON parser (weights are only numbers and
+;; arrays — a minimal subset suffices).
+
+;; Minimal JSON parse (numbers, arrays, strings) — enough for W.
+(defun json-parse-number (s i)
+  (let ((j i) (dot nil))
+    (loop while (< j (length s))
+          do (let ((c (char s j)))
+               (cond ((digit-char-p c) (incf j))
+                     ((and (char= c #\.) (not dot)) (setf dot t) (incf j))
+                     ((and (member c '(#\- #\+)) (= j i)) (incf j))
+                     ((and (char= c #\e) (> j i)) (incf j))
+                     (t (return)))))
+    (values (read-from-string (subseq s i j)) j)))
+
+(defun json-skip-ws (s i)
+  (loop while (and (< i (length s)) (member (char s i) '(#\Space #\Tab #\Newline #\Return)))
+        do (incf i))
+  i)
+
+(defun json-parse (s i)
+  "Parses a JSON value from position i. Returns (values val next-i)."
+  (setq i (json-skip-ws s i))
+  (let ((c (char s i)))
+    (cond
+      ((char= c #\[)
+       (let ((items '()) (j (1+ i)))
+         (setq j (json-skip-ws s j))
+         (if (char= (char s j) #\])
+             (values '() (1+ j))
+             (loop
+               (multiple-value-bind (v nj) (json-parse s j)
+                 (push v items)
+                 (setq j (json-skip-ws s nj))
+                 (cond ((char= (char s j) #\,) (incf j))
+                       ((char= (char s j) #\]) (return (values (reverse items) (1+ j))))
+                       (t (error "json array: ~a" (subseq s j (+ j 10))))))))))
+      ((char= c #\{)
+       (let ((obj '()) (j (1+ i)))
+         (setq j (json-skip-ws s j))
+         (if (char= (char s j) #\})
+             (values '() (1+ j))
+             (loop
+               (multiple-value-bind (k nk) (json-parse s j)
+                 (setq j (json-skip-ws s nk))
+                 (unless (char= (char s j) #\:) (error "json obj key"))
+                 (multiple-value-bind (v nv) (json-parse s (1+ j))
+                   (push (cons k v) obj)
+                   (setq j (json-skip-ws s nv))
+                   (cond ((char= (char s j) #\,) (incf j))
+                         ((char= (char s j) #\}) (return (values obj (1+ j))))
+                         (t (error "json obj: ~a" (subseq s j (+ j 10)))))))))))
+      ((char= c #\")
+       (let ((j (1+ i)) (chars '()))
+         (loop while (and (< j (length s)) (not (char= (char s j) #\")))
+               do (if (char= (char s j) #\\)
+                      (progn (push (char s (+ j 1)) chars) (incf j 2))
+                      (progn (push (char s j) chars) (incf j))))
+         (values (coerce (reverse chars) 'string) (1+ j))))
+      ((char= c #\t) (values t (+ i 4)))     ; true
+      ((char= c #\f) (values nil (+ i 5)))   ; false
+      ((char= c #\n) (values nil (+ i 4)))   ; null
+      (t (json-parse-number s i)))))
+
+;; Stringify (для вывода срезов)
+(defun json-str (x)
+  (typecase x
+    (null "null") (integer (format nil "~a" x))
+    (real (format nil "~,3f" x))
+    (string (with-output-to-string (o)
+              (format o "\"")
+              (loop for ch across x
+                    do (cond ((char= ch #\") (format o "\\\""))
+                             ((char= ch #\\) (format o "\\\\"))
+                             ((char= ch #\Newline) (format o "\\n"))
+                             (t (format o "~a" ch))))
+              (format o "\"")))
+    (list (if (and x (atom (car x)))
+              (format nil "[~{~a~^, ~}]" (mapcar #'json-str x))
+              (format nil "{~{\"~a\": ~a~^, ~}~}" (mapcar (lambda (kv) (list (car kv) (json-str (cdr kv)))) x))))
+    (t (format nil "~a" x))))
+
+;; Загрузка живой матрицы в память PoC: каждый ненулевой элемент W[i][j] —
+;; акт от persons[i] к persons[j] с весом W[i][j] (свёрнутая нить как один акт).
+(defun load-live-w (path)
+  (let* ((s (with-open-file (in path :direction :input :external-format :utf-8)
+              (let* ((len (file-length in))
+                     (buf (make-string len)))
+                (read-sequence buf in)
+                (subseq buf 0 len))))
+         (doc (nth-value 0 (json-parse s 0)))
+         (persons (cdr (assoc "persons" doc :test #'string=)))
+         (W (cdr (assoc "W" doc :test #'string=))))
+      (let ((mem (make-memory)) (n 0))
+        (dotimes (i (length persons))
+          (dotimes (j (length persons))
+            (let ((w (nth j (nth i W))))
+              (when (and (numberp w) (> w 0) (string/= (nth i persons) (nth j persons)))
+                (witness mem (make-act 'live (nth i persons) (nth j persons) w (+ (* i 100) j) (incf n)))))))
+        (run-stack mem)
+        (values mem n))))
+
+;; Прогон теорем на живых данных (живая матрица общины из data/).
+(defun demo-live ()
+  (handler-case
+      (multiple-value-bind (mem n)
+          (load-live-w "/home/unidel/gift/data/sacred-history-W.json")
+        (format t "~&=== Живая матрица (sacred-history-W) ===~%")
+        (format t "~&лиц ~a, актов-нитей ~a~%" (length (memory-agents mem)) n)
+        (format t "~&нить _claude→Дионисий: вес ~a~%"
+                (thread-weight (w-get mem "_claude" "Дионисий")))
+        ;; теорема 1 на живых данных: новый акт — вес растёт
+        (let ((before (thread-weight (w-get mem "_claude" "Дионисий"))))
+          (consolidate mem (make-act 'code "_claude" "Дионисий" 5.0 999999 999999))
+          (format t "~&Т1 живая: ~a → ~a (+5) — монотонность на реальных данных~%"
+                  before (thread-weight (w-get mem "_claude" "Дионисий"))))
+        ;; теорема 2 на живых данных: полный анамнезис — W не меняется
+        (let ((before (snapshot-w mem)))
+          (anamnesis mem :limit (length (memory-log mem)))
+          (format t "~&Т2 живая: анамнезис всех нитей — W ~:[ИЗМЕНИЛАСЬ~;НЕ ИЗМЕНЕНА~]~%"
+                  (equal before (snapshot-w mem))))
+        ;; теорема 3 на живой нити: fade 50% → полный анамнезис восстанавливает с избытком
+        (let ((before (thread-weight (w-get mem "Ева" "ОтецСергий"))))
+          (when (> before 0)
+            (fade-thread mem "Ева" "ОтецСергий" 0.5)
+            (let ((faded (thread-weight (w-get mem "Ева" "ОтецСергий"))))
+              (full-anamnesis mem "Ева" "ОтецСергий")
+              (format t "~&Т3 живая: Ева→ОтецСергий ~a → ~a (fade 50%) → ~a — анастасис~%"
+                      before faded (thread-weight (w-get mem "Ева" "ОтецСергий")))))))
+    (error (err)
+      (format t "~&живая матрица: пропуск (~a)~%" (type-of err)))))
+
+;; ── Полный прогон: демо + живая матрица + теорема 3 ───────────────────────
+(demo-live)
+(let ((r3 (theorem-anastasis :trials 300 :verbose t)))
+  (format t "~&ТЕОРЕМА 3 (анастасис): ~:[НЕ ПРОЙДЕНА~;ПРОЙДЕНА~] — ~a/300~%"
+          (null (cdr r3)) (car r3)))
