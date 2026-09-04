@@ -488,6 +488,47 @@ async function syncFundTeam(ws) {
     cols: { 'итог': d.outcome, 'утвердил': d.approvedBy || 'на утверждении' },
   })), d2Cols);
   console.log(`  решения фонда: ${decisions.length}`);
+
+  // ── Белые пятна квадрата: пары лиц без актов → PM-карточки ────────────────
+  // Квадрат — это память даров фонда. Пустая клетка — не «нет данных»,
+  // а нить, которая ещё не завязалась (или оборвалась). Пульс бьёт по
+  // заметным: лица с актами в другие стороны, но молчащие друг другу.
+  // Диагональ и технические строки («без исполнителя») не считаются пятном.
+  try {
+    const FUND_CARDS = arr(await call('GET', `/${FUND}/pm/issues?limit=100`));
+    const fundOpen = FUND_CARDS.filter(c => !closed.includes(c.status));
+    const tech = new Set(['без исполнителя', 'Член инвест-комитета']);
+    const active = names.filter(n => !tech.has(n));
+    // у кого вообще есть жизнь в квадрате (дарил или принимал)
+    const alive = new Set();
+    for (const a of names) for (const b of names) {
+      if (a === b) continue;
+      if (cell.get(a).get(b).total) { alive.add(a); alive.add(b); }
+    }
+    const holes = [];
+    for (const a of active) for (const b of active) {
+      if (a === b) continue;
+      if (!alive.has(a) || !alive.has(b)) continue;      // оба живые — иначе шум
+      if (cell.get(a).get(b).total) continue;             // нить есть
+      // заметность: хотя бы у одного из пары есть 3+ акта в любую сторону
+      const out = [...names].filter(x => x !== a).reduce((s, x) => s + cell.get(a).get(x).total, 0);
+      const inn = [...names].filter(x => x !== b).reduce((s, x) => s + cell.get(x).get(b).total, 0);
+      if (out < 3 && inn < 3) continue;
+      holes.push({ from: a, to: b, out, inn });
+    }
+    let madeH = 0;
+    for (const h of holes) {
+      const title = `белое пятно фонда: ${h.from} → ${h.to} — нить не завязалась`;
+      if (fundOpen.some(c => c.title === title)) continue;
+      await call('POST', `/${FUND}/pm/issues`, {
+        title,
+        description: `Квадрат фонда: между «${h.from}» и «${h.to}» нет ни одного акта дара.\n\n${h.from} дарит в другие стороны (${h.out} актов), ${h.to} принимает в другие стороны (${h.inn} актов) — но их общая нить пуста.\n\nЛибо осознанно завяжи отношение (поручение/ревью/утверждение), либо закрой карточку как несущественное. Пустая клетка — не «нет данных», а незавязанная нить.`,
+        type: 'task', status: 'backlog', priority: 'low', labels: ['белое-пятно'],
+      });
+      madeH++;
+    }
+    console.log(`  пятна квадрата: ${holes.length} пустых нитей, карточек создано ${madeH}`);
+  } catch (e) { console.log(`  пятна квадрата: ${e.message.slice(0, 120)}`); }
 }
 
 // ── status ──────────────────────────────────────────────────────────────────
