@@ -975,6 +975,30 @@ async function apiCall(messages, systemPrompt, tools) {
  * onToolUse(name, input) вызывается при начале tool_use.
  */
 async function apiCallStream(messages, systemPrompt, tools, { onText, onToolUse } = {}) {
+  // Ретраи на транзиентные обрывы (fetch failed / ECONNRESET): VPN-контур
+  // иногда чихает, и раньше первый обрыв убивал запрос целиком. Ретраим
+  // только пока ответ не начался (нет чанков) — начатый ответ не дублируем.
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let streamed = false;
+    try {
+      return await apiCallStreamInner(messages, systemPrompt, tools, {
+        onText: t => { streamed = true; onText && onText(t); },
+        onToolUse: n => { streamed = true; onToolUse && onToolUse(n); },
+      });
+    } catch (e) {
+      lastErr = e;
+      if (streamed || attempt === 3) break;
+      // не ретраим фатальные ответы API (4xx кроме 408/429) — только обрывы сети
+      const fatal = /API 4\d\d/.test(e?.message || '') && !/API 4(08|29)/.test(e?.message || '');
+      if (fatal) break;
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
+async function apiCallStreamInner(messages, systemPrompt, tools, { onText, onToolUse } = {}) {
   const body = {
     model: 'claude-opus-4-6',
     max_tokens: 8192,

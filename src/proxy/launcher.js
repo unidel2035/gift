@@ -197,13 +197,14 @@ export async function launchWithClaude(opts = {}) {
     // чтобы он гарантированно не конкурировал за ввод.
     if (isTTY) { try { process.stdin.destroy(); } catch {} }
 
+    const closeProxy = () => { try { proxy.close && proxy.close(); } catch {} };
     agent.on('exit', (code) => {
-        proxy.close();
+        closeProxy();
         process.exit(code || 0);
     });
 
     process.on('SIGINT', () => {
         agent.kill('SIGINT');
-        proxy.close();
+        closeProxy();
     });
 }

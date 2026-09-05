@@ -23,6 +23,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { isTableRow, tableToBox } from './gift-agent.js';
 import { execSync } from 'node:child_process';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync,
@@ -558,15 +559,41 @@ function streamMarkdown(text) {
   while ((nl = mdBuffer.indexOf('\n')) !== -1) {
     const line = mdBuffer.slice(0, nl);
     mdBuffer = mdBuffer.slice(nl + 1);
-    process.stdout.write(renderLine(line) + '\n');
+    writeMdLine(line);
   }
 }
 
 function flushMarkdown() {
   if (mdBuffer) {
-    process.stdout.write(renderLine(mdBuffer));
+    writeMdLine(mdBuffer);
     mdBuffer = '';
   }
+  flushTablePending();
+}
+
+// ── Таблицы: копим кандидата (заголовок + разделитель + строки), отдаём боксом ──
+// tableToBox/isTableRow/isTableDivider — из gift-agent.js (7 тестов там),
+// здесь только стримовая логика: не рвать таблицу построчно.
+let tablePending = [];
+function flushTablePending() {
+  if (!tablePending.length) return;
+  const box = tableToBox(tablePending);
+  if (box) for (const l of box) process.stdout.write(l + '\n');
+  else for (const l of tablePending) process.stdout.write(renderLine(l) + '\n'); // не таблица — как было
+  tablePending = [];
+}
+function writeMdLine(line) {
+  // code-block копим отдельно — таблица внутри кода не таблица
+  if (!mdInCode) {
+    const row = isTableRow(line);
+    if (row) {
+      tablePending.push(line);
+      return;                       // ждём: таблица ещё может расти
+    }
+    // обычная строка после таблицы — закрыть накопленное
+    if (tablePending.length) flushTablePending();
+  }
+  process.stdout.write(renderLine(line) + '\n');
 }
 
 // ── Pretty-print для tool_use / tool_result ─────────────────────────────
@@ -1132,6 +1159,9 @@ async function handleSlash(line, state, ui, quit, pushToInbox) {
 }
 
 // ── helpers для CLI bin/gift ────────────────────────────────────────────
+// экспорт стрим-рендера для тестов таблиц (не входит в публичный API REPL)
+export const __mdTest = { writeMdLine, flushTablePending, flushMarkdown };
+
 export const giftReplApi = {
   listSessions,
   lastSessionId,
