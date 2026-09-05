@@ -245,6 +245,15 @@ const HELP_SECTIONS = {
   gift goal pause|cancel|clear <id>
   ${C.dim('Цикл: plan → act → test → review → μετάνοια. State в data/goals/.')}`,
 
+  selfdev: () => `${C.b('Саморазвитие (замкнутый контур)')}:
+  gift selfdev                       — полный цикл: боли → цель → run → рефлексия
+  gift selfdev --pains               — только показать боли и выйти
+  gift selfdev --dry-run             — проблематизация + формулировка, без прогона
+  gift selfdev --no-run              — создать цель, запустить вручную
+  gift selfdev --pains --max N --budget T  ${C.dim('— ограничители цикла')}
+  ${C.dim('Боли: падающие тесты, V-регресс, stale-proposals, застрявшие goals.')}
+  ${C.dim('Автономно: gift agrypnia interval N "node utils/self-dev.mjs --quiet" + gift autonomy start')}`,
+
   space: () => `${C.b('Пространство кентавров (команда как организм):')}
   gift space                      — войти в живое поле всего тела (один кадр)
   gift space --watch ${C.dim('[--every N]')}   — живое поле, дышит (перерисовка раз в N с)
@@ -1032,6 +1041,13 @@ ${C.b('gift login')} <бэкенд> <api-key>
 
     case 'ideas': {
       await runRaw('utils/idea-graph.mjs', [sub, ...rest].filter(Boolean));
+      break;
+    }
+
+    case 'selfdev': {
+      // Режим саморазвития: gift сам себя проблематизирует, озадачивает и решает.
+      // Цикл: боли (тесты/proposals/goals/V) → цель (GoalEngine) → run → рефлексия.
+      await runRaw('utils/self-dev.mjs', [sub, ...rest].filter(Boolean));
       break;
     }
 
