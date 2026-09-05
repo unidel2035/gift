@@ -461,6 +461,14 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
       if (r.error || r.status !== 0) {
         lastError = r.error?.message || r.stderr?.slice(0, 300) || `exit ${r.status}`;
         console.log(`   ✗ Попытка ${attempt}/${MAX_ATTEMPTS} не удалась: ${lastError.slice(0, 80)}`);
+        // Пауза между попытками: три подряд в затор (перегруз машины,
+        // всплеск сети) дают три одинаковых ETIMEDOUT. Backoff даёт
+        // затору рассосаться — попытка приходит в живой контур.
+        if (attempt < MAX_ATTEMPTS) {
+          const pause = 60_000 * attempt;   // 1 мин, 2 мин
+          console.log(`   ⏳ ждём ${pause / 60_000} мин перед следующей попыткой…`);
+          spawnSync('sleep', [String(Math.round(pause / 1000))], { timeout: pause + 5_000 });
+        }
         continue;
       }
 
