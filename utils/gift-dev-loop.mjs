@@ -30,6 +30,10 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN
 const ROOT   = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP   = resolve(ROOT, 'data/sacred-history-W.json');
 const ONCE   = process.argv.includes('--once');
+// Прямой приказ человека снимает субботнее молчание собора (Мк 3:4:
+// «должно ли в субботу делать добро?»). Ночной cron БЕЗ флага остаётся
+// под литургической дисциплиной: автомат сам не решает нарушить покой.
+const FORCE  = process.argv.includes('--force') || process.env.GIFT_DEV_FORCE === '1';
 
 // ── Роли в матрице W ────────────────────────────────────────────────────────
 // Роли, не имена. Каждый — лицо в онтологии дара.
@@ -392,7 +396,9 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
     }));
 
     console.log('   ⟨собор⟩ Собираю голоса (Исполнитель, Критик, Свидетель)...');
-    const polyphony = await orchestrator.ask(`Issue #${issueNumber}: ${title}`);
+    // --force: эпиклеза воли человека — субботнее молчание снимается
+    // прямым приказом, но сам молчаливый ответ (апофатика, кворум) не трогаем.
+    const polyphony = await orchestrator.ask(`Issue #${issueNumber}: ${title}`, FORCE ? { sabbath: false } : {});
 
     if (polyphony.type === 'Silence') {
       console.log(`   ⟨молчание⟩ ${polyphony.reason}`);
