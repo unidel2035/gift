@@ -156,7 +156,17 @@ function App() {
   const histIdxRef = useRef(-1);
   const sessionRef = useRef(null);
   if (sessionRef.current === null) {
-    const s = (RESUME_ID && loadSession(RESUME_ID)) || { id: newSessionId(), messages: [] };
+    // 'last' — не имя файла: разрешаем в id последней сессии. Раньше
+    // loadSession('last') тихо фейлился и стартовала НОВАЯ пустая сессия
+    // («не грузит последнюю сессию»).
+    let resumeId = null;
+    if (RESUME_ID === 'last') {
+      resumeId = listSessions(1)[0]?.id || null;
+      if (resumeId) process.stdout.write(`\x1b[2m↻ продолжаю последнюю сессию: ${resumeId}\x1b[0m\n`);
+    } else if (RESUME_ID) {
+      resumeId = RESUME_ID;
+    }
+    const s = (resumeId && loadSession(resumeId)) || { id: newSessionId(), messages: [] };
     sessionRef.current = s;
     messagesRef.current = Array.isArray(s.messages) ? s.messages : [];
     activeSessionId = s.id;
