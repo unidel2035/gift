@@ -197,6 +197,7 @@ const HELP_SECTIONS = {
   chat: () => `${C.b('Диалог (multi-turn REPL с инструментами):')}
   gift                            — ${C.dim('alias к')} gift chat ${C.dim('(если запущено в TTY)')}
   gift chat                       — новая интерактивная сессия (persist в data/chat-sessions/)
+  gift --continue                 — продолжить последнюю сессию сразу (аналог claude --continue)
   gift chat --resume <id>         — продолжить сессию по id
   gift chat --resume last         — продолжить последнюю сессию
   gift chat --list                — список сохранённых сессий
@@ -381,6 +382,11 @@ if (cmd === 'help') { help(sub); process.exit(0); }
 if (cmd === '--resume' || cmd === 'resume') {
   if (sub) process.env.GIFT_RESUME = sub;
   cmd = 'start'; sub = undefined; rest = [];
+}
+// gift --continue / gift continue → продолжить последнюю chat-сессию (REPL)
+// (аналог claude --continue: resume last без вопроса)
+if (cmd === '--continue' || cmd === 'continue' || cmd === '-c') {
+  cmd = 'chat'; sub = '--resume'; rest = ['last'];
 }
 if (cmd === 'completion') {
   if (sub === 'bash') { console.log(bashCompletion()); process.exit(0); }
@@ -932,8 +938,15 @@ ${C.b('gift login')} <бэкенд> <api-key>
         break;
       }
       const resumeIdx = allArgs.indexOf('--resume');
-      const resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
+      let resumeId = resumeIdx >= 0 ? allArgs[resumeIdx + 1] : null;
       const planMode = allArgs.includes('--plan');
+      // --continue / -c: продолжить последнюю сессию сразу (без вопроса auto-resume)
+      if (allArgs.includes('--continue') || allArgs.includes('-c')) {
+        const ls = giftReplApi.listSessions(1);
+        if (!ls.length || !ls[0].turns) { console.log('Нет сессии для продолжения.'); break; }
+        resumeId = ls[0].id;
+        console.log(`${C.dim(`продолжаю последнюю сессию: ${resumeId}`)}`);
+      }
       try {
         await runGiftRepl({ resumeId, planMode });
       } catch (e) {
