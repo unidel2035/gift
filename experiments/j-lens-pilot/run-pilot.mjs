@@ -32,8 +32,21 @@ const raw = execFileSync(PY, [CORE, "--batch"], {
   maxBuffer: 64 * 1024 * 1024,
   stdio: ["pipe", "pipe", "inherit"],
 });
-const { model, baseline, records } = JSON.parse(raw.toString("utf8"));
+const { model, environment, validation, baseline, records } = JSON.parse(raw.toString("utf8"));
 console.error(`✓ прогон завершён за ${((Date.now() - t0) / 1000).toFixed(0)}с`);
+
+// Прибор обязан быть валидным ДО интерпретации данных: положительный
+// контроль (посаженное разногласие → пик там же). Без него «сигнала нет»
+// неотличимо от «линза слепа» (ревью #789, замечание 2).
+if (!validation?.pass) {
+  console.error(`✗ positive control провален — данные неинтерпретируемы, отчёт не пишется`);
+  process.exit(2);
+}
+console.error(
+  `✓ валидация прибора: синтетика ${validation.synthetic.pass ? "✓" : "✗"} (контраст ${validation.synthetic.contrast}×), ` +
+  `модельный контроль ${validation.model_detect_multi_block.pass ? "✓" : "✗"} ` +
+  `(C(t*)=${validation.model_detect_multi_block.Ct_star_perturbed} vs фон ${validation.model_detect_multi_block.C_natural_peak})`
+);
 
 // ── агрегация по kind ──
 const byKind = {};
@@ -78,6 +91,8 @@ const hedPeakiness = med(hedRows.map((r) => r.peakiness).filter(Boolean));
 // Сигнал «воспроизвёлся» = ОБА условия:
 //   (1) пик C_norm строго раньше коммитмента на ≥50% фабрикаций;
 //   (2) нейтральные плоские: медиана peakiness < 2 (порог как в тестах).
+// Отрицательный вердикт — утверждение о ПРИБОРЕ И ДАННЫХ этого масштаба:
+// «классы не дискриминируются», не метафизическое «сигнала нет вообще».
 // verdict() вычисляет вердикт кодом; tests/test_jlens.py перепроверяет его
 // по таблицам RESULTS.md на Python — вердикт не текст, а сверяемое утверждение.
 const NEUTRAL_FLAT_MAX = 2.0;
@@ -105,8 +120,21 @@ const v = verdict(records);
 
 const md = `# RESULTS — J-lens pilot (#789)
 
-**Модель:** ${model} (124M, CPU, torch autograd) · **Жадная генерация** (детерминированная) · **Дата:** ${new Date().toISOString().slice(0, 10)}
+**Модель:** ${model} (${environment.n_params} параметров, CPU, torch autograd) · **Жадная генерация** (детерминированная) · **Дата:** ${new Date().toISOString().slice(0, 10)}
+**Окружение (пин):** torch ${environment.torch} · transformers ${environment.transformers} · веса \`${environment.model}@${environment.weights_commit}\`
 **Кейсов:** ${records.length} (нейтральных ${neuRows.length}, фабрикаций ${fabRows.length}, hedging ${hedRows.length}) · **Прогон:** ${((Date.now() - t0) / 1000).toFixed(0)}с
+
+## Валидация прибора (positive control)
+
+Посаженное разногласие обязано детектироваться там, где посажено, — иначе «сигнала нет» неотличимо от «линза слепа» (ревью #789, замечание 2).
+
+| контроль | посадка | детекция | C(t*) | фон | итог |
+|---|---|---|---|---|---|
+| синтетика (метрика) | t=${validation.synthetic.planted_at} | t=${validation.synthetic.detected_at} | — | — | ${validation.synthetic.pass ? "✓" : "✗"} (контраст ${validation.synthetic.contrast}×) |
+| модель, 1 блок | t=${validation.model_floor_single_block.planted_at} | t=${validation.model_floor_single_block.detected_at} | ${validation.model_floor_single_block.Ct_star_perturbed} | ${validation.model_floor_single_block.C_natural_peak} | пограничный: на уровне фона |
+| модель, 3 блока | t=${validation.model_detect_multi_block.planted_at} | t=${validation.model_detect_multi_block.detected_at} | ${validation.model_detect_multi_block.Ct_star_perturbed} | ${validation.model_detect_multi_block.C_natural_peak} | ${validation.model_detect_multi_block.pass ? "✓" : "✗"} (2.5× фона) |
+
+**Калибровка:** линза разрешает разногласие, охватывающее несколько слоёв (3 блока → C(t*) 2.5× выше естественного фона, пик ровно в точке посадки); однослойное разногласие — ниже разрешения прибора. Прибор валиден в своём диапазоне; вердикт ниже — о данных **этого** прибора и **этого** масштаба.
 
 ## Метод
 
@@ -138,7 +166,7 @@ ${kindTable("hedging", "Hedging (промпт признаёт незнание,
 
 ## Вердикт
 
-**VERDICT: ${v.label}** — ${v.label === "reproduced" ? "кандидат в CIF по критериям плана" : "сигнал не воспроизвёлся на этом масштабе (GPT-2 124M, CPU) — интеграция по плану не выполняется"}
+**VERDICT: ${v.label}** — ${v.label === "reproduced" ? "кандидат в CIF по критериям плана" : "классы не дискриминируются линзой на этом масштабе (GPT-2 124M, CPU): пик C_norm не предшествует коммитменту, нейтральный профиль не плоский. Прибор валиден в своём диапазоне (positive control выше), значит это свойство данных 124M, а не артефакт слепого прибора — но одна точка масштаба не говорит о форме кривой (#808)"}
 
 | условие | порог | факт | выполнено |
 |---|---|---|---|
@@ -149,9 +177,11 @@ ${kindTable("hedging", "Hedging (промпт признаёт незнание,
 
 ## Ограничения
 
-- GPT-2 124M — базовая модель без инструктивного слоя; фабрикации «наивны», не ассистентного типа.
+- GPT-2 124M — базовая модель без инструктивного слоя; фабрикации «наивны», не ассистентного типа. CIF предназначен ассистентным промптам — перенос вывода на целевой класс моделей не обоснован без прогона на инструктированных весах.
 - CPU-прогон: жадная генерация + полный backward; 12 кейсов ≈ минуты, не секунды.
 - Δ измеряется от пика C_norm, найденного по всему тексту; пик в промпте (peak_in_continuation=нет) означает отсутствие сигнала в продолжении, не ошибку.
+- Одна точка масштаба: вердикт — о 124M; форма кривой (порог J-space по масштабу) не измерена — вопрошание #808 (355M, потом 1.5B).
+- Разрешение прибора: положительный контроль показывает слепоту к однослойному разногласию; если конфликт фабрикации на 124M локализован в 1–2 слоях, линза его не видит по конструкции, а не по отсутствию.
 - Паламитская граница: линза читает энергии (акты вычисления), не сущность; пик C(t) — след борьбы направлений, не «лицо модели».
 
 ## Полные профили

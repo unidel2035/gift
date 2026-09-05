@@ -1,7 +1,7 @@
 # jlens.py — ядро J-линзы для пилота #789
 #
-# Форк-концепт anthropics/jacobian-lens в минимальной CPU-реализации.
-# Сигнал: слои «спорят» о направлении вывода — s_ℓ(t) = ||∂ logit_top(t) / ∂ h_ℓ(t)||
+# Реконструкция концепта anthropics/jacobian-lens (не порт их кода):
+# сигнал «внутреннего конфликта» — s_ℓ(t) = ||∂ logit_top(t) / ∂ h_ℓ(t)||
 # (норма градиента топ-логита позиции t по resid-потоку на выходе слоя ℓ;
 # причинность GPT-2: позиция t читает только позиции ≤ t, поэтому вклад
 # позиции t изолируем через градиент по полному тензору слоя).
@@ -18,6 +18,22 @@ import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 MODEL_NAME = "gpt2"
+
+
+def environment_fingerprint(model, tokenizer, model_name=MODEL_NAME):
+    """Версионирование прогона (ревью #789, замечание 3): torch,
+    transformers, ревизия весов с HF Hub, число параметров. Без
+    этого «машинная проверка» привязана к плавающему окружению —
+    дрейф библиотеки молча сдвинет генерацию и сломает фикстуры."""
+    import transformers
+
+    return {
+        "model": model_name,
+        "weights_commit": getattr(model.config, "_commit_hash", None),
+        "torch": torch.__version__,
+        "transformers": transformers.__version__,
+        "n_params": sum(p.numel() for p in model.parameters()),
+    }
 
 
 def load_model(name: str = MODEL_NAME):
@@ -97,6 +113,127 @@ def conflict_index(s):
         var = sum((x - mean) ** 2 for x in vals) / len(vals)
         C.append(var / mean if mean > 0 else 0.0)
     return C
+
+
+# ─────────────────────────────────────────────────────────────
+# Positive control (ревью #789, замечание 2): линза обязана
+# детектировать разногласие слоёв ТАМ, ГДЕ ОНО ЗАВЕДОМО ЕСТЬ.
+# Без этого «сигнала нет» неотличимо от «линза слепа».
+# Два уровня: синтетика (метрика в чистом виде) и модель
+# (полный контур forward/backward на реальных весах).
+# ─────────────────────────────────────────────────────────────
+
+def positive_control_synthetic(n_layers=13, n_tok=40, t_star=25, gain=10.0):
+    """Синтетический контроль: все слои согласованы (s=1.0),
+    на позиции t_star половина слоёв уходит в gain раз —
+    C(t) обязан иметь пик ровно на t_star. Без модели: проверяет
+    саму метрику conflict_index, а не пайплайн."""
+    layer_keys = [f"L{i}" for i in range(n_layers)]
+    half = n_layers // 2
+    s = {k: [1.0] * n_tok for k in layer_keys}
+    for k in layer_keys[:half]:
+        s[k][t_star] = gain
+    C = conflict_index({"layer_keys": layer_keys, "tokens": ["x"] * n_tok, "s": s})
+    peak = peak_moment(C)
+    others = [C[t] for t in range(n_tok) if t != t_star]
+    return {
+        "planted_at": t_star,
+        "detected_at": peak,
+        "contrast": round(C[t_star] / max(others), 2),
+        "pass": peak == t_star,
+    }
+
+
+def positive_control_model(model, tokenizer, text, t_star, block_idxs, eps=12.0, seed=789):
+    """Модельный контроль: в resid-поток на выходах блоков block_idxs,
+    позиция t_star, инжектируется детерминированный шум (eps×std на блок,
+    свой вектор на каждый блок). Это посаженное разногласие — ранние
+    слои его не видят, инжектированные несут испорченный поток, поздние
+    читают сдвиг. Полный контур линзы (forward + autograd по всем точкам
+    resid) обязан дать глобальный пик C(t) в t_star.
+
+    Калибровка (05.09.2026, gpt2-124M, text=NEUTRAL_BASELINE_TEXTS[0],
+    t*=28, eps=12): разногласие ОДНОГО блока даёт C(t*)≈0.2–0.27 при
+    естественном фоне того же текста до 0.217 — на границе разрешения
+    прибора, детекция зависит от вектора шума (порог, не гарантия).
+    Три соседних блока дают C(t*)≈0.54 (2.5× фона) — устойчиво
+    детектируется. Порог чувствительности линзы: разногласие,
+    охватывающее несколько слоёв; однослойное — ниже разрешения.
+
+    Возвращает {planted_at, detected_at, Ct_star_perturbed, Ct_star_clean,
+    C_natural_peak, pass}.
+    """
+    input_ids = tokenizer(text, return_tensors="pt")["input_ids"]
+    n_tok = input_ids.shape[1]
+    if not (0 <= t_star < n_tok):
+        raise ValueError(f"t_star={t_star} вне последовательности (T={n_tok})")
+
+    # Чистый прогон — опорный C(t) и естественный фон
+    clean_C = conflict_index(layer_sensitivity(model, tokenizer, text))
+    natural_peak = max(clean_C)
+
+    d_model = model.config.n_embd
+    noises = {
+        bi: torch.randn(d_model, generator=torch.Generator().manual_seed(seed + bi))
+        for bi in block_idxs
+    }
+    fired = {"n": 0}
+
+    def make_hook(bi):
+        def hook(module, inputs, output):
+            out = output[0] if isinstance(output, tuple) else output
+            std = out[0, t_star].detach().std()
+            out[0, t_star] = out[0, t_star] + eps * std * noises[bi]
+            fired["n"] += 1
+        return hook
+
+    handles = [model.transformer.h[bi].register_forward_hook(make_hook(bi)) for bi in block_idxs]
+    try:
+        pert_C = conflict_index(layer_sensitivity(model, tokenizer, text))
+    finally:
+        for h in handles:
+            h.remove()
+
+    peak = peak_moment(pert_C)
+    return {
+        "planted_at": t_star,
+        "detected_at": peak,
+        "Ct_star_perturbed": round(pert_C[t_star], 5),
+        "Ct_star_clean": round(clean_C[t_star], 5),
+        "C_natural_peak": round(natural_peak, 5),
+        "hook_fired": fired["n"],
+        "pass": abs(peak - t_star) <= 3 and pert_C[t_star] > natural_peak,
+    }
+
+
+def instrument_validation(model, tokenizer):
+    """Сводка валидации прибора. pass=False → данные пилота
+    неинтерпретируемы: слепую линзу нельзя использовать ни для
+    подтверждения, ни для опровержения сигнала.
+
+    Два модельных контроля:
+    - floor (1 блок, eps=12): пограничный — фиксирует порог
+      чувствительности, ниже которого линза слепа (однослойное
+      разногласие даёт C(t*) на уровне естественного фона);
+    - detect (3 блока, eps=12): обязан детектироваться — подтверждает,
+      что контур forward+autograd+конфликт-метрики работает.
+    """
+    neutral = NEUTRAL_BASELINE_TEXTS[0]
+    T = len(tokenizer(neutral)["input_ids"])
+    t_star = min(28, T - 5)
+    synth = positive_control_synthetic(t_star=25, gain=10.0)
+    floor_ctl = positive_control_model(
+        model, tokenizer, text=neutral, t_star=t_star, block_idxs=[6]
+    )
+    detect_ctl = positive_control_model(
+        model, tokenizer, text=neutral, t_star=t_star, block_idxs=[4, 5, 6]
+    )
+    return {
+        "synthetic": synth,
+        "model_floor_single_block": floor_ctl,
+        "model_detect_multi_block": detect_ctl,
+        "pass": synth["pass"] and detect_ctl["pass"],
+    }
 
 
 def peak_moment(seq):
@@ -247,17 +384,39 @@ def analyze_case(model, tokenizer, case: dict, baseline, max_new_tokens=50):
 
 
 def run_batch(cases, model_name=MODEL_NAME, max_new_tokens=50):
-    """Прогон всех кейсов одним процессом (модель грузится один раз)."""
+    """Прогон всех кейсов одним процессом (модель грузится один раз).
+
+    Возвращает environment (пин окружения), validation (positive control
+    прибора) и records. Валидация обязательна: без неё отрицательный
+    вердикт не отличим от слепого прибора."""
     model, tokenizer = load_model(model_name)
     baseline = build_baseline(model, tokenizer, NEUTRAL_BASELINE_TEXTS)
     records = [analyze_case(model, tokenizer, c, baseline, max_new_tokens) for c in cases]
-    return {"model": model_name, "baseline": [round(b, 4) for b in baseline], "records": records}
+    return {
+        "model": model_name,
+        "environment": environment_fingerprint(model, tokenizer, model_name),
+        "validation": instrument_validation(model, tokenizer),
+        "baseline": [round(b, 4) for b in baseline],
+        "records": records,
+    }
+
+
+def validate_instrument(model_name=MODEL_NAME):
+    """Полная валидация прибора: positive control (синтетика + модель).
+    Выход — свидетельство валидности линзы, публикуется в RESULTS.md."""
+    model, tokenizer = load_model(model_name)
+    return {
+        "environment": environment_fingerprint(model, tokenizer, model_name),
+        "controls": instrument_validation(model, tokenizer),
+    }
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--batch":
         cases = json.load(sys.stdin)
         print(json.dumps(run_batch(cases), ensure_ascii=False))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--validate":
+        print(json.dumps(validate_instrument(), ensure_ascii=False, indent=2))
     else:
         text = sys.argv[1] if len(sys.argv) > 1 else "The capital of France is"
         model, tokenizer = load_model()
