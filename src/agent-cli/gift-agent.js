@@ -191,9 +191,9 @@ function isTableDivider(line) {
 function splitTableRow(line) {
   return line.trim()
     .replace(/^[│|]/, '')
-    .replace(/[│|]$/, '')
-    .split(/[│|]/)
-    .map(c => c.trim());
+    .replace(/(?<!\\)[│|]$/, '')
+    .split(/(?<!\\)[│|]/)
+    .map(c => c.trim().replace(/\\([│|])/g, '$1'));  // \| → литеральный | (md-экранирование)
 }
 function padCell(s, w) {
   const plain = s.replace(/\x1b\[[0-9;]*m/g, '');  // ANSI не влияет на ширину
@@ -239,6 +239,36 @@ function tableToBox(lines) {
     3  // минимум, чтобы пустая колонка не схлопывалась
   ));
   return renderTableBox(header, rows, widths);
+}
+
+/** Разбить текст на сегменты {table:bool, lines:[...]}. Табличные сегменты —
+ *  последовательности строк-кандидатов, где tableToBox собирается в бокс;
+ *  всё остальное — обычные текстовые блоки (включая отброшенные кандидаты,
+ *  которые таблицей не оказались — рендерятся как были). */
+function splitTables(text) {
+  const out = [];
+  let textBuf = [];
+  let pending = [];
+  const flushText = () => {
+    if (textBuf.length) { out.push({ table: false, lines: textBuf }); textBuf = []; }
+  };
+  for (const line of String(text).split('\n')) {
+    if (isTableRow(line)) { pending.push(line); continue; }
+    if (pending.length) {
+      const box = tableToBox(pending);
+      if (box) { flushText(); out.push({ table: true, lines: box }); }
+      else textBuf.push(...pending);
+      pending = [];
+    }
+    textBuf.push(line);
+  }
+  if (pending.length) {
+    const box = tableToBox(pending);
+    if (box) { flushText(); out.push({ table: true, lines: box }); }
+    else textBuf.push(...pending);
+  }
+  flushText();
+  return out;
 }
 
 
@@ -1468,7 +1498,7 @@ export async function agentLoop(prompt, opts = {}) {
 // Экспорт переиспользуемой логики для Ink-CLI (ink-cli.mjs).
 export {
   apiCallStream, executeTool, TOOLS, SAFE_TOOLS, buildSystemPrompt, renderMarkdown,
-  createMarkdownStream, isTableRow, isTableDivider, splitTableRow, tableToBox,
+  createMarkdownStream, isTableRow, isTableDivider, splitTableRow, tableToBox, splitTables,
   immuneScan, loadMatrix, saveMatrix, recordAct, matrixSummary,
   newSessionId, saveSession, loadSession, listSessions,
   estimateTokens, compactMessages,

@@ -17,7 +17,7 @@ import fs from 'fs';
 import {
   apiCallStream, executeTool, TOOLS, buildSystemPrompt, renderMarkdown,
   loadMatrix, matrixSummary, newSessionId, saveSession, loadSession, listSessions,
-  estimateTokens, compactMessages,
+  estimateTokens, compactMessages, splitTables,
 } from './gift-agent.js';
 import CognitiveImmuneSystem from '../proxy/CognitiveImmuneSystem.js';
 import { connectMcp } from './mcp-client.mjs';
@@ -540,8 +540,14 @@ function TItem({ it, cols }) {
   if (it.kind === 'user') return html`<${Box} marginTop=${1}><${Text} color="cyan" bold>❯ <//><${Text}>${it.text}<//><//>`;
   if (it.kind === 'assistant') {
     const sev = it.threats > 0 ? 'red' : (it.verdict === 'suspicious' || it.verdict === 'contradictory' || it.verdict === 'attack') ? 'yellow' : 'green';
+    // Таблицы: renderMarkdown построчный, а md-таблица — lookahead-структура
+    // (заголовок + разделитель + строки). Разбираем текст на сегменты:
+    // таблица → ASCII-бокс (tableToBox), остальное → renderMarkdown.
+    const segments = splitTables(it.text);
     return html`<${Box} marginTop=${1} flexDirection="column">
-      <${Text}>${renderMarkdown(it.text)}<//>
+      ${segments.map((seg, i) => seg.table
+        ? html`<${Box} key=${i} flexDirection="column">${seg.lines.map((l, j) => html`<${Text} key=${j} dimColor>${l}<//>`)}<//>`
+        : (seg.lines.length ? html`<${Text} key=${i}>${renderMarkdown(seg.lines.join('\n'))}<//>` : null))}
       ${it.verdict ? html`<${Text} color=${sev} dimColor=${sev === 'green'}>🛡 ${it.verdict}${it.threats ? ' · угроз: ' + it.threats : ''}<//>` : null}
     <//>`;
   }
