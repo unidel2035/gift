@@ -89,6 +89,7 @@ export class TermUI {
     }
     process.stdin.setEncoding('utf8');
     process.stdin.resume();
+    this._installRestoreHandlers();
     // Слить оставшийся в stdin мусор от родительского процесса
     // (gift CLI readline оставляет \n после выбора меню)
     let drained;
@@ -124,10 +125,41 @@ export class TermUI {
     rl.prompt();
   }
 
+  // Страховка-восстановление терминала: raw-режим не снимается сам.
+  // Если процесс умер нечисто (SIGTERM извне, краш до stop(), process.exit
+  // из SDK-обработчика), tty остаётся с echo-off — строка ввода «мёртвая»
+  // и в ЭТОЙ, и в следующей сессии того же терминала. Вешаем exit-хуки:
+  // сам rawMode в 'exit' уже поздно снимать, но cwd/echo не при чём —
+  // главное снять raw до того, как процесс отдаст tty. Дополнительно
+  // ловим SIGINT/SIGTERM вручную: process.exit из 'exit'-хука приходит
+  // после снятия raw.
+  _installRestoreHandlers() {
+    if (this._restoreInstalled) return;
+    this._restoreInstalled = true;
+    this._restore = () => {
+      try { if (process.stdin.isTTY && process.stdin.isRaw) process.stdin.setRawMode(false); } catch {}
+      try { process.stdout.write('\x1b[?25h'); } catch {}   // показать курсор
+    };
+    process.on('exit', this._restore);
+    this._sigHandlers = {};
+    for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+      const fn = () => { this._restore(); process.exit(0); };
+      this._sigHandlers[sig] = fn;
+      try { process.on(sig, fn); } catch {}
+    }
+  }
+
   stop() {
     if (this._fallbackRl) { this._fallbackRl.close(); return; }
     this._eraseMenu();
     process.stdin.removeListener('data', this._dataHandler);
+    if (this._restoreInstalled) {
+      process.removeListener('exit', this._restore);
+      for (const [sig, fn] of Object.entries(this._sigHandlers || {})) {
+        try { process.removeListener(sig, fn); } catch {}
+      }
+    }
+    this._restore && this._restore();
     if (process.stdin.isTTY) {
       try { process.stdin.setRawMode(false); } catch {}
     }
