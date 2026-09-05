@@ -457,7 +457,7 @@ async function runClaudeAgent(issueNumber, title, body, pmNumber) {
 
       const r = spawnSync(CLAUDE_BIN, ['--print', '--dangerously-skip-permissions', '--output-format', 'json'], {
         input: attemptPrompt,
-        cwd: ROOT, timeout: 600_000,
+        cwd: ROOT, timeout: 1800_000,   // 30 мин: полноценная SWE-задача (план+код+тесты+коммит) не влезает в 10 мин — агент убивался на середине, все 3 попытки ETIMEDOUT
         encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
       });
 
