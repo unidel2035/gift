@@ -313,6 +313,52 @@ const TOOLS = [
     },
   },
   {
+    name: 'TodoWrite',
+    description: 'Список задач сессии: план виден и агенту, и человеку. Обновляй после каждого шага — mark in_progress у текущего, completed у сделанного. Не удаляй завершённые: это след работы.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        todos: {
+          type: 'array',
+          description: 'Полный список задач (каждый вызов — замена всего списка)',
+          items: {
+            type: 'object',
+            properties: {
+              content: { type: 'string', description: 'что делать' },
+              status: { type: 'string', enum: ['pending', 'in_progress', 'completed'], description: 'состояние' },
+            },
+            required: ['content', 'status'],
+          },
+        },
+      },
+      required: ['todos'],
+    },
+  },
+  {
+    name: 'WebFetch',
+    description: 'Загрузить URL и вернуть содержимое как текст (markdown-сырец, до 20000 символов). Для чтения документации, репозиториев, страниц.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'http(s):// URL' },
+        max: { type: 'integer', description: 'макс. символов (default 20000)' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'Task',
+    description: 'Запустить субагента: отдельный контекст без доступа к текущему диалогу. Для широкого поиска и независимых подзадач. Субагент получает только промпт — экономит контекст главной сессии.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'полное задание субагенту: что найти/сделать, где искать, какой формат ответа' },
+        agent: { type: 'string', description: 'тип: explore (поиск, только чтение) | general (полный)' },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
     name: 'matrix_query',
     description: 'Query the W-matrix: show persons, top threads, recent acts.',
     input_schema: {
@@ -480,6 +526,86 @@ async function executeTool(name, input) {
         } catch (e) {
           return { error: e.message };
         }
+      }
+
+      // ── TodoWrite: план сессии. Список живёт в файле сессии — выживет
+      // в resume; executeTool возвращает текст для модели, UI-сторона
+      // (ink-cli) читает тот же файл и рисует чек-лист как у Claude Code.
+      case 'TodoWrite': {
+        try {
+          const list = (input.todos || []).map(t => ({
+            content: String(t.content || '').slice(0, 200),
+            status: ['pending', 'in_progress', 'completed'].includes(t.status) ? t.status : 'pending',
+          }));
+          if (typeof globalThis.__GIFT_TODOS__ !== 'undefined') globalThis.__GIFT_TODOS__ = list;
+          const done = list.filter(t => t.status === 'completed').length;
+          return `план обновлён: ${done}/${list.length} готово`;
+        } catch (e) { return { error: e.message }; }
+      }
+
+      // ── WebFetch: страница → текст. HTML-теги срезаются грубо (для модели
+      // достаточно), JSON/text проходят как есть. Таймаут 20с, редиректы — fetch сам.
+      case 'WebFetch': {
+        try {
+          const url = String(input.url || '');
+          if (!/^https?:\/\//.test(url)) return { error: 'нужен http(s):// URL' };
+          const max = Math.min(Number(input.max) || 20000, 50000);
+          const r = await fetch(url, {
+            signal: AbortSignal.timeout(20000),
+            headers: { 'user-agent': 'Mozilla/5.0 (compatible; gift-agent/0.1)', accept: 'text/html,text/plain,application/json,*/*' },
+            redirect: 'follow',
+          });
+          if (!r.ok) return { error: `HTTP ${r.status}` };
+          const ct = r.headers.get('content-type') || '';
+          let text = await r.text();
+          if (ct.includes('html')) {
+            text = text
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+              .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n')
+              .trim();
+          }
+          return text.slice(0, max) + (text.length > max ? `\n…(обрезано, всего ${text.length})` : '');
+        } catch (e) {
+          return { error: e.name === 'TimeoutError' ? 'таймаут 20с' : e.message.slice(0, 120) };
+        }
+      }
+
+      // ── Task: субагент. Отдельный мини-loop ТОЛЬКО с Read/Grep/Glob
+      // (explore) или полным набором (general). Тот же прокси и модель,
+      // отдельный контекст — широкие поиски не засоряют главную сессию.
+      case 'Task': {
+        try {
+          const explore = (input.agent || 'explore') !== 'general';
+          const tools = explore ? ['Read', 'Grep', 'Glob'] : ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'WebFetch'];
+          const sys = explore
+            ? 'Ты — поисковый субагент. Найди и процитируй главное, без правок. Отвечай выжимкой с путями к файлам.'
+            : 'Ты — субагент общего назначения. Выполни задание и верни результат.';
+          const sub = [
+            { role: 'user', content: String(input.prompt || '') },
+          ];
+          const subTools = TOOLS.filter(t => tools.includes(t.name));
+          let subTurns = 0;
+          while (subTurns++ < 10) {
+            const r = await apiCallStream(sub, sys, subTools);
+            sub.push({ role: 'assistant', content: r.content || '' });
+            const tus = (r.content || []).filter(b => b.type === 'tool_use');
+            if (!tus.length) break;
+            const results = [];
+            for (const tu of tus) {
+              const out = await executeTool(tu.name, tu.input);
+              const txt = typeof out === 'string' ? out : JSON.stringify(out);
+              results.push({ type: 'tool_result', tool_use_id: tu.id, content: txt.slice(0, 100000) });
+            }
+            sub.push({ role: 'user', content: results });
+          }
+          const text = sub.filter(m => m.role === 'assistant')
+            .flatMap(m => Array.isArray(m.content) ? m.content : [])
+            .filter(b => b.type === 'text').map(b => b.text).join('\n');
+          return text || '(субагент молчит)';
+        } catch (e) { return { error: e.message }; }
       }
 
       // ── Gift-специфичные tools ──────────────────────────────

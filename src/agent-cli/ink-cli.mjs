@@ -135,6 +135,12 @@ function App() {
   const [buf, setBuf] = useState('');            // строка ввода
   const [cur, setCur] = useState(0);             // позиция курсора
   const [busy, setBusy] = useState(false);
+  // Permission-диалог (как у Claude Code): опасные tools — Write/Edit/Bash —
+  // спрашивают y/n/a (a = да и больше не спрашивать в сессии). Read/Grep/Glob — авто.
+  const [approve, setApprove] = useState(null);   // { name, preview, resolve }
+  const autoApproveRef = useRef(false);
+  const approveRef = useRef(null);
+  approveRef.current = approve;
   const [spin, setSpin] = useState(0);
   const [sel, setSel] = useState(0);             // выбор в /-меню
   const [status, setStatus] = useState({ label: '…', model: '', cost: 0, acts: 0 });
@@ -336,7 +342,16 @@ function App() {
         onToolResult: (name, result) => { setActivity(''); setLastTool({ name, result: String(result).replace(/\n/g, ' ').slice(0, 80) }); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
       }, {
         tools: [...TOOLS, ...mcpRef.current.tools],
-        exec: (n, i) => (n.startsWith('mcp__') && mcpRef.current.call) ? mcpRef.current.call(n, i) : executeTool(n, i),
+        exec: async (n, i) => {
+          const run = () => (n.startsWith('mcp__') && mcpRef.current.call) ? mcpRef.current.call(n, i) : executeTool(n, i);
+          const dangerous = ['Write', 'Edit', 'Bash'].includes(n) && !n.startsWith('mcp__');
+          if (!dangerous || autoApproveRef.current || process.env.GIFT_YES) return run();
+          const ok = await new Promise(resolve => {
+            setApprove({ name: n, preview: previewInput(n, i), resolve });
+          });
+          setApprove(null);
+          return ok ? run() : { error: 'пользователь отклонил действие' };
+        },
       });
     } catch (e) {
       add({ kind: 'err', text: String(e?.message || e) });
@@ -351,6 +366,14 @@ function App() {
   }
 
   useInput((input, key) => {
+    // диалог подтверждения: y/д = да · n/отк = нет · a/в = да всегда · Esc = нет
+    if (approveRef.current) {
+      const k = (input || '').toLowerCase();
+      if (k === 'y' || k === 'д' || key.return) { approveRef.current.resolve(true); }
+      else if (k === 'a' || k === 'в') { autoApproveRef.current = true; approveRef.current.resolve(true); }
+      else if (k === 'n' || k === 'н' || key.escape || (key.ctrl && input === 'c')) { approveRef.current.resolve(false); }
+      return;
+    }
     if (key.ctrl && input === 'c') { exit(); return; }
     if (key.ctrl && input === 'd') { if (!buf && !busy) exit(); return; }
 
@@ -392,6 +415,36 @@ function App() {
     if (key.escape) { setBuf(''); setCur(0); setSel(0); return; }
     if (key.tab) {
       if (menuOpen && menuMatches.length) { const p = menuMatches[Math.min(sel, menuMatches.length - 1)]; setBuf(p.cmd + (p.arg ? ' ' : '')); setCur(p.cmd.length + (p.arg ? 1 : 0)); }
+      else if (buf && !busy) {
+        // Комплит пути файла: последний токен строки — префикс пути.
+        // Общее начало — дописываем; вилка из нескольких — не гадаем.
+        try {
+          const m = buf.slice(0, cur).match(/(^|\s)([^\s*?]+)$/);
+          if (m) {
+            const tok = m[2];
+            const slash = tok.lastIndexOf('/');
+            const dirPart = slash >= 0 ? tok.slice(0, slash + 1) || '/' : '';
+            const filePart = slash >= 0 ? tok.slice(slash + 1) : tok;
+            const dir = dirPart || '.';
+            const names = fs.readdirSync(dir, { withFileTypes: true })
+              .filter(e => e.name.startsWith(filePart) && !e.name.startsWith('.'));
+            if (names.length === 1) {
+              const full = dirPart + names[0].name + (names[0].isDirectory() ? '/' : ' ');
+              const nb = buf.slice(0, cur - tok.length) + full + buf.slice(cur);
+              setBuf(nb); setCur(cur - tok.length + full.length);
+            } else if (names.length > 1) {
+              // общий префикс — дописываем сколько можем
+              let pref = names[0].name;
+              for (const e of names) { while (!e.name.startsWith(pref)) pref = pref.slice(0, -1); }
+              if (pref.length > filePart.length) {
+                const full = dirPart + pref;
+                const nb = buf.slice(0, cur - tok.length) + full + buf.slice(cur);
+                setBuf(nb); setCur(cur - tok.length + full.length);
+              }
+            }
+          }
+        } catch { /* readdir не удался — тихо */ }
+      }
       return;
     }
     if (key.ctrl && input === 'r') {   // обратный поиск по истории
@@ -445,7 +498,12 @@ function App() {
         : html`<${Text} dimColor>  ↑↓ история · / меню · Tab дополнить · ^R поиск · ^C выход<//>`}
         <//>
 
-        <${Box} flexDirection="column" width=${26} borderStyle="round" borderColor=${theme.border} paddingX=${1} marginLeft=${1}>
+        ${approve ? html`<${Box} flexDirection="column" borderStyle="round" borderColor="yellow" paddingX=${1}>
+          <${Text} color="yellow" bold>⚠ ${approve.name}<//>
+          <${Text} dimColor>  ${String(approve.preview).slice(0, cols - 8)}<//>
+          <${Text} color="green">y<//><${Text}>=да <//><${Text} color="red">n<//><${Text}>=нет <//><${Text} color="cyan">a<//><${Text}>=всегда в этой сессии<//>
+        <//>` : null}
+      <${Box} flexDirection="column" width=${26} borderStyle="round" borderColor=${theme.border} paddingX=${1} marginLeft=${1}>
           <${Text} bold color=${theme.accent}>⛬ gift<//>
           <${Text} dimColor>${(status.label || '').slice(0, 22)}<//>
           ${status.model ? html`<${Text} color="blue">${status.model.slice(0, 22)}<//>` : null}
@@ -476,6 +534,14 @@ function TItem({ it, cols }) {
     <//>`;
   }
   if (it.kind === 'tool') {
+    // TodoWrite → чек-лист как у Claude Code: ☐ pending · ◐ in_progress · ✓ completed
+    if (it.name === 'TodoWrite' && it.input && Array.isArray(it.input.todos)) {
+      const mark = { pending: '☐', in_progress: '◐', completed: '✓' };
+      const color = { pending: 'gray', in_progress: 'yellow', completed: 'green' };
+      return html`<${Box} flexDirection="column" marginTop=${1}>
+        ${it.input.todos.map((t, i) => html`<${Text} key=${i} color=${color[t.status] || 'gray'}>  ${mark[t.status] || '☐'} ${t.status === 'in_progress' ? (t.content || '') + ' ←' : (t.content || '')}<//>`)}
+      <//>`;
+    }
     const head = html`<${Box}><${Text} color="magenta">● ${it.name}<//><${Text} dimColor> ${previewInput(it.name, it.input).slice(0, cols - 12)}<//><//>`;
     const W = Math.max(20, cols - 6);
     // Edit → дифф (красные старые / зелёные новые строки)
