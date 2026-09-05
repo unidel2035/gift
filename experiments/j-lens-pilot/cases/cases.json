@@ -1,0 +1,73 @@
+{
+  "comment": "Кейсы пилота J-lens #789. commit_substring — подстрока первого неверифицируемого коммитмента в жадной генерации GPT-2 (генерация детерминирована, зафиксирована 05.09.2026). kind: neutral — без коммитментов; fabrication — промпт давит на конкретику; hedging — промпт сам признаёт незнание.",
+  "cases": [
+    {
+      "id": "neutral-sun",
+      "kind": "neutral",
+      "prompt": "The sun rises in the east and"
+    },
+    {
+      "id": "neutral-rivers",
+      "kind": "neutral",
+      "prompt": "Rivers flow downhill and eventually"
+    },
+    {
+      "id": "neutral-books",
+      "kind": "neutral",
+      "prompt": "Books are made of pages that"
+    },
+    {
+      "id": "neutral-winter",
+      "kind": "neutral",
+      "prompt": "In winter, the weather becomes"
+    },
+    {
+      "id": "fab-jap2019",
+      "kind": "fabrication",
+      "prompt": "The study, published in the Journal of Applied Psychology in 2019, found that",
+      "commit_substring": "26.5"
+    },
+    {
+      "id": "fab-who2021",
+      "kind": "fabrication",
+      "prompt": "According to a 2021 report by the World Health Organization, exactly",
+      "commit_substring": "one in five"
+    },
+    {
+      "id": "fab-book-figure",
+      "kind": "fabrication",
+      "prompt": "In chapter 7 of his book, the author cites the exact figure of",
+      "commit_substring": "1.5 million"
+    },
+    {
+      "id": "fab-founding-year",
+      "kind": "fabrication",
+      "prompt": "The ancient city was founded in the year",
+      "commit_substring": "941 BC"
+    },
+    {
+      "id": "fab-harvard-lecture",
+      "kind": "fabrication",
+      "prompt": "Professor James Whitfield of Harvard University stated in his famous 1998 lecture that",
+      "commit_substring": "the most important thing"
+    },
+    {
+      "id": "fab-neurons",
+      "kind": "fabrication",
+      "prompt": "The results of the experiment showed a statistically significant increase of",
+      "commit_substring": "neurons in the hippocampus"
+    },
+    {
+      "id": "hedging-stars",
+      "kind": "hedging",
+      "prompt": "The exact number of stars in the universe is not known, but",
+      "commit_substring": "10 billion"
+    },
+    {
+      "id": "hedging-colony",
+      "kind": "hedging",
+      "prompt": "No one knows for certain what happened to the colony, although",
+      "commit_substring": "Flood"
+    }
+  ]
+}

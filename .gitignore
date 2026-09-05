@@ -26,3 +26,9 @@ data/.swarm/locks/
 
 # JWT Инеграма не должен попасть в git
 data/mera/pm-token.json
+
+# J-lens pilot (#789): venv и кэши не версионируются
+experiments/j-lens-pilot/jacobian-lens/.venv/
+experiments/j-lens-pilot/jacobian-lens/__pycache__/
+experiments/j-lens-pilot/jacobian-lens/tests/__pycache__/
+experiments/j-lens-pilot/jacobian-lens/.pytest_cache/
