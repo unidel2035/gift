@@ -52,6 +52,7 @@ const SLASH = [
   { cmd: '/theme', desc: 'тема: gift|matrix|ocean|mono', arg: true },
   { cmd: '/sessions', desc: 'сессии (можно фильтр: /sessions слово)', arg: true },
   { cmd: '/matrix', desc: 'снимок W-матрицы' },
+  { cmd: '/plan', desc: 'режим планирования (только чтение, как Shift+Tab)' },
   { cmd: '/clear', desc: 'очистить диалог' },
   { cmd: '/exit', desc: 'выход' },
 ];
@@ -135,6 +136,12 @@ function App() {
   const [buf, setBuf] = useState('');            // строка ввода
   const [cur, setCur] = useState(0);             // позиция курсора
   const [busy, setBusy] = useState(false);
+  // Plan-mode (Shift+Tab, как у Claude Code): агент думает и предлагает план,
+  // но не пишет и не исполняет. Опасные tools отфильтрованы на уровне раздачи —
+  // модель не может «случайно» нажать на Bash, его просто нет в списке.
+  const [planMode, setPlanMode] = useState(false);
+  const planModeRef = useRef(false);
+  planModeRef.current = planMode;
   // Permission-диалог (как у Claude Code): опасные tools — Write/Edit/Bash —
   // спрашивают y/n/a (a = да и больше не спрашивать в сессии). Read/Grep/Glob — авто.
   const [approve, setApprove] = useState(null);   // { name, preview, resolve }
@@ -207,6 +214,7 @@ function App() {
     const [cmd, ...rest] = line.trim().split(' ');
     const arg = rest.join(' ');
     if (cmd === '/exit') { exit(); return; }
+    if (cmd === '/plan') { setPlanMode(v => !v); add({ kind: 'sys', text: planModeRef.current ? 'режим плана снят — можно исполнять' : 'режим плана: только чтение и анализ, записи запрещены (Shift+Tab — снять)' }); return; }
     if (cmd === '/clear') { messagesRef.current = []; setItems([{ id: 0, kind: 'banner' }, item({ kind: 'sys', text: 'диалог очищен' })]); return; }
     if (cmd === '/help') {
       add({ kind: 'sys', text: SLASH.map(s => `  ${s.cmd.padEnd(12)} — ${s.desc}`).join('\n') });
@@ -324,7 +332,10 @@ function App() {
         ? `\n\nДоступны MCP-инструменты от серверов: ${mcpRef.current.ready.map(r => r.name).join(', ')} ` +
           `(имена вида mcp__<сервер>__<tool>: браузер, телеграм, документация). Вызывай когда уместно.`
         : '';
-      await runTurn(messagesRef.current, buildSystemPrompt() + mcpHint, {
+      const PLAN_PROMPT = '\n\n# РЕЖИМ ПЛАНИРОВАНИЯ (plan mode)\nСейчас действует запрет на изменения: НЕ пиши и не правь файлы, НЕ запускай команды с побочными эффектами. Только чтение и анализ. Изложи план: шаги, файлы, риски. Пользователь одобрит — режим снимется и план будет исполнен.';
+      const planTools = [...TOOLS, ...mcpRef.current.tools].filter(t =>
+        ['Read', 'Grep', 'Glob', 'WebFetch', 'TodoWrite', 'matrix_query', 'recall_treasure'].includes(t.name) || t.name.startsWith('mcp__'));
+      await runTurn(messagesRef.current, buildSystemPrompt() + mcpHint + (planMode ? PLAN_PROMPT : ''), {
         onText: (c) => { streamed += c; setStream(streamed); setActivity(''); },
         onAssistant: (t, usage) => {
           streamed = '';
@@ -341,7 +352,7 @@ function App() {
         onTool: (name, input) => { setActivity(`${name}: ${previewInput(name, input).slice(0, 50)}`); add({ kind: 'tool', name, input }); },
         onToolResult: (name, result) => { setActivity(''); setLastTool({ name, result: String(result).replace(/\n/g, ' ').slice(0, 80) }); add({ kind: 'toolres', name, result: result.slice(0, 500) }); },
       }, {
-        tools: [...TOOLS, ...mcpRef.current.tools],
+        tools: planMode ? planTools : [...TOOLS, ...mcpRef.current.tools],
         exec: async (n, i) => {
           const run = () => (n.startsWith('mcp__') && mcpRef.current.call) ? mcpRef.current.call(n, i) : executeTool(n, i);
           const dangerous = ['Write', 'Edit', 'Bash'].includes(n) && !n.startsWith('mcp__');
@@ -413,6 +424,7 @@ function App() {
     if (key.leftArrow) { setCur(c => Math.max(0, c - 1)); return; }
     if (key.rightArrow) { setCur(c => Math.min(buf.length, c + 1)); return; }
     if (key.escape) { setBuf(''); setCur(0); setSel(0); return; }
+    if (key.tab && key.shift) { setPlanMode(v => !v); return; }
     if (key.tab) {
       if (menuOpen && menuMatches.length) { const p = menuMatches[Math.min(sel, menuMatches.length - 1)]; setBuf(p.cmd + (p.arg ? ' ' : '')); setCur(p.cmd.length + (p.arg ? 1 : 0)); }
       else if (buf && !busy) {
@@ -495,7 +507,7 @@ function App() {
                   ${i === sel ? '▸ ' : '  '}${m.cmd.padEnd(12)}<${Text} dimColor> — ${m.desc}<//>
                 <//>`)}
             <//>`
-        : html`<${Text} dimColor>  ↑↓ история · / меню · Tab дополнить · ^R поиск · ^C выход<//>`}
+        : html`<${Text} dimColor>  ${planMode ? html`<${Text} color="magenta" bold>⏳ plan<//><${Text} dimColor> · Shift+Tab снять · <//>` : ''}↑↓ история · / меню · Tab дополнить · Shift+Tab план · ^C выход<//>`}
         <//>
 
         ${approve ? html`<${Box} flexDirection="column" borderStyle="round" borderColor="yellow" paddingX=${1}>

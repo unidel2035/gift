@@ -134,7 +134,7 @@ async function safeFetch(url, opts = {}) {
 }
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync } from 'node:fs';
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawnSync, spawn } from 'node:child_process';
 import { resolve, dirname, basename, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -359,6 +359,42 @@ const TOOLS = [
     },
   },
   {
+    name: 'BashOutput',
+    description: 'Прочитать вывод фонового шелла (запущенного Bash с суффиксом /bg). Без shell_id — список всех фоновых с их статусами.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        shell_id: { type: 'string', description: 'id из ответа запуска (необязательно)' },
+      },
+    },
+  },
+  {
+    name: 'KillShell',
+    description: 'Остановить фоновый шелл по shell_id.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        shell_id: { type: 'string', description: 'id фонового шелла' },
+      },
+      required: ['shell_id'],
+    },
+  },
+  {
+    name: 'NotebookEdit',
+    description: 'Правка ячейки Jupyter-ноутбука (.ipynb): вставить/заменить/удалить по индексу ячейки.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        notebook_path: { type: 'string', description: 'путь к .ipynb' },
+        cell_number: { type: 'integer', description: 'индекс ячейки (для insert — куда вставить)' },
+        new_source: { type: 'string', description: 'новый исходник ячейки' },
+        mode: { type: 'string', enum: ['replace', 'insert', 'delete'], description: 'default replace' },
+        cell_type: { type: 'string', enum: ['code', 'markdown'], description: 'для insert' },
+      },
+      required: ['notebook_path', 'new_source'],
+    },
+  },
+  {
     name: 'matrix_query',
     description: 'Query the W-matrix: show persons, top threads, recent acts.',
     input_schema: {
@@ -476,6 +512,22 @@ async function executeTool(name, input) {
 
       case 'Bash': {
         const { command, timeout = 120000 } = input;
+        // /bg в конце команды — фоновый режим (как у Claude Code): shell_id
+        // выдаётся сразу, вывод собирается буфером; BashOutput читает, KillShell убивает.
+        if (/\s*\/bg\s*$/.test(command)) {
+          const clean = command.replace(/\s*\/bg\s*$/, '');
+          try {
+            const id = `sh-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`;
+            const child = spawn('bash', ['-c', clean], { cwd: process.cwd(), detached: false });
+            const buf = [];
+            child.stdout.on('data', d => { buf.push(d.toString()); if (buf.length > 200) buf.splice(0, buf.length - 200); });
+            child.stderr.on('data', d => { buf.push(d.toString()); if (buf.length > 200) buf.splice(0, buf.length - 200); });
+            child.on('close', code => { buf.push(`[процесс завершён, exit ${code}]`); });
+            globalThis.__GIFT_SHELLS__ = globalThis.__GIFT_SHELLS__ || new Map();
+            globalThis.__GIFT_SHELLS__.set(id, { child, buf, command: clean, started: new Date().toISOString() });
+            return `фон запущен: shell_id=${id}. Читай вывод BashOutput(id), убивай KillShell(id).`;
+          } catch (e) { return { error: e.message }; }
+        }
         try {
           const result = spawnSync('bash', ['-c', command], {
             encoding: 'utf8',
@@ -491,6 +543,47 @@ async function executeTool(name, input) {
         } catch (e) {
           return { error: e.message };
         }
+      }
+
+      case 'NotebookEdit': {
+        try {
+          const fsp = await import('node:fs/promises');
+          const nb = JSON.parse(await fsp.readFile(input.notebook_path, 'utf8'));
+          const mode = input.mode || 'replace';
+          if (mode === 'delete') {
+            if (input.cell_number == null || !nb.cells[input.cell_number]) return { error: 'нет такой ячейки' };
+            nb.cells.splice(input.cell_number, 1);
+          } else if (mode === 'insert') {
+            const cell = { cell_type: input.cell_type || 'code', metadata: {}, source: String(input.new_source).split('\n').map((l, i, a) => l + (i < a.length - 1 ? '\n' : '')), outputs: input.cell_type === 'markdown' ? undefined : [], execution_count: null };
+            nb.cells.splice(input.cell_number ?? nb.cells.length, 0, cell);
+          } else {
+            if (input.cell_number == null || !nb.cells[input.cell_number]) return { error: 'нет такой ячейки (укажи cell_number)' };
+            nb.cells[input.cell_number].source = String(input.new_source).split('\n').map((l, i, a) => l + (i < a.length - 1 ? '\n' : ''));
+          }
+          await fsp.writeFile(input.notebook_path, JSON.stringify(nb, null, 1));
+          return `${mode}: ячейка ${input.cell_number ?? nb.cells.length - 1} в ${input.notebook_path}`;
+        } catch (e) { return { error: e.message }; }
+      }
+
+      case 'BashOutput': {
+        const shells = globalThis.__GIFT_SHELLS__ || new Map();
+        if (!input.shell_id) {
+          if (!shells.size) return 'фоновых шеллов нет';
+          return [...shells.entries()].map(([id, sh]) =>
+            `${id}: ${sh.child.exitCode === null ? 'работает' : 'завершён'} · с ${sh.started} · ${sh.command.slice(0, 60)}`).join('\n');
+        }
+        const sh = shells.get(input.shell_id);
+        if (!sh) return { error: `нет такого shell_id (есть: ${[...shells.keys()].join(', ') || 'ничего'})` };
+        return sh.buf.join('').slice(-10000) || '(пока пусто)';
+      }
+
+      case 'KillShell': {
+        const shells = globalThis.__GIFT_SHELLS__ || new Map();
+        const sh = shells.get(input.shell_id);
+        if (!sh) return { error: 'нет такого shell_id' };
+        try { sh.child.kill('SIGTERM'); } catch {}
+        shells.delete(input.shell_id);
+        return `шелл ${input.shell_id} остановлен`;
       }
 
       case 'Grep': {
