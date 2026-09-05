@@ -198,7 +198,8 @@ SUCCESS: <измеримое условие успеха, проверяемое
 Жёсткие ограничения:
 - НЕ трогай: ${GUARD_LIST.join('; ')}
 - цель должна быть выполнима за ${MAX_STEPS} итераций силами одного агента с shell-доступом;
-- SUCCESS должен быть проверяемым (файл существует, тест проходит, команда возвращает 0).`;
+- SUCCESS должен быть проверяемым (файл существует, тест проходит, команда возвращает 0).
+- КАТЕГОРИЧЕСКИ: тесты, CI и конвейер — судья; правка судьи = провал цели, не решение. Чини код, не судью.`;
 
 /** Формулировка цели через claude --print. Возвращает {objective, success} или null. */
 function formulateGoal(painsText) {
@@ -216,13 +217,36 @@ function formulateGoal(painsText) {
 }
 
 // ── 3. РЕШЕНИЕ: запуск goal-цикла ──────────────────────────────────────────
+// база диффа стражи: коммит, с которого цикл начал править код
+const GUARD_BASE = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout?.trim() || 'HEAD';
+
 async function runGoal(id) {
   const engine = new GoalEngine({
     root: GOALS_DIR,
     executor: new ClaudeExecutor({ cwd: ROOT, testCommand: ['node', '--test', 'tests/*.test.js'] }),
     recorder: new MatrixRecorder({ snapPath: SNAP_PATH, agentId: '_selfdev' }),
   });
-  return engine.run(id);
+  const result = await engine.run(id);
+
+  // Стража измерения (урок HF/METR 26.08: рой идёт на судью раньше задачи).
+  // Самая лакомая selfdev-цель — «падают тесты» — решается правкой тестов.
+  // Дифф с коммита-базы цикла: если агент тронул файлы судьи — успех
+  // не засчитан, цель на паузу для человеческого взгляда.
+  try {
+    const { violations } = await import(resolve(ROOT, 'utils/judge-guard.mjs'));
+    const diff = spawnSync('git', ['diff', '--name-only', GUARD_BASE + '..HEAD'],
+      { cwd: ROOT, encoding: 'utf8' }).stdout || '';
+    const bad = violations(diff.split('\n').filter(Boolean));
+    if (bad.length) {
+      log(`     ⛔ стража измерения: агент правил судью (${bad.join(', ')}) — успех не засчитан`);
+      logFile(`judge-guard violation: ${bad.join(', ')}`);
+      try { engine.pause(id, 'judge-guard-violation'); } catch {}
+      return { ...result, status: 'paused', pauseReason: 'judge-guard-violation', judgeViolation: bad };
+    }
+  } catch (e) {
+    logFile(`judge-guard check failed: ${e.message}`);
+  }
+  return result;
 }
 
 // ── 4. РЕФЛЕКСИЯ: итог в insights.json + лог ───────────────────────────────

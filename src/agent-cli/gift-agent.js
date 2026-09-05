@@ -168,20 +168,118 @@ function renderMarkdown(text) {
     ;
 }
 
+// ── Таблицы: │ a │ b │ / | a | b | с |---|---| ────────────────────────────
+// Markdown-таблица рендерится в ASCII-боксы: заголовок жирным, разделитель
+// строкой из ─, ячейки выровнены по ширине колонки. Работает построчно,
+// поэтому совместима с createMarkdownStream (строчная буферизация).
+const BOX_H = '\x1b[2m─\x1b[0m';
+
+function isTableRow(line) {
+  const t = line.trim();
+  if (!t) return false;
+  // │...│ или |...|
+  return /^[\t ]*[│|].*[│|][\t ]*$/.test(t);
+}
+function isTableDivider(line) {
+  const t = line.trim();
+  // обрамлён чертами │ или |, внутри только дефисы/двоеточия/черты/пробелы,
+  // минимум один - или : (alignment), и нет букв
+  return /^[│|][ ││:\-|│]*[│|][\t ]*$/.test(t)
+    && /[-:]/.test(t)
+    && !/[a-zа-яё]/i.test(t);
+}
+function splitTableRow(line) {
+  return line.trim()
+    .replace(/^[│|]/, '')
+    .replace(/[│|]$/, '')
+    .split(/[│|]/)
+    .map(c => c.trim());
+}
+function padCell(s, w) {
+  const plain = s.replace(/\x1b\[[0-9;]*m/g, '');  // ANSI не влияет на ширину
+  const pad = Math.max(0, w - plain.length);
+  return s + ' '.repeat(pad);
+}
+
+/** Отрендерить массив строк-строк таблицы (уже сплитнутых) в бокс. */
+function renderTableBox(header, rows, widths) {
+  const w = widths;
+  const top    = '┌' + w.map(n => BOX_H.repeat(n + 2)).join('┬') + '┐';
+  const mid    = '├' + w.map(n => BOX_H.repeat(n + 2)).join('┼') + '┤';
+  const bottom = '└' + w.map(n => BOX_H.repeat(n + 2)).join('┴') + '┘';
+  const line = (cells, bold) => {
+    const inner = cells.map((c, i) => ` ${padCell(c, w[i])} `).join('\x1b[2m│\x1b[0m');
+    return `\x1b[2m│\x1b[0m${bold ? '\x1b[1m' + inner + '\x1b[0m' : inner}\x1b[2m│\x1b[0m`;
+  };
+  const out = [top, line(header.map(renderMarkdown), true), mid];
+  for (const r of rows) out.push(line(r.map(renderMarkdown)));
+  out.push(bottom);
+  return out;
+}
+
+/** Преобразовать последовательность md-строк таблицы в готовый бокс.
+ *  Возвращает массив строк для вывода или null, если это не таблица. */
+function tableToBox(lines) {
+  if (lines.length < 2) return null;
+  if (!isTableRow(lines[0]) || !isTableDivider(lines[1])) return null;
+  const header = splitTableRow(lines[0]);
+  const nCols = header.length;
+  const rows = [];
+  let i = 2;
+  while (i < lines.length && isTableRow(lines[i]) && !isTableDivider(lines[i])) {
+    const cells = splitTableRow(lines[i]);
+    while (cells.length < nCols) cells.push('');
+    rows.push(cells.slice(0, nCols));
+    i++;
+  }
+  // ширины: по максимальной длине ячейки (без ANSI — вход чистый md)
+  const widths = header.map((h, c) => Math.max(
+    h.length,
+    ...rows.map(r => (r[c] || '').length),
+    3  // минимум, чтобы пустая колонка не схлопывалась
+  ));
+  return renderTableBox(header, rows, widths);
+}
+
+
 // Буферизованный markdown-рендерер: копит чанки до полных строк,
 // чтобы не рвать markdown-синтаксис (##, **, etc.) посередине.
+// Таблицы требуют lookahead (заголовок + разделитель + N строк),
+// поэтому строки сначала копятся, таблица целиком уходит в бокс.
 function createMarkdownStream(out = process.stdout) {
   let buf = '';
+  let pending = [];      // строки, ожидающие решения: таблица или обычный вывод
+  const flushPlain = () => {
+    for (const line of pending) out.write(renderMarkdown(line) + '\n');
+    pending = [];
+  };
   return {
     write(chunk) {
       buf += chunk;
       const lines = buf.split('\n');
       buf = lines.pop() || '';
-      for (const line of lines) out.write(renderMarkdown(line) + '\n');
+      for (const line of lines) {
+        const t = line.trim();
+        const maybeRow = isTableRow(line);
+        if (!maybeRow && pending.length) {
+          // последовательность строк-таблицы кончилась
+          const box = tableToBox(pending);
+          if (box) { for (const l of box) out.write(l + '\n'); }
+          else flushPlain();
+          pending = [];
+        }
+        if (maybeRow) pending.push(line);
+        else out.write(renderMarkdown(line) + '\n');
+      }
     },
     flush() {
-      if (buf) out.write(renderMarkdown(buf));
-      buf = '';
+      if (buf) { pending.push(buf); buf = ''; }
+      if (pending.length) {
+        const box = tableToBox(pending);
+        if (box) { for (const l of box) out.write(l + '\n'); }
+        else flushPlain();
+        pending = [];
+      }
     },
   };
 }
@@ -528,21 +626,27 @@ async function executeTool(name, input) {
             return `фон запущен: shell_id=${id}. Читай вывод BashOutput(id), убивай KillShell(id).`;
           } catch (e) { return { error: e.message }; }
         }
-        try {
-          const result = spawnSync('bash', ['-c', command], {
-            encoding: 'utf8',
-            timeout,
-            maxBuffer: 1024 * 1024 * 10,
-            cwd: process.cwd(),
+        // Асинхронный spawn: синхронный spawnSync блокировал весь event
+        // loop Node — Ink не перерисовывался, Ctrl+C ложился в буфер без
+        // читателя, терминал выглядел мёртвым на любой долгой команде
+        // (npm test, sleep, git log по большим репо). Грабля 05.09.2026.
+        return new Promise((resolve) => {
+          const child = spawn('bash', ['-c', command], { cwd: process.cwd() });
+          let out = '';
+          const cap = 10 * 1024 * 1024;
+          child.stdout.on('data', d => { if (out.length < cap) out += d; });
+          child.stderr.on('data', d => { if (out.length < cap) out += d; });
+          const killTimer = timeout > 0 ? setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch {}
+            resolve(`(таймаут ${timeout}мс — процесс убит)\n` + (out.length > 20000 ? out.slice(0, 20000) + '…' : out));
+          }, timeout) : null;
+          child.on('error', e => { if (killTimer) clearTimeout(killTimer); resolve({ error: e.message }); });
+          child.on('close', code => {
+            if (killTimer) clearTimeout(killTimer);
+            if (code !== 0) out += `\nExit code: ${code}`;
+            resolve(out.slice(0, 200000) || '(no output)');
           });
-          let output = '';
-          if (result.stdout) output += result.stdout;
-          if (result.stderr) output += result.stderr;
-          if (result.status !== 0) output += `\nExit code: ${result.status}`;
-          return output || '(no output)';
-        } catch (e) {
-          return { error: e.message };
-        }
+        });
       }
 
       case 'NotebookEdit': {
@@ -1340,6 +1444,7 @@ export async function agentLoop(prompt, opts = {}) {
 // Экспорт переиспользуемой логики для Ink-CLI (ink-cli.mjs).
 export {
   apiCallStream, executeTool, TOOLS, SAFE_TOOLS, buildSystemPrompt, renderMarkdown,
+  createMarkdownStream, isTableRow, isTableDivider, splitTableRow, tableToBox,
   immuneScan, loadMatrix, saveMatrix, recordAct, matrixSummary,
   newSessionId, saveSession, loadSession, listSessions,
   estimateTokens, compactMessages,
