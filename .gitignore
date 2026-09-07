@@ -32,3 +32,5 @@ experiments/j-lens-pilot/jacobian-lens/.venv/
 experiments/j-lens-pilot/jacobian-lens/__pycache__/
 experiments/j-lens-pilot/jacobian-lens/tests/__pycache__/
 experiments/j-lens-pilot/jacobian-lens/.pytest_cache/
+specs/formal/.tlacache/
+specs/formal/*_TTrace_*
