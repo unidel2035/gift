@@ -33,6 +33,19 @@ const NO_ISSUES = process.argv.includes('--no-issues');
 const maxIdx    = process.argv.indexOf('--max');
 const MAX_NEW   = maxIdx !== -1 ? Number(process.argv[maxIdx + 1]) || 10 : 10;
 
+// ── Heartbeat: тишина по умолчанию (#101, эталон Codex Astra) ──────────────
+// Рутинный прогон не должен шуметь: в тихом режиме (--quiet, для крона)
+// баннер гасится, наружу выходит одна строка-вердикт:
+//   NOTIFY       — пульс посеял новое (вопрошания/issues)
+//   DONT_NOTIFY  — значимого нет (пустынь нет / всё в дубликатах / Суббота)
+// Вердикт печатается в любом режиме — лог становится grep-уемым.
+const _log  = console.log.bind(console);
+const QUIET = process.argv.includes('--quiet');
+if (QUIET) console.log = () => {};
+function heartbeat(notify, reason) {
+  _log(notify ? `NOTIFY: ${reason}` : `DONT_NOTIFY: ${reason}`);
+}
+
 const NOUS_URL    = process.env.NOUS_URL    || 'http://localhost:8089';
 const QDRANT_URL  = process.env.QDRANT_URL  || 'http://localhost:6333';
 const OLLAMA_URL2 = process.env.OLLAMA_URL  || 'http://localhost:11434';
@@ -69,6 +82,7 @@ async function isSemanticDuplicate(text) {
 
 if (!existsSync(SNAP)) {
   console.log('[пульс] Матрица не найдена — онтология ещё не родилась.');
+  heartbeat(false, 'матрица не найдена');
   process.exit(0);
 }
 
@@ -290,6 +304,7 @@ for (const d of deserts.slice(0, 5)) {
 
 if (!deserts.length) {
   console.log('[пульс] Пустынь не найдено — онтология в равновесии. Суббота.');
+  heartbeat(false, 'пустынь нет — равновесие, Суббота');
   process.exit(0);
 }
 
@@ -521,3 +536,10 @@ if (topTheosis.length)
 if (declined)
   console.log(`║  λήψις: ${String(declined).padEnd(2)} дара ждут μετάνοια                      ║`);
 console.log('╚══════════════════════════════════════════════════════╝\n');
+
+// Вердикт heartbeat — последняя строка прогона: шум только при посеве.
+const seeded = newProposals.length > 0 || issuesCreated > 0;
+heartbeat(seeded,
+  seeded
+    ? `посеяно ${newProposals.length} (issues: ${issuesCreated}, дубликатов: ${skippedDuplicates})`
+    : `пустыни были, но значимого нет (дубликатов: ${skippedDuplicates})`);

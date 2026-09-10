@@ -664,6 +664,10 @@ if (CMD === 'pulse') {
     try { await syncMatrix(BOARD); } catch (e) { console.log(`  матрица: ${e.message.slice(0, 120)}`); }
     try { await syncFundTeam(BOARD); } catch (e) { console.log(`  фонд: ${e.message.slice(0, 120)}`); }
   }
+  // Heartbeat-вердикт (#101): последняя строка прогона, grep-уемая в логе.
+  // Шум только когда пульс реально тронул доску; тишина — рутинный прогон.
+  const touched = APPLY && made + updated > 0;
+  console.log(touched ? `NOTIFY: пульс тронул доску (${made} новых, ${updated} обновлено, дубликатов ${skipped})` : `DONT_NOTIFY: пусто (уже были ${skipped})`);
   console.log(APPLY ? `\nпульс: создано ${made}, обновлено ${updated}, уже были ${skipped}` : '\nсухой прогон — ничего не записано. Запиши: --apply');
   process.exit(0);
 }

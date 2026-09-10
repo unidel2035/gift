@@ -935,6 +935,8 @@ async function executeTool(name, input) {
       }
 
       case 'sobor_ask': {
+        // Перихоресис: голоса звучат последовательно, каждый слышит сказанное прежде.
+        // Не параллельный говор, а взаимопроникновение голосов в соборе.
         const { question, personas = 'theologian,engineer,strategist' } = input;
         const personaList = personas.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3);
         const personaPrompts = {
@@ -943,12 +945,18 @@ async function executeTool(name, input) {
           strategist: 'You are a strategic advisor. Answer with strategic insight, considering long-term consequences. Be concise.',
         };
         try {
-          const answers = await Promise.all(personaList.map(async (persona) => {
+          const answers = [];
+          for (const persona of personaList) {
             const sysPrompt = personaPrompts[persona] || `You are a ${persona}. Answer concisely.`;
-            const resp = await apiCall([{ role: 'user', content: question }], sysPrompt, []);
+            let userContent = question;
+            if (answers.length) {
+              const heard = answers.map(a => `[${a.persona}]: ${a.text}`).join('\n\n');
+              userContent = `${question}\n\nVoices already spoken in the sobor — respond in communion with them (perichoresis):\n${heard}`;
+            }
+            const resp = await apiCall([{ role: 'user', content: userContent }], sysPrompt, []);
             const text = resp.content?.find(b => b.type === 'text')?.text || '(no answer)';
-            return { persona, text };
-          }));
+            answers.push({ persona, text });
+          }
           return answers.map(a => `## ${a.persona}\n${a.text}`).join('\n\n---\n\n');
         } catch (e) {
           return { error: `Sobor failed: ${e.message}` };
@@ -1291,11 +1299,23 @@ Working directory: ${process.cwd()}
 - Address the user as "вы" (capitalised where appropriate).
 - Be precise and restrained. No exclamation marks, no emojis, no familiarity.
 - Do not use words like "чё", "мутить", "давить", "ровно", "чисто" or any street/slang vernacular.
+- Стиль-чеклист (#101, эталон Codex Astra):
+  - без контрастных фреймов «X, а не Y» без запроса пользователя;
+  - без AI-слопа: «стоит отметить», «важно понимать», «подводя итог», «действительно» как наполнитель;
+  - без похвалы своего плана через подразумеваемую худшую альтернативу;
+  - сначала главное, потом развитие; списки — только для по-настоящему параллельного.
 
 ## Inter-session memory
 ${giftSummary ? `Gift Matrix (full):\n${giftSummary}` : `Local matrix:\n${wSummary}`}
 
 ${koinon ? `## Recent messages from other agents (KoinonBus)\n${koinon}` : ''}
+
+## Memory citation (#101)
+Когда ответ опирается на матрицу/анамнезис выше, в конце ответа укажи одной строкой,
+на какие записи он опирается, например:
+  [по анамнезису: нить _claude→Дионисий (из Top threads); актов в матрице: N]
+Строка должна быть проверяемой: лицо/нить/число из контекста выше, без выдумок.
+Если ответ не опирается на память — строка не нужна.
 
 When you complete a task, it is recorded in the matrix. Other agents will see it.`;
 }

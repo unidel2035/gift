@@ -125,11 +125,25 @@ ${files.join(', ')}
   }
 }
 
+// No-op гейт (#101): рутинные коммиты (data/-снапшоты, обновления состояния)
+// не дают душе повода для записи. Существенный = gift-коммит, не сводящийся
+// к шаблонам автоконсолидации/пульса.
+const ROUTINE_RE = /^(данные|дар|дар записан|пульс|снапшот|автосводка|матрица обновлена)/i;
+
+function substantiveCommits(commits) {
+  return commits.filter(c => {
+    const m = c.message.match(/^gift\(.*?\):\s*(.+)$/);
+    return m && !ROUTINE_RE.test(m[1]);
+  });
+}
+
 function fallbackSummary(commits, files) {
   if (!commits.length) return null;
   const codeFiles = files.filter(f => f.endsWith('.js') || f.endsWith('.mjs') || f.endsWith('.ts'));
+  const substantive = substantiveCommits(commits);
+  if (!substantive.length) return null; // нечего сохранить — файлы не трогаем
   return {
-    summary: `Автосводка: ${commits.length} коммитов, ${files.length} изменённых файлов. Темы: ${commits.slice(0,5).map(c => c.message.replace(/^gift\(.*?\):\s*/,'')).join('; ')}.`,
+    summary: `Автосводка: ${commits.length} коммитов, ${files.length} изменённых файлов. Темы: ${substantive.slice(0,5).map(c => c.message.replace(/^gift\(.*?\):\s*/,'')).join('; ')}.`,
     keyDecisions: [],
     gifts: codeFiles.slice(0, 5),
   };
@@ -149,6 +163,10 @@ async function main() {
   const files = collectChangedFiles(lastDate);
 
   log(`found ${commits.length} commits, ${files.length} files since ${lastDate}`);
+
+  // Гейт на входе: одни рутинные коммиты — сессии нечего сказать, даже LLM не зовём.
+  const substantive = substantiveCommits(commits);
+  if (!substantive.length) { log('all commits routine — nothing to save, soul untouched'); markDone(); return; }
 
   let extracted = await ollamaSummarize(commits, files);
   if (!extracted) extracted = fallbackSummary(commits, files);
