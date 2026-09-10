@@ -30,6 +30,10 @@ const HOST = (process.env.INTEGRAM_URL || 'https://ai2o.online').replace(/\/$/, 
 const ORG = process.argv[2];
 const CMD = process.argv[3];
 const APPLY = process.argv.includes('--apply');
+// Тихий режим (#101): для крона — весь вывод гасится, наружу только строка-вердикт.
+const QUIET = process.argv.includes('--quiet');
+const _log  = console.log.bind(console);
+if (QUIET) console.log = () => {};
 const BOARD = process.argv.includes('--board')
   ? process.argv[process.argv.indexOf('--board') + 1]
   : 'trytofly';
@@ -667,7 +671,10 @@ if (CMD === 'pulse') {
   // Heartbeat-вердикт (#101): последняя строка прогона, grep-уемая в логе.
   // Шум только когда пульс реально тронул доску; тишина — рутинный прогон.
   const touched = APPLY && made + updated > 0;
-  console.log(touched ? `NOTIFY: пульс тронул доску (${made} новых, ${updated} обновлено, дубликатов ${skipped})` : `DONT_NOTIFY: пусто (уже были ${skipped})`);
+  const verdict = touched
+    ? `NOTIFY: пульс тронул доску (${made} новых, ${updated} обновлено, дубликатов ${skipped})`
+    : `DONT_NOTIFY: пусто (уже были ${skipped})`;
+  _log(verdict); // вердикт проходит и в тихом режиме
   console.log(APPLY ? `\nпульс: создано ${made}, обновлено ${updated}, уже были ${skipped}` : '\nсухой прогон — ничего не записано. Запиши: --apply');
   process.exit(0);
 }
